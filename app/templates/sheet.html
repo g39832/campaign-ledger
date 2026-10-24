@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, initials %}
+{% block title %}{{ char.name }}{% endblock %}
+{% block content %}
+<div id="sheet">
+  <div class="sheet-head">
+    <label class="portrait" title="Change portrait">
+      {% if char.portrait %}<img src="/api/uploads/{{ char.portrait }}" alt="Portrait of {{ char.name }}">{% else %}<span>{{ initials(char.name) }}</span>{% endif %}
+      <span class="portrait-edit">Change</span>
+      <input type="file" id="portrait-file" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only">
+    </label>
+    <div style="min-width:0">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input class="sheet-name grow" data-f="name" aria-label="Character name" style="flex:1 1 260px">
+        <select data-f="kind" aria-label="Character type" style="width:auto"><option value="pc">Player character</option><option value="npc">NPC</option></select>
+        <button class="btn btn-sm btn-quiet" type="button" id="archive-btn">{{ icon("archive", "sm") }} {{ "Restore" if char.archived else "Archive" }}</button>
+      </div>
+      {% if char.archived %}<div class="warn-box" style="margin:8px 0 0">This character is archived. They're hidden from lists and the party, but nothing has been deleted.</div>{% endif %}
+      <div class="sheet-ident">
+        <label class="uline"><input data-f="class_name" placeholder="—"><span>Class</span></label>
+        <label class="uline"><input data-f="subclass" placeholder="—"><span>Subclass</span></label>
+        <label class="uline"><input data-f="level" type="number" min="1" max="30"><span>Level</span></label>
+        <label class="uline"><input data-f="race" placeholder="—"><span>Species</span></label>
+        <label class="uline"><input data-f="background" placeholder="—"><span>Background</span></label>
+        <label class="uline"><input data-f="player_name" placeholder="—"><span>Player</span></label>
+        <label class="uline"><input data-f="alignment" list="alignments" placeholder="—"><span>Alignment <a href="{{ url_for('pages.character_morality', char_id=char.id) }}" style="letter-spacing:0;font-family:var(--sans)">history</a></span></label>
+        <label class="uline"><input data-f="xp" type="number" min="0"><span>Experience</span></label>
+        <label class="uline"><input data-f="speed" placeholder="30 ft."><span>Speed</span></label>
+      </div>
+      <datalist id="alignments">{% for a in ALIGNMENTS %}<option value="{{ a }}">{% endfor %}</datalist>
+    </div>
+  </div>
+
+  <div class="vitals">
+    <div class="vital shield"><input class="big" data-f="ac" type="number" min="0" max="99" aria-label="Armor class"><span class="lbl">Armor Class</span></div>
+    <div class="vital"><button type="button" class="big roll-link" id="d-init" data-roll="initiative" title="Roll initiative" style="border:0">+0</button><span class="lbl">Initiative</span><span class="hint" id="d-init-hint">Dex</span></div>
+    <div class="vital"><div class="big" id="d-prof">+2</div><span class="lbl">Proficiency</span></div>
+    <div class="vital"><label class="check" style="justify-content:center;flex-direction:column;gap:2px"><input type="checkbox" data-f="inspiration" style="width:22px;height:22px"><span class="lbl">Inspiration</span></label></div>
+
+    <div class="hpbox">
+      <div class="now"><input data-f="current_hp" type="number" min="0" aria-label="Current hit points"><span class="max">/ <input data-f="max_hp" type="number" min="0" aria-label="Maximum hit points"></span></div>
+      <span class="lbl">Hit points</span>
+      <div class="hp-quick">
+        <input type="number" min="0" id="hp-amt" placeholder="0" aria-label="Amount">
+        <button class="btn btn-sm btn-dmg" type="button" data-hp="damage">Damage</button>
+        <button class="btn btn-sm btn-heal" type="button" data-hp="heal">Heal</button>
+      </div>
+      <label class="temp-in"><span class="lbl" style="color:var(--temp)">Temp</span><input data-f="temp_hp" type="number" min="0" aria-label="Temporary hit points"></label>
+      <span class="hpbar" id="hpbar"><span class="hpbar-fill"></span></span>
+    </div>
+
+    <div class="statebox">
+      <div class="line"><span class="lbl">Death saves</span>
+        <span class="pips" data-pips="death_successes" aria-label="Death save successes"></span>
+        <span class="pips fail" data-pips="death_failures" aria-label="Death save failures"></span>
+        <button type="button" class="btn btn-sm btn-quiet" data-roll="death" title="Roll a death save">Roll</button></div>
+      <div class="line"><span class="lbl">Hit dice</span><input data-f="hit_dice" placeholder="5d8" style="width:7ch;min-height:28px;padding:2px 6px"> <span class="faint">used</span> <input data-f="hit_dice_used" type="number" min="0" style="width:5ch;min-height:28px;padding:2px 6px"></div>
+      <div class="line"><span class="lbl">Exhaustion</span><select data-f="exhaustion" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for i in range(0, 7) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}</select>
+        <span class="lbl" style="min-width:0">Status</span><select data-f="status" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for s in ["ok","unconscious","stable","incapacitated","dead"] %}<option value="{{ s }}">{{ "Fine" if s == "ok" else s | capitalize }}</option>{% endfor %}</select></div>
+      <div class="line"><span class="lbl">Conditions</span><span id="cond-chips" class="c-conds" style="margin:0"></span>
+        <select id="cond-add" style="width:auto;min-height:28px;padding:2px 26px 2px 8px"><option value="">Add…</option>{% for c in CONDITIONS %}<option>{{ c }}</option>{% endfor %}<option value="__custom">Custom…</option></select></div>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="is-on" data-tab="main" role="tab">Sheet</button>
+    <button type="button" data-tab="spells" role="tab">Spells</button>
+    <button type="button" data-tab="story" role="tab">Story</button>
+    <button type="button" data-tab="notes" role="tab">Notes</button>
+    <a href="{{ url_for('pages.character_morality', char_id=char.id) }}">{{ icon("scale", "sm") }} Morality &amp; alignment</a>
+  </div>
+
+  <section data-pane="main" class="sheet-body">
+    <div class="col-1">
+      <div class="abilities">
+        <div class="ability-col">
+          {% for a in ABILITIES %}
+          <div class="ability"><span class="lbl">{{ ABILITY_NAMES[a] }}</span><button type="button" class="mod roll-link" id="mod-{{ a }}" data-roll="ability:{{ a }}" title="Roll a {{ ABILITY_NAMES[a] }} check">+0</button>
+            <input type="number" min="1" max="30" data-ab="{{ a }}" aria-label="{{ ABILITY_NAMES[a] }} score"></div>
+          {% endfor %}
+        </div>
+        <div>
+          <h3 class="rule-head" style="font-size:.85rem">Saving throws</h3>
+          <ul class="checklist" id="saves">
+            {% for a in ABILITIES %}
+            <li><button type="button" class="prof" data-save="{{ a }}" aria-label="{{ ABILITY_NAMES[a] }} save proficiency"></button><button type="button" class="v roll-link" id="save-{{ a }}" data-roll="save:{{ a }}" title="Roll a {{ ABILITY_NAMES[a] }} save">+0</button><span>{{ ABILITY_NAMES[a] }}</span><span></span></li>
+            {% endfor %}
+          </ul>
+          <h3 class="rule-head" style="font-size:.85rem;margin-top:14px">Skills</h3>
+          <ul class="checklist" id="skills">
+            {% for key, label, ab in SKILLS %}
+            <li><button type="button" class="prof" data-skill="{{ key }}" aria-label="{{ label }} proficiency (click to cycle: none, proficient, expertise)"></button><button type="button" class="v roll-link" id="skill-{{ key }}" data-roll="skill:{{ key }}" title="Roll {{ label }}">+0</button><span>{{ label }}</span><span class="ab">{{ ab }}</span></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="passives">
+        <div class="passive"><b id="pp">10</b> Passive Perception</div>
+        <div class="passive"><b id="pi">10</b> Passive Insight</div>
+        <div class="passive"><b id="pv">10</b> Passive Investigation</div>
+      </div>
+      <details style="margin-top:14px">
+        <summary class="lbl" style="cursor:pointer">Homebrew adjustments</summary>
+        <div style="display:grid;gap:8px;margin-top:10px">
+          <label class="field"><span>Proficiency bonus override</span><input data-f="prof_override" type="number" placeholder="Use level"></label>
+          <label class="field"><span>Initiative bonus (added to Dex)</span><input data-f="initiative_bonus" type="number"></label>
+          <label class="field"><span>Initiative override (replaces all)</span><input data-f="initiative_override" type="number" placeholder="None"></label>
+          <div class="lbl" style="margin-top:4px">Extra save bonuses</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+            {% for a in ABILITIES %}<label class="field"><span>{{ ABILITY_NAMES[a] }}</span><input type="number" data-savebonus="{{ a }}"></label>{% endfor %}
+          </div>
+          <div class="lbl" style="margin-top:4px">Extra skill bonuses</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+            {% for key, label, ab in SKILLS %}<label class="field"><span>{{ label }}</span><input type="number" data-skillbonus="{{ key }}"></label>{% endfor %}
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="col-2">
+      <section class="section">
+        <h3 class="rule-head">Attacks &amp; weapons</h3>
+        <div id="attacks"></div>
+      </section>
+      <section class="section">
+        <h3 class="rule-head">Features &amp; traits</h3>
+        <textarea data-f="features" rows="10" class="prose" placeholder="Class features, racial traits, feats…"></textarea>
+      </section>
+      <section class="section">
+        <h3 class="rule-head">Proficiencies &amp; languages</h3>
+        <textarea data-f="proficiencies" rows="4" placeholder="Armor, weapons, tools, languages"></textarea>
+      </section>
+    </div>
+
+    <div class="col-3">
+      <section class="section">
+        <h3 class="rule-head">Equipment <span class="count" id="eq-weight"></span></h3>
+        <div id="equipment"></div>
+        <div class="coins">
+          {% for c in ["cp", "sp", "ep", "gp", "pp"] %}
+          <label class="coin"><input type="number" min="0" data-coin="{{ c }}" aria-label="{{ c }}"><span class="lbl">{{ c }}</span></label>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section data-pane="spells" hidden>
+    <div class="row" style="margin-bottom:16px;align-items:center">
+      <label class="field" style="flex:0 0 200px"><span>Spellcasting ability</span>
+        <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
+      <div class="vital" style="flex:0 0 110px"><div class="big" id="spell-dc">—</div><span class="lbl">Save DC</span></div>
+      <div class="vital" style="flex:0 0 110px"><button type="button" class="big roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack" style="border:0">—</button><span class="lbl">Spell attack</span></div>
+      <button class="btn btn-sm" type="button" id="long-rest" style="margin-left:auto">{{ icon("moon", "sm") }} Restore all slots</button>
+    </div>
+    <h3 class="rule-head">Spell slots <span class="count">set the total, click diamonds to spend</span></h3>
+    <div class="slots" id="slots"></div>
+    <h3 class="rule-head">Spells known &amp; prepared</h3>
+    <div id="spells"></div>
+  </section>
+
+  <section data-pane="story" hidden>
+    <div class="story-grid">
+      <label class="field"><span>Personality traits</span><textarea data-f="personality" rows="4" class="prose"></textarea></label>
+      <label class="field"><span>Ideals</span><textarea data-f="ideals" rows="4" class="prose"></textarea></label>
+      <label class="field"><span>Bonds</span><textarea data-f="bonds" rows="4" class="prose"></textarea></label>
+      <label class="field"><span>Flaws</span><textarea data-f="flaws" rows="4" class="prose"></textarea></label>
+      <label class="field"><span>Goals &amp; motivations</span><textarea data-f="goals" rows="5" class="prose"></textarea></label>
+      <label class="field"><span>Relationships</span><textarea data-f="relationships" rows="5" class="prose"></textarea></label>
+      <label class="field full"><span>Appearance</span><textarea data-f="appearance" rows="3" class="prose"></textarea></label>
+      <label class="field full"><span>Backstory</span><textarea data-f="backstory" rows="14" class="prose"></textarea></label>
+    </div>
+  </section>
+
+  <section data-pane="notes" hidden>
+    <div class="story-grid">
+      <label class="field full"><span>Notes</span><textarea data-f="notes" rows="16" class="prose" placeholder="Anything else — homebrew rules, secrets, reminders"></textarea></label>
+      <div class="full">
+        <h3 class="rule-head">Mentioned in the journal</h3>
+        <ul class="stack-list" id="backlinks"><li class="faint">Loading…</li></ul>
+      </div>
+    </div>
+  </section>
+</div>
+<script type="application/json" id="boot">{{ char | tojson }}</script>
+<script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=2"></script>{% endblock %}

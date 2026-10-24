@@ -1,0 +1,49 @@
+{% from "_macros.html" import icon %}<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ campaign_name }} · Campaign Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=2">
+</head>
+<body class="page-play" data-role="player">
+{% include "_sprite.svg" %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="wordmark">Campaign <span>Ledger</span></span>
+    <span class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ campaign_name }} · playing as <b>{{ ident.name }}</b></span>
+    <div class="topbar-right">
+      <span class="save-status" id="save-status" data-state="saved"><span class="dot"></span><span class="save-text">Connected</span><button type="button" class="link-btn save-retry" hidden>Retry now</button></span>
+      <button type="button" class="btn btn-sm dice-btn" data-dice-open aria-expanded="false" title="Dice tray (D)">{{ icon("dice-5", "sm") }} Dice<span class="dice-mode-flag" hidden></span><span class="dice-badge" hidden></span></button>
+      <button type="button" class="icon-btn" id="theme-toggle-p" aria-label="Light / dark">{{ icon("sun", "when-dark") }}{{ icon("moon", "when-light") }}</button>
+    </div>
+  </div>
+</header>
+<main class="main" style="max-width:none">
+  <div class="play-grid">
+    <div>
+      <div class="map-stage" id="stage">
+        <div class="map-zoom">
+          <button type="button" class="icon-btn sm" id="zoom-in" aria-label="Zoom in">{{ icon("plus", "sm") }}</button>
+          <button type="button" class="icon-btn sm" id="zoom-out" aria-label="Zoom out">{{ icon("minus", "sm") }}</button>
+          <button type="button" class="icon-btn sm" id="zoom-fit" aria-label="Fit map">{{ icon("rotate-ccw", "sm") }}</button>
+        </div>
+        <div class="map-hint" id="hint"></div>
+        <div class="empty" id="no-map" style="position:absolute;inset:30% 10% auto;border-color:var(--line)" hidden><h3>No map yet</h3>The DM hasn't shared a battle map.</div>
+      </div>
+    </div>
+    <aside class="map-side" style="max-height:none">
+      <div class="panel" id="turns"></div>
+      <div class="panel pc-card" id="me"></div>
+      <div class="panel" id="party"></div>
+      <div class="panel"><button type="button" class="btn btn-sm btn-quiet" id="leave">Leave this game</button></div>
+    </aside>
+  </div>
+</main>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+{% set role = "player" %}{% include "_dice_dock.html" %}
+<script src="{{ url_for('static', filename='js/core.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/dice.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/play.js') }}?v=2"></script>
+</body>
+</html>

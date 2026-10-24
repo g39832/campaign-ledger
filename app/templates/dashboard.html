@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, hpbar, signed, initials %}
+{% block title %}{{ campaign.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">Campaign</div>
+    <h1>{{ campaign.name }}</h1>
+    {% if campaign.description %}<div class="sub">{{ campaign.description }}</div>{% endif %}
+  </div>
+  <div class="actions">
+    <button class="btn" type="button" id="new-session">{{ icon("feather", "sm") }} New session note</button>
+    <a class="btn" href="{{ url_for('pages.combat_list') }}#new">{{ icon("swords", "sm") }} New encounter</a>
+  </div>
+</div>
+
+{% if active %}
+{% set cur = active.combatants | selectattr("id", "equalto", active.encounter.current_id) | first %}
+{% set standing = active.combatants | rejectattr("status", "in", ["dead", "defeated", "fled"]) | list %}
+<div class="encounter-strip">
+  <div class="round"><small>Round</small>{{ active.encounter.round }}</div>
+  <div class="grow">
+    <div class="kind">Combat in progress</div>
+    <div style="font-weight:700;font-size:1.1rem">{{ active.encounter.name }}</div>
+    <div class="muted">{% if cur %}{{ cur.name }}'s turn · {% endif %}{{ standing | length }} of {{ active.combatants | length }} still standing</div>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('pages.combat', enc_id=active.encounter.id) }}">{{ icon("play", "sm") }} Resume combat</a>
+</div>
+{% endif %}
+
+<div class="dash">
+  <div>
+    <section class="section">
+      <h2 class="rule-head">The party <span class="count">{{ characters | selectattr("kind", "equalto", "pc") | list | length }}</span>
+        <span class="tail"><a class="btn btn-sm btn-quiet" href="{{ url_for('pages.characters') }}">{{ icon("plus", "sm") }} Add</a></span></h2>
+      {% set pcs = characters | selectattr("kind", "equalto", "pc") | list %}
+      {% if pcs %}
+      <div class="panel" style="overflow-x:auto">
+      <table class="ledger party-table">
+        <thead><tr><th>Character</th><th>Hit points</th><th class="r">AC</th><th class="r hide-sm">Passive Perc.</th><th class="hide-sm">Conditions</th></tr></thead>
+        <tbody>
+        {% for c in pcs %}
+          <tr>
+            <td>
+              <div style="display:flex;gap:10px;align-items:center">
+                <span class="token">{% if c.portrait %}<img src="/api/uploads/{{ c.portrait }}" alt="">{% else %}{{ initials(c.name) }}{% endif %}</span>
+                <div><a class="name" href="{{ url_for('pages.sheet', char_id=c.id) }}">{{ c.name }}</a>
+                <div class="faint" style="font-size:.88rem">{{ c.race }} {{ c.class_name }} {{ c.level }}{% if c.player_name %} · {{ c.player_name }}{% endif %}</div></div>
+              </div>
+            </td>
+            <td class="hp">
+              <div class="hp-line"><span class="hp-text"><b>{{ c.current_hp }}</b> / {{ c.max_hp }}{% if c.temp_hp %} <span class="temp">+{{ c.temp_hp }}</span>{% endif %}</span>
+                {% if c.status != "ok" %}<span class="tag is-bad">{{ c.status }}</span>{% endif %}</div>
+              {{ hpbar(c.current_hp, c.max_hp, c.temp_hp) }}
+            </td>
+            <td class="r num" style="font-weight:700;font-size:1.1rem">{{ c.ac }}</td>
+            <td class="r num hide-sm">{{ c.derived.passive_perception }}</td>
+            <td class="hide-sm">{% for cond in c.conditions %}<span class="tag">{{ cond.name }}</span> {% else %}<span class="faint">—</span>{% endfor %}
+              {% if c.exhaustion %}<span class="tag is-warn">Exhaustion {{ c.exhaustion }}</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="empty"><h3>No player characters yet</h3>Add the party on the <a href="{{ url_for('pages.characters') }}">Characters</a> page.</div>
+      {% endif %}
+    </section>
+
+    {% set npcs = characters | selectattr("kind", "equalto", "npc") | list %}
+    {% if npcs %}
+    <section class="section">
+      <h2 class="rule-head">Allies &amp; NPCs <span class="count">{{ npcs | length }}</span></h2>
+      <div class="roster">
+        {% for c in npcs %}
+        <a class="roster-item" href="{{ url_for('pages.sheet', char_id=c.id) }}">
+          <span class="token">{% if c.portrait %}<img src="/api/uploads/{{ c.portrait }}" alt="">{% else %}{{ initials(c.name) }}{% endif %}</span>
+          <span><span class="roster-name">{{ c.name }}</span><br><span class="roster-sub">{{ c.race }} {{ c.class_name }}</span></span>
+          <span class="hp-text"><b>{{ c.current_hp }}</b>/{{ c.max_hp }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="section">
+      <h2 class="rule-head">Encounters <span class="tail"><a class="btn btn-sm btn-quiet" href="{{ url_for('pages.combat_list') }}">All encounters</a></span></h2>
+      {% if encounters %}
+      <ul class="stack-list">
+        {% for e in encounters %}
+        <li style="display:flex;gap:12px;align-items:center">
+          <span class="status-label {{ e.status }}">{{ {"active": "Running", "planning": "Prepared", "ended": "Ended"}[e.status] }}</span>
+          <a href="{{ url_for('pages.combat', enc_id=e.id) }}" style="font-weight:700" class="grow">{{ e.name }}</a>
+          <span class="meta">{{ e.combatant_count }} combatants{% if e.round %} · round {{ e.round }}{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="faint">No encounters yet.</p>{% endif %}
+    </section>
+  </div>
+
+  <aside>
+    <section class="section">
+      <h2 class="rule-head">Last session</h2>
+      {% if last_session %}
+        <div style="font-weight:700">{{ last_session.title }}{% if last_session.session_date %} <span class="faint" style="font-weight:400" data-date="{{ last_session.session_date }}">· {{ last_session.session_date }}</span>{% endif %}</div>
+        <div class="excerpt" style="margin-top:4px">{{ last_session.body or "No summary written yet." }}</div>
+        <a href="{{ url_for('pages.journal') }}?entry={{ last_session.id }}" style="font-size:.92rem">Open in journal</a>
+      {% else %}
+        <p class="faint">No sessions recorded. Use “New session note” after your next game.</p>
+      {% endif %}
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">Open threads <span class="count">{{ threads | length }}</span></h2>
+      {% if threads %}
+      <ul class="stack-list">
+        {% for t in threads %}
+        <li><span class="kind">{{ t.kind }}</span> <a href="{{ url_for('pages.journal') }}?entry={{ t.id }}">{{ t.title }}</a>{% if t.status %} <span class="meta">· {{ t.status }}</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="faint">Unresolved quests, mysteries and plot hooks from the journal appear here.</p>{% endif %}
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">Recent deeds</h2>
+      {% if morality %}
+      <ul class="stack-list">
+        {% for m in morality %}
+        <li>
+          <div><a href="{{ url_for('pages.character_morality', char_id=m.character_id) }}">{{ m.character_name }}</a> — {{ m.title }}</div>
+          <div class="meta">
+            {% if m.law_delta %}<span class="delta {{ 'law' if m.law_delta > 0 else 'chaos' }}">{{ signed(m.law_delta) }} {{ 'Lawful' if m.law_delta > 0 else 'Chaotic' }}</span>{% endif %}
+            {% if m.good_delta %}<span class="delta {{ 'good' if m.good_delta > 0 else 'evil' }}">{{ signed(m.good_delta) }} {{ 'Good' if m.good_delta > 0 else 'Evil' }}</span>{% endif %}
+            {% if not m.law_delta and not m.good_delta %}<span class="delta zero">No shift</span>{% endif %}
+            {% if m.session_label %} · {{ m.session_label }}{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="faint">Morality events you record will show up here.</p>{% endif %}
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">Recently edited notes</h2>
+      {% set notes = journal | rejectattr("kind", "equalto", "session") | list %}
+      {% if notes %}
+      <ul class="stack-list">
+        {% for j in notes[:5] %}
+        <li><span class="kind">{{ j.kind }}</span> <a href="{{ url_for('pages.journal') }}?entry={{ j.id }}">{{ j.title }}</a></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="faint">Nothing in the journal yet.</p>{% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+L.$("#new-session").addEventListener("click", () => {
+  L.act("POST", "/api/campaigns/{{ campaign.id }}/journal", { kind: "session", session_date: new Date().toISOString().slice(0, 10) },
+    (d) => { location.href = "/journal?entry=" + d.entry.id; });
+});
+L.$$("[data-date]").forEach((el) => { el.textContent = "· " + L.fmtDate(el.dataset.date); });
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% macro icon(name, cls="") -%}<svg class="ico {{ cls }}" aria-hidden="true"><use href="#i-{{ name }}"/></svg>{%- endmacro %}
+
+{% macro hpbar(hp, max_hp, temp=0) -%}
+{%- set pct = ((hp / max_hp * 100) if max_hp else 0) | round(0, 'floor') | int -%}
+<span class="hpbar" data-level="{{ 'dead' if hp <= 0 else ('low' if pct <= 25 else ('mid' if pct <= 50 else 'high')) }}">
+  <span class="hpbar-fill" style="width: {{ [pct, 100] | min }}%"></span>{% if temp %}<span class="hpbar-temp"></span>{% endif %}
+</span>
+{%- endmacro %}
+
+{% macro signed(n) -%}{{ ("+" ~ n) if n >= 0 else ("−" ~ (n | abs)) }}{%- endmacro %}
+
+{% macro initials(name) -%}{{ (name or "?").split() | map("first") | join("") | upper | truncate(2, True, "") }}{%- endmacro %}

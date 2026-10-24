@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, hpbar, initials %}
+{% block title %}Characters{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Characters</h1><div class="sub">Player characters and the NPCs worth keeping a sheet for.</div></div>
+</div>
+
+<form id="new-char" class="panel new-char" style="margin-bottom:24px">
+  <label class="field"><span>Name</span><input type="text" name="name" maxlength="200" required placeholder="Character name"></label>
+  <label class="field"><span>Class</span><input type="text" name="class_name" maxlength="200" placeholder="e.g. Ranger"></label>
+  <label class="field"><span>Player</span><input type="text" name="player_name" maxlength="200" placeholder="Who plays them"></label>
+  <label class="field"><span>Type</span><select name="kind"><option value="pc">Player character</option><option value="npc">NPC</option></select></label>
+  <button class="btn btn-primary" type="submit">{{ icon("plus", "sm") }} Add &amp; open sheet</button>
+</form>
+
+{% for kind, title in [("pc", "Player characters"), ("npc", "NPCs")] %}
+  {% set group = characters | selectattr("kind", "equalto", kind) | list %}
+  <section class="section">
+    <h2 class="rule-head">{{ title }} <span class="count">{{ group | length }}</span></h2>
+    {% if group %}
+    <div class="roster">
+    {% for c in group %}
+      <a class="roster-item" href="{{ url_for('pages.sheet', char_id=c.id) }}">
+        <span class="token lg" style="width:48px;height:48px;font-size:1.1rem">{% if c.portrait %}<img src="/api/uploads/{{ c.portrait }}" alt="">{% else %}{{ initials(c.name) }}{% endif %}</span>
+        <span style="min-width:0">
+          <span class="roster-name">{{ c.name }}</span><br>
+          <span class="roster-sub">{% if c.class_name %}Level {{ c.level }} {{ c.race }} {{ c.class_name }}{% else %}{{ c.race or "No class set" }}{% endif %}</span><br>
+          <span class="faint" style="font-size:.86rem">{{ c.alignment or "Alignment unset" }}{% if c.player_name %} · played by {{ c.player_name }}{% endif %}</span>
+        </span>
+        <span class="roster-ac">{{ c.ac }}<small>AC</small></span>
+        <span class="hp-text" style="grid-column:2/4;font-size:.9rem;display:flex;justify-content:space-between"><span><b>{{ c.current_hp }}</b> / {{ c.max_hp }} HP{% if c.temp_hp %} <span class="temp">+{{ c.temp_hp }}</span>{% endif %}</span>{% if c.status != "ok" %}<span class="tag is-bad">{{ c.status }}</span>{% endif %}</span>
+        {{ hpbar(c.current_hp, c.max_hp, c.temp_hp) }}
+      </a>
+    {% endfor %}
+    </div>
+    {% else %}
+      <p class="faint">None yet.</p>
+    {% endif %}
+  </section>
+{% endfor %}
+
+{% if archived %}
+<section class="section">
+  <h2 class="rule-head">Archived <span class="count">{{ archived | length }}</span></h2>
+  <table class="ledger">
+    <tbody>
+    {% for c in archived %}
+      <tr data-id="{{ c.id }}" data-name="{{ c.name }}">
+        <td><a class="name" href="{{ url_for('pages.sheet', char_id=c.id) }}">{{ c.name }}</a> <span class="faint">{{ c.class_name }}</span></td>
+        <td class="r nowrap">
+          <button class="btn btn-sm" data-restore>{{ icon("archive-restore", "sm") }} Restore</button>
+          <button class="btn btn-sm btn-quiet btn-danger" data-delete>{{ icon("trash-2", "sm") }} Delete forever</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="faint" style="font-size:.9rem;margin-top:8px">Deleting removes the sheet and its morality history. Encounters keep a frozen copy of the character's last HP.</p>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  L.$("#new-char").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const body = { name: f.name.value.trim(), class_name: f.class_name.value.trim(), player_name: f.player_name.value.trim(), kind: f.kind.value };
+    L.act("POST", "/api/campaigns/{{ campaign.id }}/characters", body, (d) => { location.href = "/characters/" + d.character.id; });
+  });
+  L.$$("tr[data-id]").forEach((tr) => {
+    const id = tr.dataset.id;
+    L.$("[data-restore]", tr).addEventListener("click", () =>
+      L.act("PATCH", "/api/characters/" + id, { changes: { archived: { from: true, to: false } } }, () => location.reload()));
+    const del = L.$("[data-delete]", tr);
+    L.armed(del, () => L.act("DELETE", "/api/characters/" + id, { confirm_name: tr.dataset.name }, () => location.reload()),
+      "Delete " + tr.dataset.name + "? Click again");
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ state.character.name }} · Morality{% endblock %}
+{% block content %}
+<div class="page-head" style="border-bottom:0;margin-bottom:6px">
+  <div><div class="eyebrow">Morality &amp; alignment</div><h1>{{ state.character.name }}</h1></div>
+  <div class="actions"><a class="btn btn-sm" href="{{ url_for('pages.sheet', char_id=state.character.id) }}">{{ icon("user", "sm") }} Character sheet</a></div>
+</div>
+<nav class="char-tabs" aria-label="Characters">
+  {% for o in others %}<a href="{{ url_for('pages.character_morality', char_id=o.id) }}" class="{% if o.id == state.character.id %}is-on{% endif %}">{{ o.name }}</a>{% endfor %}
+</nav>
+
+<div class="moral-grid">
+  <div>
+    <div class="align-now">
+      <div><div class="lbl">Current alignment</div><div class="name" id="align-name"></div></div>
+      <div id="align-note" class="muted" style="font-size:.95rem"></div>
+    </div>
+    <svg class="align-chart" id="chart" viewBox="0 0 400 400" role="img" aria-labelledby="chart-title"><title id="chart-title">Alignment chart showing how scores moved over time</title></svg>
+    <div class="axis-meter" id="meters"></div>
+
+    <section class="section" style="margin-top:22px">
+      <h3 class="rule-head">How alignment is decided</h3>
+      <div class="setting">
+        <div><b>Automatic alignment</b></div>
+        <div class="desc">When on, the alignment follows the scores below, and every change is announced and marked in the ledger. Turn it off to set alignment by hand — scores keep being tracked either way.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" id="auto-align"> Automatic</label></div>
+      </div>
+      <div class="setting" id="manual-row">
+        <div><b>Alignment (manual)</b></div>
+        <div class="desc">Used while automatic alignment is off.</div>
+        <div class="ctl"><select id="manual-align" style="width:auto"><option value="">Unset</option>{% for a in ALIGNMENTS %}<option>{{ a }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="setting">
+        <div><b>Starting scores</b></div>
+        <div class="desc">Where the character began before any recorded events. Useful for a character who starts out lawful or wicked.</div>
+        <div class="ctl row" style="flex-wrap:nowrap">
+          <label class="field"><span>Law</span><input type="number" id="law-start" style="width:80px"></label>
+          <label class="field"><span>Good</span><input type="number" id="good-start" style="width:80px"></label>
+        </div>
+      </div>
+      <p class="faint" style="font-size:.9rem;margin-top:10px" id="scale-explainer"></p>
+    </section>
+  </div>
+
+  <div>
+    <section class="section">
+      <h2 class="rule-head">Record a deed</h2>
+      <form id="deed-form" class="deed-form panel panel-pad"></form>
+    </section>
+    <section class="section">
+      <h2 class="rule-head">Ledger <span class="count" id="ledger-count"></span></h2>
+      <ol class="deeds" id="deeds"></ol>
+    </section>
+  </div>
+</div>
+<script type="application/json" id="boot">{{ state | tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=2"></script>{% endblock %}

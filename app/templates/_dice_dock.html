@@ -1,0 +1,44 @@
+{% from "_macros.html" import icon %}
+<aside id="dice-dock" class="dice-dock" aria-label="Dice tray">
+  <div class="dd-head">
+    <h2>Dice</h2>
+    <span class="faint dd-keys">press <span class="kbd">D</span> to open · shift-click = advantage · ctrl-click = disadvantage</span>
+    <button type="button" class="icon-btn" id="dice-close" aria-label="Close dice tray">{{ icon("x") }}</button>
+  </div>
+  <div class="dice-tray"><canvas id="dice-canvas" aria-hidden="true"></canvas></div>
+  <div id="dice-result" class="dice-result" aria-live="polite"><div class="faint">Results appear here.</div></div>
+  <div class="dd-row">
+    <button type="button" class="btn btn-sm" id="dice-skip" disabled title="Jump to the result (doesn't reroll)">{{ icon("skip-forward", "sm") }} Skip</button>
+    <button type="button" class="btn btn-sm" id="dice-replay" title="Watch the last result again (doesn't reroll)">{{ icon("rotate-ccw", "sm") }} Replay</button>
+    <label class="dd-speed"><span class="lbl">Animation</span>
+      <select id="dice-speed" aria-label="Animation speed">
+        <option value="normal">Normal</option><option value="fast">Fast</option><option value="dramatic">Dramatic</option><option value="none">Off (reduced motion)</option>
+      </select></label>
+  </div>
+  <form id="dice-form" class="dd-form" autocomplete="off">
+    <input type="text" id="dice-expr" maxlength="80" placeholder="e.g. 1d20+5, 2d6+3, 4d6dl1" aria-label="Dice expression">
+    <button type="button" class="icon-btn" id="dice-clear" aria-label="Clear">{{ icon("x", "sm") }}</button>
+    <button type="submit" class="btn btn-primary">{{ icon("dice-5", "sm") }} Roll</button>
+  </form>
+  <div class="dd-dice" role="group" aria-label="Add dice">
+    {% for d in [4, 6, 8, 10, 12, 20, 100] %}<button type="button" class="btn btn-sm" data-die="{{ d }}">d{{ d }}</button>{% endfor %}
+  </div>
+  <div class="dd-row">
+    <div class="seg" role="group" aria-label="Advantage">
+      <button type="button" data-mode="normal">Normal</button><button type="button" data-mode="advantage">Advantage</button><button type="button" data-mode="disadvantage">Disadvantage</button>
+    </div>
+    <select id="dice-vis" aria-label="Who sees this roll" style="width:auto;flex:1;min-width:0">
+      <option value="public">Everyone sees it</option>
+      {% if role == "player" %}
+      <option value="dm">Only the DM and me</option>
+      <option value="private">Only me</option>
+      {% else %}
+      <option value="dm">Hidden — only the DM</option>
+      {% endif %}
+    </select>
+  </div>
+  <label class="check dd-overmap" hidden><input type="checkbox" id="dice-overmap"> Roll across the battle map</label>
+  <h3 class="rule-head" style="margin:12px 0 4px">History</h3>
+  <ul id="dice-history" class="dice-history"></ul>
+</aside>
+<div id="dice-drama" class="dice-drama" hidden><canvas id="dice-drama-canvas" aria-hidden="true"></canvas><p>click to skip</p></div>

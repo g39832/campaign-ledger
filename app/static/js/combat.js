@@ -1,0 +1,436 @@
+/* Combat screen. The server owns all combat state; every action goes through
+   the save queue and the response (the full encounter state) is rendered.
+   Nothing about the fight lives only in the browser. */
+(function () {
+  "use strict";
+  const { h, icon, $, $$, signed, boot, act, api, toast, Save, Binder, armed, fmtTime, initials } = L;
+  let S = boot("boot-state");
+  const chars = boot("boot-chars");
+  const creatures = boot("boot-creatures");
+  const CONDITIONS = boot("boot-conditions");
+  const EID = S.encounter.id;
+  const OUT = new Set(["dead", "defeated", "fled"]);
+  const STATUS_LABEL = { ok: "Fighting", unconscious: "Unconscious", stable: "Stable", incapacitated: "Incapacitated", defeated: "Defeated", dead: "Dead", fled: "Fled" };
+  let selected = null;
+  try { selected = Number(localStorage.getItem("combat-sel-" + EID)) || null; } catch (e) { /* ignore */ }
+
+  const byId = (id) => S.combatants.find((c) => c.id === id);
+  const current = () => byId(S.encounter.current_id);
+
+  function onErr(err) {
+    toast(err.message, "error");
+    if (err.status === 409) refresh(true);
+  }
+  function run(method, url, body, after) {
+    return act(method, url, body, (d) => { if (d && d.encounter) apply(d); if (after) after(d); }, { onError: onErr });
+  }
+  const hpLevel = (c) => {
+    if (c.hp <= 0) return "dead";
+    const p = c.max_hp ? (c.hp / c.max_hp) * 100 : 0;
+    return p <= 25 ? "low" : p <= 50 ? "mid" : "high";
+  };
+  const hpbar = (c) => h("span", { class: "hpbar", "data-level": hpLevel(c) },
+    h("span", { class: "hpbar-fill", style: "width:" + (c.max_hp ? Math.min(100, Math.floor((c.hp / c.max_hp) * 100)) : 0) + "%" }),
+    c.temp_hp ? h("span", { class: "hpbar-temp" }) : null);
+  const token = (c) => h("span", { class: "token" + (c.kind === "enemy" ? " enemy" : "") },
+    c.portrait ? h("img", { src: "/api/uploads/" + c.portrait, alt: "" }) : initials(c.name));
+
+  // ---- apply + focus preservation -----------------------------------------------
+  function apply(state) {
+    const a = document.activeElement;
+    const keep = a && a.dataset && a.dataset.keep ? { key: a.dataset.keep, start: a.selectionStart, end: a.selectionEnd, value: a.value } : null;
+    S = state;
+    if (selected && !byId(selected)) selected = null;
+    if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
+    renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
+    if (keep) {
+      const el = document.querySelector('[data-keep="' + keep.key + '"]');
+      if (el) { el.focus(); try { el.setSelectionRange(keep.start, keep.end); } catch (e) { /* number inputs */ } }
+    }
+  }
+  function select(id) {
+    selected = id;
+    try { localStorage.setItem("combat-sel-" + EID, id); } catch (e) { /* ignore */ }
+    renderList(); renderDetail();
+    if (window.Dice && Dice.history) Dice.renderHistory();
+  }
+
+  // ---- top bar ------------------------------------------------------------------
+  const nameBinder = new Binder({
+    url: "/api/encounters/" + EID, model: { name: S.encounter.name },
+    extract: (d) => { setTimeout(() => apply(d), 0); return d.encounter; },
+  });
+  nameBinder.bind($("#enc-name"), "name");
+
+  function renderBar() {
+    const e = S.encounter, st = e.status;
+    const label = $("#enc-status");
+    label.textContent = { planning: "Prepared", active: "In combat", ended: "Ended" }[st];
+    label.className = "status-label " + st;
+    if (document.activeElement !== $("#enc-name") && !nameBinder.pending.size) {
+      nameBinder.baseline.name = nameBinder.model.name = e.name;
+      $("#enc-name").value = e.name;
+    }
+    $("#round").textContent = e.round || "—";
+    const cur = current();
+    $("#now").textContent = st === "active" && cur ? cur.name : st === "ended" ? "Combat over" : "Not started";
+    $("#start").hidden = st !== "planning";
+    $("#reopen").hidden = st !== "ended";
+    $("#end").hidden = st === "ended";
+    $("#next").disabled = $("#prev").disabled = st !== "active";
+    const u = $("#undo");
+    u.disabled = !S.undo;
+    u.title = S.undo ? "Undo: " + S.undo.label : "No HP change to undo";
+    $("span", u).textContent = "Undo HP";
+    $("#count").textContent = S.combatants.length ? S.combatants.filter((c) => !OUT.has(c.status)).length + " standing of " + S.combatants.length : "";
+    document.title = e.name + (st === "active" ? " · Round " + e.round : "") + " · Campaign Ledger";
+  }
+  $("#next").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/next", {}, () => { const c = current(); if (c) select(c.id); }));
+  $("#prev").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/prev", {}, () => { const c = current(); if (c) select(c.id); }));
+  $("#start").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/start", {}, () => { const c = current(); if (c) select(c.id); }));
+  $("#reopen").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/reopen"));
+  armed($("#end"), () => run("POST", "/api/encounters/" + EID + "/end"), "End combat? Click again");
+  $("#undo").addEventListener("click", () => {
+    act("POST", "/api/encounters/" + EID + "/undo", {}, apply, {
+      onError: (err) => {
+        if (err.status === 409 && err.data.needs_force) {
+          toast(err.message, "error", { ms: 12000, action: { label: "Undo anyway", run: () => run("POST", "/api/encounters/" + EID + "/undo", { force: true }) } });
+        } else onErr(err);
+      },
+    });
+  });
+  $("#roll-missing").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/roll", { scope: "missing" }));
+  $("#roll-enemies").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/roll", { scope: "enemies" }));
+  $("#sort").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/sort"));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    if (e.key === "n" || e.key === "N") { if (!$("#next").disabled) { e.preventDefault(); $("#next").click(); } }
+    if (e.key === "p" || e.key === "P") { if (!$("#prev").disabled) { e.preventDefault(); $("#prev").click(); } }
+  });
+
+  // ---- initiative list --------------------------------------------------------------
+  function move(c, dir) {
+    const ids = S.combatants.map((x) => x.id);
+    const i = ids.indexOf(c.id), j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    run("POST", "/api/encounters/" + EID + "/reorder", { ids, moved_name: c.name });
+  }
+  function renderList() {
+    const ol = $("#init-list");
+    if (!S.combatants.length) {
+      ol.replaceChildren(h("li", { class: "empty", style: "border:0" }, h("h3", null, "No combatants yet"), "Add the party and some enemies below, set initiative, then start combat."));
+      return;
+    }
+    const active = S.encounter.status === "active";
+    ol.replaceChildren(...S.combatants.map((c, i) => {
+      const isCur = active && c.id === S.encounter.current_id;
+      const initIn = h("input", { type: "number", value: c.init_roll ?? "", placeholder: "—", "aria-label": "Initiative for " + c.name, "data-keep": "init-" + c.id,
+        onchange: (e) => {
+          const v = e.target.value.trim();
+          run("PATCH", "/api/combatants/" + c.id, { changes: { init_roll: { from: c.init_roll, to: v === "" ? null : Number(v) } } });
+        },
+        onkeydown: (e) => { if (e.key === "Enter") e.target.blur(); } });
+      return h("li", { class: "combatant" + (isCur ? " is-current" : "") + (c.id === selected ? " is-selected" : "") + (OUT.has(c.status) ? " is-out" : ""),
+        "aria-current": isCur ? "true" : null,
+        onclick: (e) => { if (!e.target.closest("input,button,a")) select(c.id); } },
+        h("div", { class: "c-move" },
+          h("button", { type: "button", "aria-label": "Move " + c.name + " up", disabled: i === 0, onclick: () => move(c, -1) }, icon("chevron-up", "sm")),
+          h("button", { type: "button", "aria-label": "Move " + c.name + " down", disabled: i === S.combatants.length - 1, onclick: () => move(c, 1) }, icon("chevron-down", "sm"))),
+        h("div", { class: "c-init" }, initIn, h("span", { class: "m" }, signed(c.init_mod))),
+        token(c),
+        h("div", { class: "c-main" },
+          h("div", { class: "c-name" }, h("span", { style: "overflow:hidden;text-overflow:ellipsis" }, c.name), isCur ? h("span", { class: "acting" }, "acting") : null),
+          h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
+            c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
+          c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
+            x.name + (x.rounds_left != null ? " " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null),
+        h("div", { class: "c-hp" },
+          h("div", { class: "hp-text" }, h("span", null, h("b", null, c.hp), " / " + c.max_hp), c.temp_hp ? h("span", { class: "temp" }, "+" + c.temp_hp + " temp") : null),
+          hpbar(c)),
+        h("div", { class: "c-ac" }, c.ac, h("small", null, "AC")));
+    }));
+  }
+
+  // ---- detail panel ----------------------------------------------------------------
+  function renderDetail() {
+    const box = $("#detail");
+    const c = byId(selected);
+    if (!c) {
+      box.replaceChildren(h("div", { class: "detail-sec faint" }, "Select a combatant to manage HP, conditions and details."));
+      return;
+    }
+    const cid = c.id;
+    const amt = h("input", { type: "number", min: 0, placeholder: "0", "aria-label": "Amount", "data-keep": "amt-" + cid, inputmode: "numeric",
+      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); hp(e.shiftKey ? "heal" : "damage"); } } });
+    function hp(op) {
+      const n = Number(amt.value);
+      if (!amt.value || !Number.isFinite(n) || n < 0) { amt.focus(); return; }
+      run("POST", "/api/combatants/" + cid + "/hp", { op, amount: Math.trunc(n) });
+      amt.value = "";
+    }
+    const statusSel = h("select", { "aria-label": "Status", style: "width:auto", onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { status: { from: c.status, to: e.target.value } } }) },
+      Object.entries(STATUS_LABEL).filter(([k]) => c.kind === "enemy" ? k !== "stable" : k !== "defeated").map(([k, v]) => h("option", { value: k, selected: k === c.status }, v)));
+    const removeBtn = h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger" }, icon("trash-2", "sm"), " Remove");
+    armed(removeBtn, () => run("DELETE", "/api/combatants/" + cid), "Remove " + c.name + "?");
+
+    const sections = [];
+    sections.push(h("div", { class: "detail-head" }, token(c),
+      h("div", { class: "grow", style: "min-width:0" }, h("h2", null, c.name),
+        h("div", { class: "faint", style: "font-size:.9rem" }, c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC"),
+          c.linked ? [" · ", h("a", { href: "/characters/" + c.character_id }, "open sheet")] : null)),
+      statusSel));
+
+    // HP
+    const editMax = h("input", { type: "number", min: 0, value: c.max_hp, "aria-label": "Max HP", style: "width:7ch" });
+    const editCur = h("input", { type: "number", min: 0, value: c.hp, "aria-label": "Current HP", style: "width:7ch" });
+    const editTemp = h("input", { type: "number", min: 0, value: c.temp_hp, "aria-label": "Temp HP", style: "width:7ch" });
+    sections.push(h("div", { class: "detail-sec" },
+      h("div", { class: "hp-readout" }, h("span", { class: "cur" }, c.hp), h("span", { class: "of" }, "/ " + c.max_hp + " HP"),
+        c.temp_hp ? h("span", { class: "t" }, "+" + c.temp_hp + " temp") : null,
+        h("span", { class: "grow" }), h("span", { class: "faint", style: "font-size:.85rem" }, "AC " + c.ac)),
+      hpbar(c),
+      h("div", { class: "hp-ctl", style: "margin-top:12px" }, amt,
+        h("button", { type: "button", class: "btn btn-dmg", onclick: () => hp("damage") }, icon("swords", "sm"), " Damage"),
+        h("button", { type: "button", class: "btn btn-heal", onclick: () => hp("heal") }, icon("heart", "sm"), " Heal"),
+        h("button", { type: "button", class: "btn btn-temp", onclick: () => hp("temp"), title: S.settings.temp_hp_stacking ? "Adds to current temp HP" : "Temp HP doesn't stack: keeps the higher value" }, icon("shield-plus", "sm"), " Temp")),
+      h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" }, "Enter applies damage · Shift+Enter heals. Damage uses temp HP first."),
+      h("details", { style: "margin-top:10px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Edit HP directly"),
+        h("div", { class: "row", style: "margin-top:8px;align-items:center" },
+          h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Current"), editCur),
+          h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Max"), editMax),
+          h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Temp"), editTemp),
+          h("button", { type: "button", class: "btn btn-sm", style: "align-self:flex-end", onclick: () => {
+            const body = { op: "set" };
+            if (editCur.value !== String(c.hp)) body.hp = Number(editCur.value);
+            if (editMax.value !== String(c.max_hp)) body.max_hp = Number(editMax.value);
+            if (editTemp.value !== String(c.temp_hp)) body.temp_hp = Number(editTemp.value);
+            if (Object.keys(body).length > 1) run("POST", "/api/combatants/" + cid + "/hp", body);
+          } }, "Apply")))));
+
+    // Death saves
+    if (c.linked && (c.hp === 0 || c.death_successes || c.death_failures)) {
+      const pips = (field, cls) => h("span", { class: "pips " + cls }, [0, 1, 2].map((i) => h("button", {
+        type: "button", class: "pip" + (i < c[field] ? " on" : ""), "aria-label": field.replace("_", " ") + " " + (i + 1),
+        onclick: () => run("PATCH", "/api/combatants/" + cid, { changes: { [field]: { from: c[field], to: c[field] === i + 1 ? i : i + 1 } } }),
+      })));
+      sections.push(h("div", { class: "detail-sec" }, h("div", { class: "row", style: "align-items:center" },
+        h("span", { class: "lbl" }, "Death saves"), h("span", { class: "faint" }, "Successes"), pips("death_successes", ""), h("span", { class: "faint" }, "Failures"), pips("death_failures", "fail"))));
+    }
+
+    // Conditions
+    const condName = h("input", { type: "text", list: "cond-names", placeholder: "Condition or effect", "aria-label": "Condition", "data-keep": "cname-" + cid });
+    const rounds = h("input", { type: "number", min: 1, placeholder: "∞", "aria-label": "Duration in rounds", title: "Rounds (leave blank for no fixed duration)" });
+    const tickOn = h("select", { "aria-label": "Counts down on whose turn" },
+      S.combatants.map((o) => h("option", { value: o.id, selected: o.id === cid }, o.id === cid ? "Their own turn" : o.name + "'s turn")));
+    const tick = h("select", { "aria-label": "Start or end of turn" }, h("option", { value: "end" }, "at end of"), h("option", { value: "start" }, "at start of"));
+    const auto = h("input", { type: "checkbox" });
+    const note = h("input", { type: "text", placeholder: "Note (save DC, source…)", "aria-label": "Condition note" });
+    function addCond(name, withDuration) {
+      name = (name || condName.value).trim();
+      if (!name) { condName.focus(); return; }
+      const body = { name, note: withDuration ? note.value : "" };
+      if (withDuration && rounds.value) Object.assign(body, { rounds: Number(rounds.value), tick: tick.value, tick_on: Number(tickOn.value), auto_expire: auto.checked });
+      run("POST", "/api/combatants/" + cid + "/conditions", body);
+    }
+    const condItems = c.conditions.map((x) => h("div", { class: "cond" + (x.expired ? " is-expired" : "") },
+      h("div", { class: "cn" }, x.name),
+      h("div", { class: "ca" },
+        x.rounds_left != null && !x.expired ? [
+          h("button", { type: "button", class: "icon-btn sm", "aria-label": "One less round", onclick: () => run("PATCH", "/api/combatants/" + cid + "/conditions/" + x.id, { rounds_left: Math.max(0, x.rounds_left - 1) }) }, icon("minus", "sm")),
+          h("button", { type: "button", class: "icon-btn sm", "aria-label": "One more round", onclick: () => run("PATCH", "/api/combatants/" + cid + "/conditions/" + x.id, { rounds_left: x.rounds_left + 1 }) }, icon("plus", "sm"))] : null,
+        x.expired ? h("button", { type: "button", class: "btn btn-sm", title: "Keep it with no fixed duration", onclick: () => run("PATCH", "/api/combatants/" + cid + "/conditions/" + x.id, { rounds_left: null }) }, "Keep") : null,
+        h("button", { type: "button", class: x.expired ? "btn btn-sm btn-primary" : "icon-btn sm", "aria-label": "Remove " + x.name, title: "Remove",
+          onclick: () => run("DELETE", "/api/combatants/" + cid + "/conditions/" + x.id) }, x.expired ? "Remove" : icon("x", "sm"))),
+      h("div", { class: "cd" }, condDesc(x, c))));
+    sections.push(h("div", { class: "detail-sec" },
+      h("h3", { class: "rule-head" }, "Conditions & effects"),
+      condItems.length ? h("div", { class: "cond-list" }, condItems) : h("p", { class: "faint", style: "margin:0" }, "None."),
+      h("div", { class: "cond-quick", "aria-label": "Add a standard condition" },
+        CONDITIONS.filter((n) => !c.conditions.some((x) => x.name === n)).map((n) => h("button", { type: "button", onclick: () => addCond(n, false) }, n))),
+      h("details", { style: "margin-top:10px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Add with duration or custom effect"),
+        h("div", { class: "cond-add" }, condName, rounds, h("label", { class: "check", style: "font-size:.88rem" }, auto, "Remove automatically"),
+          h("div", { class: "full row", style: "align-items:center;gap:6px;font-size:.92rem" }, h("span", { class: "faint" }, "Count down"), tick, tickOn),
+          h("div", { class: "full" }, note),
+          h("button", { type: "button", class: "btn btn-sm full", onclick: () => addCond(null, true) }, icon("plus", "sm"), " Add effect"),
+          h("div", { class: "full faint", style: "font-size:.82rem" }, "Effects count down one per round on the chosen turn. When one runs out it's flagged for you to remove — unless “Remove automatically” is ticked. Either way it's written to the log.")))));
+
+    // Initiative & AC
+    const modIn = h("input", { type: "number", value: c.init_mod, "aria-label": "Initiative modifier", style: "width:7ch",
+      onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { init_mod: { from: c.init_mod, to: Number(e.target.value) } } }) });
+    const acIn = h("input", { type: "number", value: c.ac, min: 0, "aria-label": "Armor class", style: "width:7ch",
+      onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { ac: { from: c.ac, to: Number(e.target.value) } } }) });
+    const isCurrent = S.encounter.status === "active" && S.encounter.current_id === cid;
+    sections.push(h("div", { class: "detail-sec row", style: "align-items:flex-end" },
+      h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Init modifier"), modIn),
+      h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, c.linked ? "AC (sheet)" : "AC"), acIn),
+      S.encounter.status === "active" && !isCurrent ? h("button", { type: "button", class: "btn btn-sm", title: "Override turn order", onclick: () => run("POST", "/api/encounters/" + EID + "/set-turn", { combatant_id: cid }) }, icon("play", "sm"), " Make it their turn") : null,
+      h("label", { class: "check", style: "font-size:.9rem", title: "Hidden combatants and their map tokens are never sent to players" },
+        h("input", { type: "checkbox", checked: c.hidden, onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { hidden: { from: c.hidden, to: e.target.checked } } }) }),
+        "Hidden from players"),
+      h("span", { class: "grow" }), removeBtn));
+
+    // Rolls: results only. Nothing here changes HP; initiative is set only by its own button.
+    sections.push(rollSection(c));
+
+    // Stat block (enemies)
+    if (c.kind === "enemy") sections.push(statblock(c));
+
+    // Notes
+    const notes = h("textarea", { rows: 3, placeholder: "Notes for this combatant", "aria-label": "Combatant notes", "data-keep": "notes-" + cid },
+      c.notes);
+    notes.addEventListener("change", () => run("PATCH", "/api/combatants/" + cid, { changes: { notes: { from: c.notes, to: notes.value } } }));
+    sections.push(h("div", { class: "detail-sec" }, h("h3", { class: "rule-head" }, "Notes"), notes));
+
+    box.replaceChildren(...sections, h("datalist", { id: "cond-names" }, CONDITIONS.map((n) => h("option", { value: n }))));
+  }
+  const ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
+  function attackLines(text) {
+    return String(text || "").split(/\n+/).map((line) => {
+      const name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1];
+      const hit = line.match(/([+-]\s*\d+)\s*to hit/i);
+      const dmg = line.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)/i);
+      return name && (hit || dmg) ? { name: name.trim(), hit: hit ? hit[1].replace(/\s/g, "") : null, dmg: dmg ? dmg[1].replace(/\s/g, "") : null } : null;
+    }).filter(Boolean);
+  }
+  function rollSection(c) {
+    const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
+    const btns = [];
+    btns.push(h("button", { type: "button", class: "btn btn-sm", title: "Roll d20 + initiative modifier and put it in the turn order",
+      onclick: (e) => roll({ check: { type: "initiative", combatant_id: c.id }, apply_initiative: true }, e).then((r) => { if (r) refresh(true); }) },
+      icon("dice-5", "sm"), " Roll & set initiative"));
+    const saves = h("div", { class: "roll-grid", style: "margin-top:8px" }, ABIL.map(([k, label]) => h("button", { type: "button",
+      onclick: (e) => roll({ check: { type: "save", key: k, combatant_id: c.id } }, e) },
+      h("span", null, label + " save"), h("b", null, c.linked ? "" : signed(Math.floor((((c.statblock.abilities || {})[k] ?? 10) - 10) / 2))))));
+    const atk = c.kind === "enemy" ? attackLines(c.statblock.attacks) : [];
+    return h("div", { class: "detail-sec" },
+      h("h3", { class: "rule-head" }, "Rolls", h("span", { class: "count" }, "shift = advantage · ctrl = disadvantage")),
+      h("div", { class: "roll-row" }, btns),
+      atk.length ? h("div", { style: "margin-top:8px;display:grid;gap:6px" }, atk.map((a) => h("div", { class: "roll-row", style: "align-items:center" },
+        h("b", { style: "min-width:7ch" }, a.name),
+        a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }, e) }, "Hit " + a.hit) : null,
+        a.dmg ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name }, e) }, "Dmg " + a.dmg) : null,
+        a.dmg ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit: true }, e) }, "Crit") : null))) : null,
+      saves,
+      c.linked ? h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" }, "Uses the character sheet's saves. Weapon attacks are on the ", h("a", { href: "/characters/" + c.character_id }, "sheet"), ".") : null);
+  }
+  // Damage rolls in the dice history can be applied — but only when the DM clicks.
+  const applied = new Map(); // roll id -> what was applied, so one roll can't be applied twice by accident
+  if (window.Dice) {
+    Dice.actions = (r) => {
+      if (r.kind !== "damage") return null;
+      if (applied.has(r.id)) return h("div", { class: "dh-actions faint" }, "Applied " + applied.get(r.id));
+      const target = byId(selected);
+      if (!target) return h("div", { class: "dh-actions faint" }, "Select a combatant to apply this damage");
+      const apply = (amount) => {
+        applied.set(r.id, amount + " to " + target.name);
+        Dice.renderHistory();
+        run("POST", "/api/combatants/" + target.id + "/hp", { op: "damage", amount });
+      };
+      return h("div", { class: "dh-actions" },
+        h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => apply(r.total) }, "Apply " + r.total + " to " + target.name),
+        h("button", { type: "button", class: "btn btn-sm", title: "Half damage, rounded down (successful save)", onclick: () => apply(Math.floor(r.total / 2)) }, "Half (" + Math.floor(r.total / 2) + ")"));
+    };
+  }
+
+  function condDesc(x, c) {
+    const parts = [];
+    if (x.expired) parts.push("Duration has run out — remove it or keep it?");
+    else if (x.rounds_left != null) {
+      const who = x.tick_on === c.id ? "their" : ((byId(x.tick_on) || {}).name || "another combatant") + "'s";
+      parts.push(x.rounds_left + " round" + (x.rounds_left === 1 ? "" : "s") + " left · counts at " + x.tick + " of " + who + " turn" + (x.auto_expire ? " · auto-removes" : ""));
+    } else parts.push("No fixed duration");
+    if (x.note) parts.push(x.note);
+    return parts.join(" · ");
+  }
+  function statblock(c) {
+    const s = c.statblock || {};
+    const ab = s.abilities || {};
+    const line = (label, v) => v ? h("div", null, h("b", null, label + " "), v) : null;
+    const hasAbil = Object.keys(ab).length;
+    return h("div", { class: "detail-sec statblock" },
+      h("h3", { class: "rule-head" }, "Stat block", c.creature_id ? h("span", { class: "count" }, "copied when added") : null),
+      h("div", { class: "faint", style: "font-style:italic" }, [s.creature_type, s.cr ? "CR " + s.cr : ""].filter(Boolean).join(" · ") || "Quick-added enemy"),
+      line("Speed", s.speed),
+      hasAbil ? [h("hr", { class: "sb-rule" }), h("div", { class: "sb-abil" }, ["str", "dex", "con", "int", "wis", "cha"].map((a) =>
+        h("div", null, h("b", null, { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" }[a]), (ab[a] ?? 10) + " (" + signed(Math.floor(((ab[a] ?? 10) - 10) / 2)) + ")"))), h("hr", { class: "sb-rule" })] : null,
+      line("Resistances", s.resistances), line("Immunities", s.immunities), line("Vulnerabilities", s.vulnerabilities),
+      line("Condition immunities", s.condition_immunities), line("Senses", s.senses), line("Languages", s.languages),
+      s.traits ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Traits"), h("div", { class: "pre" }, s.traits)) : null,
+      s.attacks ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Actions"), h("div", { class: "pre" }, s.attacks)) : null,
+      s.notes ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Notes"), h("div", { class: "pre" }, s.notes)) : null);
+  }
+
+  // ---- log ----------------------------------------------------------------------
+  let lastLogLen = 0;
+  function renderLog() {
+    const box = $("#log-items");
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.replaceChildren(...S.log.map((l) => h("div", { class: "log-item k-" + l.kind },
+      h("span", { class: "r" }, l.round ? "R" + l.round : ""),
+      h("div", null, h("span", { class: "m" }, l.message), h("time", { datetime: l.created_at }, fmtTime(l.created_at) + (l.turn_name && l.kind !== "turn" ? " · " + l.turn_name + "'s turn" : ""))))));
+    $("#log-count").textContent = S.log_total > S.log.length ? "latest " + S.log.length + " of " + S.log_total : S.log_total + " entries";
+    if (atBottom || S.log.length !== lastLogLen) box.scrollTop = box.scrollHeight;
+    lastLogLen = S.log.length;
+  }
+  $("#log-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const m = e.target.message.value.trim();
+    if (!m) return;
+    run("POST", "/api/encounters/" + EID + "/log", { message: m });
+    e.target.message.value = "";
+  });
+
+  // ---- adding combatants -----------------------------------------------------------
+  $$("[data-addtab]").forEach((t) => t.addEventListener("click", () => {
+    $$("[data-addtab]").forEach((x) => x.classList.toggle("is-on", x === t));
+    $$("[data-addpane]").forEach((p) => { p.hidden = p.dataset.addpane !== t.dataset.addtab; });
+  }));
+  $("#quick-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const quick = { name: f.name.value.trim(), max_hp: Number(f.max_hp.value), ac: f.ac.value === "" ? 10 : Number(f.ac.value),
+      init_mod: f.init_mod.value === "" ? 0 : Number(f.init_mod.value), count: Number(f.count.value) || 1, save_to_library: f.save_to_library.checked };
+    run("POST", "/api/encounters/" + EID + "/combatants", { quick }, () => { f.reset(); f.name.focus(); });
+  });
+  $("#lib-search").addEventListener("input", renderAdd);
+  function renderAdd() {
+    const q = $("#lib-search").value.trim().toLowerCase();
+    const list = creatures.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.creature_type || "").toLowerCase().includes(q));
+    $("#lib-list").replaceChildren(...(list.length ? list.slice(0, 80).map((cr) => {
+      const n = h("input", { type: "number", min: 1, max: 50, value: 1, "aria-label": "How many " + cr.name, style: "width:6ch" });
+      return h("li", null, h("div", { class: "grow" }, h("b", null, cr.name), h("div", { class: "faint", style: "font-size:.85rem" },
+        [cr.creature_type, cr.cr ? "CR " + cr.cr : "", cr.max_hp + " HP", "AC " + cr.ac, "init " + signed(cr.initiative_mod)].filter(Boolean).join(" · "))),
+        n, h("button", { type: "button", class: "btn btn-sm", onclick: () => run("POST", "/api/encounters/" + EID + "/combatants", { creature_id: cr.id, count: Number(n.value) || 1 }) }, "Add"));
+    }) : [h("li", { class: "faint" }, creatures.length ? "No match." : "The library is empty. Tick “Also save to the creature library” when quick-adding, or build stat blocks on the Creatures page.")]));
+    const inEnc = new Set(S.combatants.filter((c) => c.character_id).map((c) => c.character_id));
+    const avail = chars.filter((c) => !inEnc.has(c.id));
+    const pcs = avail.filter((c) => c.kind === "pc");
+    $("#party-list").replaceChildren(
+      ...(pcs.length > 1 ? [h("li", null, h("span", { class: "grow faint" }, pcs.length + " player characters not in this fight"),
+        h("button", { type: "button", class: "btn btn-sm", onclick: () => run("POST", "/api/encounters/" + EID + "/combatants", { characters: pcs.map((c) => c.id) }) }, "Add all"))] : []),
+      ...(avail.length ? avail.map((c) => h("li", null, h("div", { class: "grow" }, h("b", null, c.name), h("div", { class: "faint", style: "font-size:.85rem" },
+        (c.kind === "pc" ? "PC" : "NPC") + " · " + c.current_hp + "/" + c.max_hp + " HP · AC " + c.ac)),
+        h("button", { type: "button", class: "btn btn-sm", onclick: () => run("POST", "/api/encounters/" + EID + "/combatants", { characters: [c.id] }) }, "Add"))) :
+        [h("li", { class: "faint" }, "Every character in this campaign is already here.")]));
+  }
+
+  // ---- stay in sync (other tabs, character sheet edits) -----------------------------
+  async function refresh(force) {
+    if (!force && (Save.busy() || document.hidden)) return;
+    try {
+      if (!force) {
+        const r = await api("GET", "/api/encounters/" + EID + "/rev");
+        if (r.rev === S.encounter.rev) return;
+      }
+      apply(await api("GET", "/api/encounters/" + EID));
+    } catch (e) { /* offline: the indicator shows it when a save fails */ }
+  }
+  setInterval(refresh, 3000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+
+  apply(S);
+})();

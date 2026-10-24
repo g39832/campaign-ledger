@@ -1,0 +1,77 @@
+{% from "_macros.html" import icon %}<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ campaign.name if campaign else "Campaign Ledger" }}{% endblock %} · Campaign Ledger</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 29 9.5v13L16 30 3 22.5v-13z' fill='%23c8553d'/%3E%3Cpath d='M16 8 23 20H9z' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=2">
+{% block head %}{% endblock %}
+</head>
+<body class="page-{{ section }}" data-role="dm"{% if campaign %} data-campaign="{{ campaign.id }}"{% endif %}>
+{% include "_sprite.svg" %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="{{ url_for('pages.dashboard') }}" title="Dashboard">Campaign <span>Ledger</span></a>
+
+    {% if campaign %}
+    <details class="switcher" data-menu>
+      <summary aria-label="Switch campaign">
+        <span class="switcher-label">Campaign</span>
+        <span class="switcher-name">{{ campaign.name }}</span>
+        {{ icon("chevron-down", "sm") }}
+      </summary>
+      <div class="menu">
+        {% for c in campaigns %}
+          <button type="button" class="menu-item{% if c.id == campaign.id %} is-current{% endif %}" data-activate="{{ c.id }}">
+            {{ c.name }}{% if c.id == campaign.id %} {{ icon("check", "sm") }}{% endif %}
+          </button>
+        {% endfor %}
+        <a class="menu-item menu-foot" href="{{ url_for('pages.campaigns') }}">{{ icon("book-open", "sm") }} Manage campaigns</a>
+      </div>
+    </details>
+    {% endif %}
+
+    <div class="topbar-right">
+      <div id="save-status" class="save-status" data-state="saved" role="status" aria-live="polite">
+        <span class="dot"></span><span class="save-text">All changes saved</span>
+        <button type="button" class="link-btn save-retry" hidden>Retry now</button>
+      </div>
+      <button type="button" class="btn btn-sm dice-btn" data-dice-open aria-expanded="false" title="Dice tray (D)">{{ icon("dice-5", "sm") }} Dice<span class="dice-mode-flag" hidden></span><span class="dice-badge" hidden></span></button>
+      <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch to {{ 'light' if theme == 'dark' else 'dark' }} mode" title="Light / dark">
+        {{ icon("sun", "when-dark") }}{{ icon("moon", "when-light") }}
+      </button>
+    </div>
+  </div>
+  <nav class="mainnav" aria-label="Main">
+    {% set nav = [
+      ("dashboard", "pages.dashboard", "Dashboard", "house"),
+      ("characters", "pages.characters", "Characters", "users"),
+      ("combat", "pages.combat_list", "Combat", "swords"),
+      ("map", "pages.maps", "Battle map", "map"),
+      ("morality", "pages.morality_overview", "Morality", "scale"),
+      ("journal", "pages.journal", "Journal", "scroll-text"),
+      ("creatures", "pages.creatures", "Creatures", "paw-print"),
+      ("table", "pages.table", "Players", "link"),
+      ("campaigns", "pages.campaigns", "Campaigns", "book-open"),
+      ("settings", "pages.settings", "Settings & Backups", "settings"),
+    ] %}
+    {% for key, endpoint, label, ic in nav %}
+      <a href="{{ url_for(endpoint) }}" class="{% if section == key %}is-active{% endif %}"{% if section == key %} aria-current="page"{% endif %}>{{ icon(ic, "sm") }}<span>{{ label }}</span></a>
+    {% endfor %}
+  </nav>
+</header>
+
+<main id="main" class="main {% block main_class %}{% endblock %}">
+{% block content %}{% endblock %}
+</main>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="conflicts" class="conflicts" aria-live="assertive"></div>
+{% set role = "dm" %}{% include "_dice_dock.html" %}
+
+<script src="{{ url_for('static', filename='js/core.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/dice.js') }}?v=2"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

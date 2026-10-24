@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join a game · Campaign Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=2">
+</head>
+<body class="page-join">
+{% include "_sprite.svg" %}
+<header class="topbar"><div class="topbar-inner"><span class="wordmark">Campaign <span>Ledger</span></span></div></header>
+<main class="main">
+  <div class="join-box">
+    <div class="eyebrow">Join the table</div>
+    <h1>Join a game</h1>
+    {% if ident and ident.role == "player" %}
+      <p class="muted">You're already in a game as <b>{{ ident.name }}</b>. <a href="/play">Go back to it</a>, or join a different one below.</p>
+    {% endif %}
+    <p class="muted">Ask your DM for the join code.</p>
+    <form id="join" style="display:grid;gap:12px;margin-top:14px">
+      <label class="field"><span>Join code</span><input type="text" name="code" maxlength="12" autocomplete="off" autocapitalize="characters" value="{{ prefill }}" required style="font:700 1.4rem var(--sans);letter-spacing:.15em;text-transform:uppercase"></label>
+      <div id="found" class="faint"></div>
+      <label class="field"><span>Your name</span><input type="text" name="name" maxlength="40" required placeholder="So the DM knows who you are"></label>
+      <label class="field" id="char-field" hidden><span>Your character</span><select name="character_id"></select></label>
+      <button class="btn btn-primary btn-lg" type="submit">Join</button>
+    </form>
+  </div>
+</main>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='js/core.js') }}?v=2"></script>
+<script>
+(() => {
+  const { $, h, api, toast, debounce } = L;
+  const f = $("#join");
+  const lookup = debounce(async () => {
+    const code = f.code.value.trim();
+    if (code.length < 6) { $("#found").textContent = ""; $("#char-field").hidden = true; return; }
+    try {
+      const d = await api("GET", "/api/join/lookup?code=" + encodeURIComponent(code));
+      $("#found").textContent = "Game found: " + d.campaign;
+      const sel = f.character_id;
+      sel.replaceChildren(h("option", { value: "" }, "Just watching / no character yet"),
+        ...d.characters.map((c) => h("option", { value: c.id, disabled: c.claimed }, c.name + (c.class_name ? " — " + c.class_name + " " + c.level : "") + (c.claimed ? " (taken)" : ""))));
+      $("#char-field").hidden = !d.characters.length;
+    } catch (e) { $("#found").textContent = e.message; $("#char-field").hidden = true; }
+  }, 300);
+  f.code.addEventListener("input", lookup);
+  if (f.code.value) lookup();
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("POST", "/api/join", { code: f.code.value.trim(), name: f.name.value.trim(), character_id: Number(f.character_id.value) || null });
+      location.href = "/play";
+    } catch (err) { toast(err.message, "error"); }
+  });
+})();
+</script>
+</body>
+</html>

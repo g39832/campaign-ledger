@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Battle maps{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Battle maps</h1><div class="sub">Tactical maps for fights: upload a map image or draw one on a grid, place tokens, and reveal the battlefield to players as they explore.</div></div>
+</div>
+<form id="new-map" class="panel panel-pad row" style="margin-bottom:22px">
+  <label class="field" style="flex:2 1 220px"><span>New map</span><input type="text" name="name" maxlength="200" required placeholder="e.g. Goblin warrens, level 1"></label>
+  <label class="field" style="flex:0 0 90px"><span>Columns</span><input type="number" name="cols" min="1" max="200" value="24"></label>
+  <label class="field" style="flex:0 0 90px"><span>Rows</span><input type="number" name="rows" min="1" max="200" value="16"></label>
+  <label class="field" style="flex:1 1 180px"><span>Encounter (optional)</span>
+    <select name="encounter_id"><option value="">None</option>{% for e in encounters if e.status != "ended" %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></label>
+  <label class="field" style="flex:1 1 200px"><span>Map image (optional)</span><input type="file" name="image" accept="image/png,image/jpeg,image/webp"></label>
+  <button class="btn btn-primary" type="submit">{{ icon("plus", "sm") }} Create map</button>
+</form>
+{% if maps %}
+<div class="panel" style="overflow-x:auto">
+<table class="ledger">
+  <thead><tr><th>Map</th><th>Grid</th><th>Encounter</th><th class="r">Tokens</th><th></th></tr></thead>
+  <tbody>
+  {% for m in maps %}
+    <tr>
+      <td><a class="name" href="{{ url_for('pages.map_edit', map_id=m.id) }}">{{ m.name }}</a>
+        {% if campaign.live_map_id == m.id %} <span class="live-flag">· shown to players</span>{% endif %}
+        <div class="faint" style="font-size:.86rem">{{ "Uploaded image" if m.image else "Drawn grid" }}{% if m.fog_enabled %} · fog of war{% endif %}</div></td>
+      <td class="num">{{ m.cols }} × {{ m.rows }}</td>
+      <td>{{ m.encounter_name or "—" }}</td>
+      <td class="r num">{{ m.token_count }}</td>
+      <td class="r"><a class="btn btn-sm" href="{{ url_for('pages.map_edit', map_id=m.id) }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty"><h3>No maps yet</h3>Create one above. You can upload a map image now or later, or just draw walls and water on the grid.</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+L.$("#new-map").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = { name: f.name.value.trim(), cols: Number(f.cols.value) || 24, rows: Number(f.rows.value) || 16 };
+  if (f.encounter_id.value) body.encounter_id = Number(f.encounter_id.value);
+  try {
+    const d = await L.api("POST", "/api/campaigns/{{ campaign.id }}/maps", body);
+    if (f.image.files[0]) {
+      const fd = new FormData(); fd.append("file", f.image.files[0]);
+      await L.api("POST", "/api/maps/" + d.map.id + "/image", fd);
+    }
+    location.href = "/map/" + d.map.id;
+  } catch (err) { L.toast(err.message, "error"); }
+});
+</script>
+{% endblock %}

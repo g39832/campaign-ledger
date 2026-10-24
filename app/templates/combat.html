@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ state.encounter.name }}{% endblock %}
+{% block content %}
+<div class="combat-bar" id="bar">
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <span class="status-label" id="enc-status" style="align-self:flex-start"></span>
+    <input class="input enc-name" id="enc-name" aria-label="Encounter name">
+  </div>
+  <div class="round-box"><span class="lbl">Round</span><span class="n" id="round">0</span></div>
+  <div class="turn-now"><span class="lbl">Now acting</span><span class="who" id="now">—</span></div>
+  <div class="controls">
+    <button class="btn" type="button" id="undo" title="Undo the most recent HP change">{{ icon("undo-2", "sm") }} <span>Undo HP</span></button>
+    <button class="btn" type="button" id="prev">{{ icon("skip-back", "sm") }} Prev<span class="kbd">P</span></button>
+    <button class="btn btn-primary btn-lg" type="button" id="next">Next turn {{ icon("skip-forward", "sm") }}<span class="kbd">N</span></button>
+    <button class="btn" type="button" id="start">{{ icon("play", "sm") }} Start combat</button>
+    <button class="btn btn-quiet" type="button" id="end">{{ icon("flag", "sm") }} End</button>
+    <button class="btn" type="button" id="reopen">{{ icon("rotate-ccw", "sm") }} Reopen</button>
+  </div>
+</div>
+
+<div class="combat-grid">
+  <div>
+    <div class="row" style="margin-bottom:8px;align-items:center">
+      <h2 class="rule-head grow" style="margin:0">Initiative <span class="count" id="count"></span></h2>
+      <button class="btn btn-sm" type="button" id="roll-missing" title="Roll d20 + modifier for everyone without an initiative">{{ icon("dice-5", "sm") }} Roll missing</button>
+      <button class="btn btn-sm" type="button" id="roll-enemies" title="Re-roll initiative for every enemy">{{ icon("dice-5", "sm") }} Roll enemies</button>
+      <button class="btn btn-sm btn-quiet" type="button" id="sort" title="Sort by initiative">{{ icon("list-ordered", "sm") }} Sort</button>
+    </div>
+    <ol class="init-list" id="init-list"></ol>
+
+    <div class="add-panel" id="add-panel">
+      <div class="tabs" role="tablist">
+        <button type="button" class="is-on" data-addtab="quick">Quick enemy</button>
+        <button type="button" data-addtab="library">From library</button>
+        <button type="button" data-addtab="party">Characters</button>
+      </div>
+      <form class="pane quick-form" data-addpane="quick" id="quick-form">
+        <label class="field"><span>Name</span><input type="text" name="name" required maxlength="200" placeholder="Goblin"></label>
+        <label class="field"><span>HP</span><input type="number" name="max_hp" min="1" required placeholder="7"></label>
+        <label class="field"><span>AC</span><input type="number" name="ac" min="0" placeholder="10"></label>
+        <label class="field"><span>Init mod</span><input type="number" name="init_mod" placeholder="0"></label>
+        <label class="field"><span>How many</span><input type="number" name="count" min="1" max="50" value="1"></label>
+        <label class="check" style="grid-column:1/4"><input type="checkbox" name="save_to_library"> Also save to the creature library</label>
+        <button class="btn btn-primary" type="submit" style="grid-column:4/-1">{{ icon("plus", "sm") }} Add</button>
+      </form>
+      <div class="pane" data-addpane="library" hidden>
+        <div class="row" style="margin-bottom:8px">
+          <input type="search" id="lib-search" placeholder="Search creatures" aria-label="Search creatures" class="grow" style="flex:1">
+          <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.creatures') }}">Manage library</a>
+        </div>
+        <ul class="pick-list" id="lib-list"></ul>
+      </div>
+      <div class="pane" data-addpane="party" hidden>
+        <ul class="pick-list" id="party-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail" id="detail"></div>
+
+  <aside class="log" id="log">
+    <div class="log-head"><h3 class="grow">Combat log</h3><span class="faint" id="log-count" style="font-size:.85rem"></span></div>
+    <div class="log-items" id="log-items"></div>
+    <form class="log-form" id="log-form">
+      <input type="text" name="message" placeholder="Add a note to the log" aria-label="Log note" maxlength="2000">
+      <button class="btn btn-sm" type="submit">Add</button>
+    </form>
+  </aside>
+</div>
+
+<script type="application/json" id="boot-state">{{ state | tojson }}</script>
+<script type="application/json" id="boot-chars">{{ characters | tojson }}</script>
+<script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
+<script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=2"></script>{% endblock %}

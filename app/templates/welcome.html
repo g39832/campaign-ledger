@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<div class="welcome">
+  <div class="eyebrow">A ledger for the table</div>
+  <h1>Begin a campaign</h1>
+  <p>Everything you track — characters, deeds, battles and session notes — belongs to a campaign. Name your first one to get started. You can rename it later.</p>
+  <form id="first-campaign" class="row" style="margin-top:18px">
+    <label class="field grow"><span>Campaign name</span><input type="text" name="name" required maxlength="200" placeholder="e.g. The Sunless Citadel" autofocus></label>
+    <button class="btn btn-primary btn-lg" type="submit">Create campaign</button>
+  </form>
+  <p class="faint" style="margin-top:22px;font-size:.95rem;font-family:var(--sans)">Restoring from a backup instead? Go to <a href="{{ url_for('pages.settings') }}#backups">Settings &amp; Backups</a>.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+L.$("#first-campaign").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = e.target.name.value.trim();
+  if (!name) return;
+  try { await L.api("POST", "/api/campaigns", { name }); location.href = "/"; }
+  catch (err) { L.toast(err.message, "error"); }
+});
+</script>
+{% endblock %}

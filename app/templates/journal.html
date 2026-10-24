@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Journal{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Campaign journal</h1><div class="sub">Session summaries, people, places, quests and loose threads — searchable, and saved as you type.</div></div>
+</div>
+<div class="journal">
+  <div class="j-side">
+    <div class="j-search">
+      <input type="search" id="q" placeholder="Search the journal" aria-label="Search the journal">
+      <div class="j-kinds" id="kinds"></div>
+    </div>
+    <ul class="j-list" id="list"></ul>
+    <div class="j-new">
+      <button class="btn btn-sm btn-primary" type="button" data-new="session">{{ icon("plus", "sm") }} Session</button>
+      <select id="new-kind" aria-label="New entry of type" style="width:auto;flex:1;min-height:30px;padding:3px 26px 3px 8px">
+        <option value="">New entry…</option>
+      </select>
+    </div>
+  </div>
+  <div class="j-editor" id="editor"></div>
+</div>
+<script type="application/json" id="boot-entries">{{ entries | tojson }}</script>
+<script type="application/json" id="boot-links">{{ linkables | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>window.CAMPAIGN_ID = {{ campaign.id }};</script>
+<script src="{{ url_for('static', filename='js/journal.js') }}?v=2"></script>
+{% endblock %}

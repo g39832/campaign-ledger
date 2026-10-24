@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Campaigns{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Campaigns</h1><div class="sub">Each campaign keeps its own characters, encounters, morality history and journal. Archiving hides a campaign but never deletes anything.</div></div>
+</div>
+
+<form id="new-campaign" class="panel panel-pad row" style="margin-bottom:22px">
+  <label class="field" style="flex:2 1 240px"><span>New campaign</span><input type="text" name="name" maxlength="200" placeholder="Campaign name" required></label>
+  <label class="field" style="flex:3 1 260px"><span>Description (optional)</span><input type="text" name="description" maxlength="5000" placeholder="One line about the setting or premise"></label>
+  <button class="btn btn-primary" type="submit">{{ icon("plus", "sm") }} Create</button>
+</form>
+
+<div id="campaign-list">
+{% for c in all_campaigns %}
+  <div class="campaign-row{% if c.archived %} is-archived{% endif %}" data-id="{{ c.id }}">
+    <div>
+      {% if campaign and c.id == campaign.id %}<div class="current-mark">Current campaign</div>{% elif c.archived %}<div class="current-mark" style="color:var(--text-3)">Archived</div>{% endif %}
+      <input class="input title-input" data-f="name" aria-label="Campaign name">
+      <input class="input" data-f="description" placeholder="Add a description" aria-label="Description" style="background:transparent;border-color:transparent;padding-left:0;color:var(--text-2)">
+      <div class="facts">
+        <span>{{ c.character_count }} character{{ "s" if c.character_count != 1 }}</span>
+        <span>{{ c.session_count }} session{{ "s" if c.session_count != 1 }}</span>
+        <span>{{ c.encounter_count }} encounter{{ "s" if c.encounter_count != 1 }}</span>
+        <span data-date="{{ c.created_at }}">Started {{ c.created_at[:10] }}</span>
+      </div>
+    </div>
+    <div class="acts">
+      {% if not c.archived and (not campaign or c.id != campaign.id) %}<button class="btn btn-sm" data-switch>{{ icon("log-out", "sm") }} Switch to</button>{% endif %}
+      <a class="btn btn-sm" href="/api/backup/export?campaign_id={{ c.id }}">{{ icon("download", "sm") }} Export</a>
+      {% if c.archived %}
+        <button class="btn btn-sm" data-archive="0">{{ icon("archive-restore", "sm") }} Unarchive</button>
+      {% else %}
+        <button class="btn btn-sm btn-quiet" data-archive="1">{{ icon("archive", "sm") }} Archive</button>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="empty"><h3>No campaigns yet</h3>Create one above.</div>
+{% endfor %}
+</div>
+<script type="application/json" id="boot">{{ all_campaigns | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const camps = L.boot("boot");
+  L.$$(".campaign-row").forEach((row) => {
+    const c = camps.find((x) => x.id === Number(row.dataset.id));
+    const b = new L.Binder({ url: "/api/campaigns/" + c.id, model: { name: c.name, description: c.description } });
+    L.$$("[data-f]", row).forEach((el) => b.bind(el, el.dataset.f));
+    const sw = L.$("[data-switch]", row);
+    if (sw) sw.addEventListener("click", async () => {
+      try { await L.api("POST", "/api/campaigns/" + c.id + "/activate"); location.href = "/"; } catch (e) { L.toast(e.message, "error"); }
+    });
+    const ar = L.$("[data-archive]", row);
+    ar.addEventListener("click", () => {
+      const to = ar.dataset.archive === "1";
+      L.act("PATCH", "/api/campaigns/" + c.id, { changes: { archived: { from: !to, to } } }, () => location.reload());
+    });
+  });
+  L.$$("[data-date]").forEach((el) => { el.textContent = "Started " + L.fmtDate(el.dataset.date); });
+  L.$("#new-campaign").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = e.target;
+    L.act("POST", "/api/campaigns", { name: f.name.value.trim(), description: f.description.value.trim() }, () => location.reload());
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Players{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Players at the table</h1><div class="sub">Friends join from their own phone, tablet or computer. They see the battle map you share, the turn order, their own character, and dice rolls. Your notes, hidden enemies and anything under fog stay on your side.</div></div>
+</div>
+<div class="settings-grid">
+  <div>
+    <section class="section">
+      <h2 class="rule-head">1 · Let them reach this computer</h2>
+      {% if lan_mode %}
+        <p>The app is listening on your network. Friends on the same Wi-Fi can open:</p>
+        <div id="urls" class="share-url"></div>
+      {% else %}
+        <div class="warn-box"><b>Right now only this computer can open the app.</b> Close the app window and start it with <code>start.bat --lan</code>
+          (or double-click <code>start-lan.bat</code>). Windows will ask whether to allow Python on networks — allow it on <b>private</b> networks.</div>
+      {% endif %}
+      <details class="instructions" style="margin-top:10px">
+        <summary style="cursor:pointer;font-weight:700">Playing with friends who aren't on your Wi-Fi</summary>
+        <ol>
+          <li><b>Easiest and private: Tailscale.</b> You and each friend install the free Tailscale app and sign in to the same Tailscale network (you invite them). Start Campaign Ledger with <code>--lan</code>, then friends open <code>http://&lt;your Tailscale IP&gt;:5050/join</code>. Nothing is exposed to the public internet.</li>
+          <li><b>A public link: a tunnel</b> such as Cloudflare Tunnel (<code>cloudflared tunnel --url http://localhost:5050</code>) gives you a temporary https address to send. Anyone with the link can reach the join page, but they still need your join code, and visitors through a tunnel are never treated as the DM.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">2 · Give them the join code</h2>
+      <div class="row" style="align-items:center">
+        <div class="join-code" id="code">—</div>
+        <button type="button" class="btn btn-sm" id="new-code">{{ icon("refresh-cw", "sm") }} New code</button>
+        <button type="button" class="btn btn-sm btn-quiet" id="off-code">Turn off joining</button>
+      </div>
+      <p class="faint" style="font-size:.9rem">They go to <b>/join</b> on the address above, type this code and their name, and pick their character. A new code stops new people joining with the old one; players already in stay in.</p>
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">3 · Show them a map</h2>
+      <div class="row" style="align-items:center">
+        <select id="live-map" style="width:auto;flex:1"><option value="">No map shown</option>{% for m in maps %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>
+        <a class="btn btn-sm" href="{{ url_for('pages.maps') }}">{{ icon("map", "sm") }} Maps</a>
+      </div>
+      <p class="faint" style="font-size:.9rem">Players see one map at a time: the one picked here (or with "Show to players" on a map).</p>
+    </section>
+  </div>
+
+  <div>
+    <section class="section">
+      <h2 class="rule-head">Joined <span class="count" id="player-count"></span></h2>
+      <table class="ledger"><tbody id="players"><tr><td class="faint">Loading…</td></tr></tbody></table>
+    </section>
+    <section class="section">
+      <h2 class="rule-head">Your other devices as DM</h2>
+      <p class="faint" style="font-size:.92rem">Want to run the game from a tablet? Make a DM link and open it on that device. Anyone with the link gets full DM access, so don't share it. Making a new link cancels the old one.</p>
+      <div class="row"><button type="button" class="btn btn-sm" id="dm-link">{{ icon("link", "sm") }} Make DM link</button>
+        <button type="button" class="btn btn-sm btn-quiet" id="dm-revoke">Cancel DM links</button></div>
+      <div id="dm-link-out" class="share-url" style="margin-top:8px"></div>
+    </section>
+  </div>
+</div>
+<script type="application/json" id="boot-chars">{{ characters | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const { h, $, api, act, toast, armed, fmtDate, fmtTime } = L;
+  const CID = {{ campaign.id }};
+  const chars = L.boot("boot-chars");
+  let info = null;
+  async function load() {
+    info = await api("GET", "/api/campaigns/" + CID + "/players");
+    $("#code").textContent = info.join_code || "—";
+    $("#off-code").hidden = !info.join_code;
+    $("#live-map").value = info.live_map_id || "";
+    const urls = $("#urls");
+    if (urls) urls.replaceChildren(...(info.addresses.length ? info.addresses.map((ip) => h("div", null, "http://" + ip + ":" + info.port + "/join" + (info.join_code ? "?code=" + info.join_code : ""))) : [h("div", { class: "faint" }, "Couldn't detect this computer's network address.")]));
+    $("#player-count").textContent = info.players.length;
+    $("#players").replaceChildren(...(info.players.length ? info.players.map((p) => {
+      const sel = h("select", { style: "width:auto", "aria-label": "Character for " + p.name, onchange: (e) => act("PATCH", "/api/players/" + p.id, { character_id: Number(e.target.value) || null }, load) },
+        h("option", { value: "" }, "No character"), chars.map((c) => h("option", { value: c.id, selected: c.id === p.character_id }, c.name)));
+      const kick = h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger" }, "Remove");
+      armed(kick, () => act("DELETE", "/api/players/" + p.id, {}, load), "Remove " + p.name + "?");
+      return h("tr", null, h("td", null, h("b", null, p.name), h("div", { class: "faint", style: "font-size:.82rem" }, "last seen " + fmtDate(p.last_seen) + " " + fmtTime(p.last_seen))), h("td", null, sel), h("td", { class: "r" }, kick));
+    }) : [h("tr", null, h("td", { class: "faint" }, "Nobody has joined yet."))]));
+  }
+  $("#new-code").addEventListener("click", () => act("POST", "/api/campaigns/" + CID + "/join-code", { action: "new" }, load));
+  armed($("#off-code"), () => act("POST", "/api/campaigns/" + CID + "/join-code", { action: "off" }, load), "Stop new joins?");
+  $("#live-map").addEventListener("change", (e) => act("POST", "/api/campaigns/" + CID + "/live-map", { map_id: Number(e.target.value) || null }, () => toast("Players' map updated.", "ok")));
+  $("#dm-link").addEventListener("click", () => act("POST", "/api/dm-key", {}, (d) => {
+    const base = info && info.addresses[0] ? "http://" + info.addresses[0] + ":" + info.port : location.origin;
+    $("#dm-link-out").textContent = base + "/dm-login?key=" + d.key;
+  }));
+  armed($("#dm-revoke"), () => act("DELETE", "/api/dm-key", {}, () => { $("#dm-link-out").textContent = ""; toast("DM links cancelled.", "ok"); }), "Cancel all DM links?");
+  load();
+  setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 10000);
+})();
+</script>
+{% endblock %}

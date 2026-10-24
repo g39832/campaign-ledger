@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Settings &amp; Backups{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Settings &amp; backups</h1></div></div>
+<div class="settings-grid">
+  <div>
+    <section class="section">
+      <h2 class="rule-head">Display</h2>
+      <div class="setting">
+        <div><b>Theme</b></div><div class="desc">Dark is easier on the eyes at a dim table. Saved for every browser that opens this app.</div>
+        <div class="ctl seg" id="theme-seg"><button type="button" data-theme-set="dark">Dark</button><button type="button" data-theme-set="light">Light</button></div>
+      </div>
+    </section>
+
+    {% if campaign %}
+    <section class="section" id="rules">
+      <h2 class="rule-head">Rules for “{{ campaign.name }}”</h2>
+      <div class="setting">
+        <div><b>Morality scale</b></div><div class="desc">Scores run from minus this number to plus this number, with 0 as neutral.</div>
+        <div class="ctl"><input type="number" min="1" max="1000" data-set="morality.scale"></div>
+      </div>
+      <div class="setting">
+        <div><b>Lawful / Chaotic threshold</b></div><div class="desc">A law score at or above +this is Lawful; at or below −this is Chaotic; anything between is Neutral.</div>
+        <div class="ctl"><input type="number" min="1" max="1000" data-set="morality.law_threshold"></div>
+      </div>
+      <div class="setting">
+        <div><b>Good / Evil threshold</b></div><div class="desc">Same rule on the good–evil axis.</div>
+        <div class="ctl"><input type="number" min="1" max="1000" data-set="morality.good_threshold"></div>
+      </div>
+      <div class="setting">
+        <div><b>Temporary HP stacking</b></div><div class="desc">By the rules, new temp HP replaces old temp HP only if it's higher. Turn on to add them together instead (homebrew).</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.temp_hp_stacking"> Stack</label></div>
+      </div>
+      <div class="setting">
+        <div><b>Initiative ties</b></div><div class="desc">How combatants with the same initiative roll are ordered.</div>
+        <div class="ctl"><select data-set="combat.tie_break" style="width:auto">
+          <option value="modifier">Higher modifier first</option>
+          <option value="pc_first">Characters first</option>
+          <option value="enemy_first">Enemies first</option>
+          <option value="manual">Keep my manual order</option>
+        </select></div>
+      </div>
+      <div class="setting">
+        <div><b>Auto-sort turn order</b></div><div class="desc">Re-sort whenever an initiative is entered or rolled. Turn off to arrange the order yourself.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.auto_sort"> Auto-sort</label></div>
+      </div>
+      <div class="setting">
+        <div><b>Skip these on “Next turn”</b></div><div class="desc">Unconscious characters are not skipped by default because they still roll death saves.</div>
+        <div class="ctl" id="skip-set" style="display:grid;gap:4px">
+          {% for s in ["dead", "defeated", "fled", "unconscious", "stable", "incapacitated"] %}
+          <label class="check"><input type="checkbox" value="{{ s }}"> {{ s | capitalize }}</label>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <div>
+    <section class="section" id="backups">
+      <h2 class="rule-head">Back up</h2>
+      <p class="muted">Backups are JSON files containing everything in a campaign — characters, morality history, encounters and logs, journal and portraits. Keep copies somewhere other than this computer.</p>
+      <div class="row" style="margin-bottom:8px">
+        {% if campaign %}<a class="btn" href="/api/backup/export?campaign_id={{ campaign.id }}">{{ icon("download", "sm") }} Export “{{ campaign.name }}”</a>{% endif %}
+        <a class="btn" href="/api/backup/export">{{ icon("download", "sm") }} Export everything</a>
+        <a class="btn btn-quiet" href="/api/backup/database" title="A copy of the raw SQLite database file">{{ icon("download", "sm") }} Database file</a>
+      </div>
+      <p class="faint" style="font-size:.9rem">To export a single other campaign, use its Export button on the <a href="{{ url_for('pages.campaigns') }}">Campaigns</a> page.</p>
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">Restore from a backup</h2>
+      <p class="muted">The file is checked first and nothing changes until you confirm. Campaigns that aren't in the backup are never touched, and a snapshot of the current database is saved before anything is imported.</p>
+      <label class="btn" style="display:inline-flex">{{ icon("upload", "sm") }} Choose backup file…<input type="file" id="import-file" accept=".json,application/json" class="sr-only"></label>
+      <div id="import-report" class="import-report"></div>
+    </section>
+
+    <section class="section">
+      <h2 class="rule-head">Automatic snapshots</h2>
+      <p class="muted" style="font-size:.95rem">The app copies its database once a day when it starts (the last 14 are kept), and again before every import.</p>
+      <div id="snapshots" class="faint">Loading…</div>
+      <details class="instructions" style="margin-top:12px">
+        <summary style="cursor:pointer;font-weight:700">How to restore a database snapshot</summary>
+        <ol>
+          <li>Stop the app (close its window, or press <code>Ctrl+C</code> in it).</li>
+          <li>Open the <code>data</code> folder inside the app folder. Rename <code>dnd_tracker.sqlite3</code> to something like <code>dnd_tracker.broken.sqlite3</code> so you still have it.</li>
+          <li>Delete <code>dnd_tracker.sqlite3-wal</code> and <code>dnd_tracker.sqlite3-shm</code> if they exist.</li>
+          <li>Copy the snapshot you want from <code>data\backups</code> into <code>data</code> and rename it to <code>dnd_tracker.sqlite3</code>.</li>
+          <li>Start the app again.</li>
+        </ol>
+      </details>
+    </section>
+  </div>
+</div>
+<script type="application/json" id="boot">{{ (campaign.settings if campaign else {}) | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=2"></script>
+{% endblock %}

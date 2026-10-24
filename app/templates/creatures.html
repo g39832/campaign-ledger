@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Creatures{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Creature library</h1><div class="sub">Reusable stat blocks. Adding a creature to an encounter copies its stats, so editing one here never changes enemies already in a fight.</div></div>
+  <div class="actions"><button class="btn btn-primary" type="button" id="new">{{ icon("plus", "sm") }} New creature</button></div>
+</div>
+<div class="bestiary">
+  <div>
+    <input type="search" id="q" placeholder="Search by name or type" aria-label="Search creatures" style="margin-bottom:8px">
+    <ul class="j-list" id="list"></ul>
+  </div>
+  <div id="editor"></div>
+</div>
+<script type="application/json" id="boot">{{ creatures | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
+<script src="{{ url_for('static', filename='js/creatures.js') }}?v=2"></script>
+{% endblock %}

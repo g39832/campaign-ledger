@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ state.map.name }}{% endblock %}
+{% block content %}
+<div class="row" style="align-items:center;margin-bottom:10px;gap:10px">
+  <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.maps') }}">{{ icon("chevron-left", "sm") }} Maps</a>
+  <input class="input enc-name grow" id="map-name" aria-label="Map name" style="font:700 1.25rem var(--caps);background:transparent;border-color:transparent;max-width:420px">
+  <span id="live-flag" class="live-flag"></span>
+  <span class="grow"></span>
+  <button type="button" class="btn btn-sm" id="live-btn">{{ icon("eye-off", "sm") }} <span>Show to players</span></button>
+  <a class="btn btn-sm btn-quiet" id="preview-btn" href="#" title="See exactly what players receive">Player view</a>
+</div>
+<div class="map-layout">
+  <div class="map-stage" id="stage">
+    <div class="map-tools" role="toolbar" aria-label="Map tools">
+      <button type="button" data-tool="select" title="Select and move tokens (drag empty space to pan)">{{ icon("play", "sm") }}<span>Move</span></button>
+      <button type="button" data-tool="pan" title="Pan">{{ icon("compass", "sm") }}<span>Pan</span></button>
+      <button type="button" data-tool="measure" title="Measure distance">{{ icon("arrow-up-down", "sm") }}<span>Measure</span></button>
+      <span class="sep"></span>
+      <button type="button" data-tool="reveal" title="Paint to reveal (fog of war)">{{ icon("sun", "sm") }}<span>Reveal</span></button>
+      <button type="button" data-tool="conceal" title="Paint to hide (fog of war)">{{ icon("moon", "sm") }}<span>Hide</span></button>
+      <button type="button" data-tool="paint" title="Paint terrain">{{ icon("feather", "sm") }}<span>Terrain</span></button>
+      <button type="button" data-tool="place" title="Click a square to place a marker or trap">{{ icon("map-pin", "sm") }}<span>Marker</span></button>
+    </div>
+    <div class="map-zoom">
+      <button type="button" class="icon-btn sm" id="zoom-in" aria-label="Zoom in">{{ icon("plus", "sm") }}</button>
+      <button type="button" class="icon-btn sm" id="zoom-out" aria-label="Zoom out">{{ icon("minus", "sm") }}</button>
+      <button type="button" class="icon-btn sm" id="zoom-fit" aria-label="Fit map" title="Fit">{{ icon("rotate-ccw", "sm") }}</button>
+    </div>
+    <div class="map-hint" id="hint"></div>
+  </div>
+
+  <aside class="map-side">
+    <div class="panel" id="brush-panel" hidden>
+      <h3 class="rule-head">Brush</h3>
+      <div class="row" style="align-items:center">
+        <span class="lbl">Size</span>
+        <div class="seg" id="brush-size"><button type="button" data-b="1">1</button><button type="button" data-b="3">3</button><button type="button" data-b="5">5</button></div>
+      </div>
+      <div class="palette" id="terrain-palette" style="margin-top:8px"></div>
+      <div class="row" id="fog-all" style="margin-top:8px">
+        <button type="button" class="btn btn-sm" data-fog="reveal">Reveal all</button>
+        <button type="button" class="btn btn-sm" data-fog="conceal">Hide all</button>
+      </div>
+    </div>
+
+    <div class="panel" id="selected-panel"></div>
+
+    <div class="panel">
+      <h3 class="rule-head">Turn order</h3>
+      <div id="order"></div>
+    </div>
+
+    <div class="panel">
+      <h3 class="rule-head">Tokens <span class="count" id="token-count"></span></h3>
+      <div class="row" style="margin-bottom:8px">
+        <button type="button" class="btn btn-sm" id="from-enc">{{ icon("swords", "sm") }} Add encounter</button>
+        <select id="add-char" style="width:auto;flex:1;min-width:0"><option value="">Add character…</option>{% for c in characters %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+      </div>
+      <ul class="token-list" id="tokens"></ul>
+    </div>
+
+    <details class="panel" open>
+      <summary class="rule-head" style="cursor:pointer;list-style:none">Map &amp; grid settings</summary>
+      <div style="display:grid;gap:8px">
+        <label class="field"><span>Linked encounter</span>
+          <select data-m="encounter_id"><option value="">None</option>{% for e in encounters %}<option value="{{ e.id }}">{{ e.name }}{% if e.status == "ended" %} (ended){% endif %}</option>{% endfor %}</select></label>
+        <div class="grid2">
+          <label class="field"><span>Columns</span><input type="number" data-m="cols" min="1" max="200"></label>
+          <label class="field"><span>Rows</span><input type="number" data-m="rows" min="1" max="200"></label>
+          <label class="field"><span>Square size (px)</span><input type="number" data-m="cell_px" min="8" max="400"></label>
+          <label class="field"><span>Each square is</span><div class="row" style="flex-wrap:nowrap;gap:4px"><input type="number" data-m="scale_value" min="1" style="width:60px"><input type="text" data-m="scale_unit" style="width:50px"></div></label>
+          <label class="field"><span>Grid offset X</span><input type="number" data-m="offset_x"></label>
+          <label class="field"><span>Grid offset Y</span><input type="number" data-m="offset_y"></label>
+          <label class="field"><span>Grid colour</span><input type="color" data-m="grid_color" style="min-height:34px;padding:2px"></label>
+          <label class="field"><span>Grid opacity %</span><input type="number" data-m="grid_opacity" min="0" max="100"></label>
+          <label class="field"><span>Background</span><input type="color" data-m="bg_color" style="min-height:34px;padding:2px"></label>
+        </div>
+        <label class="check"><input type="checkbox" data-m="show_grid"> Show grid</label>
+        <label class="check"><input type="checkbox" data-m="snap"> Snap tokens to squares</label>
+        <label class="check"><input type="checkbox" data-m="fog_enabled"> Fog of war (players only see revealed squares)</label>
+        <label class="check"><input type="checkbox" data-m="players_can_move"> Players can move their own token</label>
+        <div class="row">
+          <label class="btn btn-sm">{{ icon("upload", "sm") }} {{ "Replace" if state.map.image else "Upload" }} map image<input type="file" id="map-image" accept="image/png,image/jpeg,image/webp" class="sr-only"></label>
+          {% if state.map.image %}<button type="button" class="btn btn-sm btn-quiet" id="clear-image">Remove image</button>{% endif %}
+        </div>
+        <p class="faint" style="font-size:.84rem;margin:0">To line the grid up with a map image, set the square size to the image's square size in pixels, then nudge the offsets.</p>
+        <label class="field"><span>DM notes (never shown to players)</span><textarea data-m="notes" rows="4"></textarea></label>
+        <button type="button" class="btn btn-sm btn-quiet btn-danger" id="delete-map">{{ icon("trash-2", "sm") }} Delete map</button>
+      </div>
+    </details>
+  </aside>
+</div>
+<script type="application/json" id="boot-map">{{ state | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=2"></script>
+{% endblock %}
