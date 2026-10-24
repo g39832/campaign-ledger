@@ -423,8 +423,8 @@
       if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true);
       return new Promise((resolve) => {
         L.Save.push({
-          run: async () => {
-            const d = await api("POST", "/api/rolls", body);
+          run: () => api("POST", "/api/rolls", body),
+          done: (d) => {
             this.addHistory([d.roll]);
             if (this.mode !== "normal" && !(ev && (ev.shiftKey || ev.ctrlKey || ev.altKey))) this.setMode("normal");
             this.animate(d.roll);

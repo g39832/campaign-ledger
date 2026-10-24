@@ -126,6 +126,20 @@ def outcome_for(kind, result):
     return ""
 
 
+def save_roll(conn, viewer, campaign_id, result, *, label, kind, subject="", ids=None, visibility="public",
+              op_id=None, outcome=""):
+    """Insert a roll inside the caller's transaction and return its id."""
+    ids = ids or {}
+    cur = conn.execute(
+        """INSERT INTO rolls (uid, op_id, campaign_id, roller_kind, player_id, roller_name, character_id, combatant_id,
+           encounter_id, subject, label, kind, expression, mode, visibility, result, total, outcome, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (new_uid(), op_id, campaign_id, viewer["role"], viewer.get("id") if viewer["role"] == "player" else None,
+         viewer["name"], ids.get("character_id"), ids.get("combatant_id"), ids.get("encounter_id"), subject, label,
+         kind, result["expression"], result["mode"], visibility, json.dumps(result), result["total"], outcome, now_iso()))
+    return cur.lastrowid
+
+
 def visible_clause(viewer):
     if viewer["role"] == "dm":
         return "(r.visibility IN ('public', 'dm') OR r.roller_kind = 'dm')", []
@@ -196,14 +210,8 @@ def api_roll():
         if op_id and conn.execute("SELECT 1 FROM rolls WHERE op_id = ?", (op_id,)).fetchone():
             row = conn.execute("SELECT * FROM rolls WHERE op_id = ?", (op_id,)).fetchone()
             return jsonify({"roll": roll_dict(row, viewer), "repeat": True})
-        cur = conn.execute(
-            """INSERT INTO rolls (uid, op_id, campaign_id, roller_kind, player_id, roller_name, character_id, combatant_id,
-               encounter_id, subject, label, kind, expression, mode, visibility, result, total, outcome, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (new_uid(), op_id, campaign_id, viewer["role"], viewer.get("id") if viewer["role"] == "player" else None,
-             viewer["name"], ids.get("character_id"), ids.get("combatant_id"), ids.get("encounter_id"), subject, label,
-             kind, result["expression"], result["mode"], visibility, json.dumps(result), result["total"], outcome, now_iso()))
-        roll_id = cur.lastrowid
+        roll_id = save_roll(conn, viewer, campaign_id, result, label=label, kind=kind, subject=subject, ids=ids,
+                            visibility=visibility, op_id=op_id, outcome=outcome)
         if apply_init:
             _apply_initiative(conn, ids, result["total"], result)
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()

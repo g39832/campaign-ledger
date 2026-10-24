@@ -781,3 +781,8 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
   .map-hint { display: none; }
   .roll-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- HP corrections ---------- */
+.hp-fix { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.hp-fix .lbl { margin-right: 4px; }
+.hp-fix .btn { min-width: 38px; min-height: 28px; padding: 3px 6px; font-variant-numeric: tabular-nums; }

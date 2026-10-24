@@ -140,12 +140,17 @@ def _own_character(conn, char_id):
     d = derived(c)
     keep = ("id", "name", "class_name", "subclass", "level", "race", "current_hp", "max_hp", "temp_hp", "ac", "speed",
             "status", "death_successes", "death_failures", "exhaustion", "portrait", "abilities", "save_profs",
-            "skill_profs", "spell_slots", "spellcasting_ability", "inspiration")
+            "skill_profs", "spell_slots", "spellcasting_ability", "inspiration", "hit_dice", "hit_dice_used")
     out = {k: c[k] for k in keep}
     out["conditions"] = [x["name"] for x in c["conditions"]]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", "")}
                       for i, a in enumerate(c["attacks"] or [])]
     out["derived"] = d
+    from .campaigns import get_campaign
+    from .rules import parse_hit_dice
+    out["can"] = get_campaign(c["campaign_id"])["settings"]["players"]
+    out["hit_dice_total"] = sum(n for n, _ in parse_hit_dice(c["hit_dice"]))
+    out["hit_dice_sizes"] = sorted({s for _, s in parse_hit_dice(c["hit_dice"])}, reverse=True)
     return out
 
 
@@ -243,6 +248,85 @@ def api_map_image(map_id):
     resp = send_file(path, max_age=0)
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+# ---- players updating their own character ---------------------------------------------
+
+def _own(action):
+    """The player's character id, if the DM allows this action."""
+    from .campaigns import get_campaign
+    ident = _player_required()
+    if not ident["character_id"]:
+        raise F.ApiError("Ask the DM to give you a character first", status=403)
+    rules = get_campaign(ident["campaign_id"])["settings"]["players"]
+    if action and not rules.get(action):
+        raise F.ApiError("The DM has turned this off for players", status=403)
+    return ident, ident["character_id"]
+
+
+@bp.post("/api/play/me/hp")
+def api_me_hp():
+    from .rest import change_character_hp
+    ident, char_id = _own("edit_hp")
+    data = request.get_json(silent=True) or {}
+    if data.get("op") not in ("damage", "heal", "temp", "set"):
+        raise F.ApiError("op must be damage, heal, temp or set")
+    body = {k: data[k] for k in ("op", "amount", "hp", "max_hp", "temp_hp") if k in data}
+    if body["op"] == "set":
+        body.pop("max_hp", None)  # max HP is the DM's call
+    with tx() as conn:
+        change_character_hp(conn, char_id, body, by=ident["name"])
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/slot")
+def api_me_slot():
+    ident, char_id = _own("spend_slots")
+    data = request.get_json(silent=True) or {}
+    level = str(data.get("level"))
+    with tx() as conn:
+        row = conn.execute("SELECT spell_slots FROM characters WHERE id = ?", (char_id,)).fetchone()
+        slots = json.loads(row["spell_slots"] or "{}")
+        slot = slots.get(level)
+        if not slot or not slot.get("max"):
+            raise F.ApiError("No spell slots of that level")
+        try:
+            used = int(data.get("used"))
+        except (TypeError, ValueError):
+            raise F.ApiError("used must be a number")
+        slot["used"] = max(0, min(slot["max"], used))
+        conn.execute("UPDATE characters SET spell_slots = ?, updated_at = ? WHERE id = ?", (json.dumps(slots), now_iso(), char_id))
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/death")
+def api_me_death():
+    ident, char_id = _own("edit_hp")
+    data = request.get_json(silent=True) or {}
+    field = data.get("field")
+    if field not in ("death_successes", "death_failures"):
+        raise F.ApiError("field must be death_successes or death_failures")
+    try:
+        value = max(0, min(3, int(data.get("value"))))
+    except (TypeError, ValueError):
+        raise F.ApiError("value must be 0-3")
+    with tx() as conn:
+        conn.execute(f"UPDATE characters SET {field} = ?, updated_at = ? WHERE id = ?", (value, now_iso(), char_id))
+        from .characters import _touch_encounters
+        _touch_encounters(conn, char_id)
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/hit-die")
+def api_me_hit_die():
+    from .rest import spend_hit_die
+    from .rolls import roll_dict
+    ident, char_id = _own("hit_dice")
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        roll_id = spend_hit_die(conn, ident, char_id, data.get("sides"), data.get("op_id"))
+    row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
+    return jsonify({"roll": roll_dict(row, ident), "character": _own_character(get_db(), char_id)})
 
 
 # ---- DM: managing who's at the table ---------------------------------------------------

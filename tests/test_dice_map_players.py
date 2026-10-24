@@ -321,6 +321,13 @@ def test_tokens_snap_and_stay_on_map(api, battlemap):
     assert (tok(s, "Bandit 1")["x"], tok(s, "Bandit 1")["y"]) == (9, 0)
 
 
+def test_no_duplicate_character_tokens(api, battlemap):
+    mid, aria = battlemap["mid"], battlemap["a"]
+    r = api.post(f"/api/maps/{mid}/tokens", {"character_id": aria["id"], "x": 3, "y": 3}, expect=400)
+    assert "already has a token" in r["error"]
+    assert len([t for t in api.get(f"/api/maps/{mid}")["tokens"] if t["display"] == "Aria"]) == 1
+
+
 def test_token_moves_never_touch_combat(api, battlemap):
     before = api.get(f"/api/encounters/{battlemap['eid']}")
     for t in battlemap["state"]["tokens"]:

@@ -373,12 +373,16 @@ def api_add_token(map_id):
             ch = conn.execute("SELECT kind, campaign_id, name FROM characters WHERE id = ?", (char_id,)).fetchone()
             if ch is None or ch["campaign_id"] != m["campaign_id"]:
                 raise F.ApiError("Character isn't in this campaign")
+            if _has_character_token(conn, map_id, char_id):
+                raise F.ApiError(f"{ch['name']} already has a token on this map")
             values.setdefault("kind", ch["kind"])
         if comb_id:
             cb = conn.execute("SELECT c.kind, c.character_id, e.campaign_id FROM combatants c JOIN encounters e "
                               "ON e.id = c.encounter_id WHERE c.id = ?", (comb_id,)).fetchone()
             if cb is None or cb["campaign_id"] != m["campaign_id"]:
                 raise F.ApiError("Combatant isn't in this campaign")
+            if conn.execute("SELECT 1 FROM map_tokens WHERE map_id = ? AND combatant_id = ?", (map_id, comb_id)).fetchone()                     or (cb["character_id"] and _has_character_token(conn, map_id, cb["character_id"])):
+                raise F.ApiError("That combatant already has a token on this map")
             values.setdefault("kind", cb["kind"])
         if not (char_id or comb_id or values.get("label", "").strip()):
             raise F.ApiError("Give the token a label")
@@ -387,6 +391,13 @@ def api_add_token(map_id):
                                                        "combatant_id": comb_id, "created_at": ts, "updated_at": ts})
         _bump(conn, map_id)
     return jsonify(dm_state(map_id)), 201
+
+
+def _has_character_token(conn, map_id, char_id):
+    """True if the character is already on the map, directly or through a combatant."""
+    return conn.execute(
+        "SELECT 1 FROM map_tokens t LEFT JOIN combatants c ON c.id = t.combatant_id "
+        "WHERE t.map_id = ? AND (t.character_id = ? OR c.character_id = ?)", (map_id, char_id, char_id)).fetchone() is not None
 
 
 @bp.post("/maps/<int:map_id>/tokens/from-encounter")
@@ -402,7 +413,7 @@ def api_tokens_from_encounter(map_id):
         combs = conn.execute("SELECT * FROM combatants WHERE encounter_id = ? ORDER BY sort_order, id", (m["encounter_id"],)).fetchall()
         ts, added, i = now_iso(), 0, 0
         for cb in combs:
-            if cb["id"] in have or (cb["character_id"] and cb["character_id"] in have_chars):
+            if cb["id"] in have or (cb["character_id"] and (cb["character_id"] in have_chars or _has_character_token(conn, map_id, cb["character_id"]))):
                 continue
             x = 0 if cb["kind"] != "enemy" else max(0, m["cols"] - 1)
             conn.execute(

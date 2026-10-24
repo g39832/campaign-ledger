@@ -32,7 +32,8 @@
   <div>
     <section class="section">
       <h2 class="rule-head">The party <span class="count">{{ characters | selectattr("kind", "equalto", "pc") | list | length }}</span>
-        <span class="tail"><a class="btn btn-sm btn-quiet" href="{{ url_for('pages.characters') }}">{{ icon("plus", "sm") }} Add</a></span></h2>
+        <span class="tail"><button type="button" class="btn btn-sm btn-quiet" id="party-rest" title="Long rest for every player character">{{ icon("moon", "sm") }} Long rest</button>
+        <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.characters') }}">{{ icon("plus", "sm") }} Add</a></span></h2>
       {% set pcs = characters | selectattr("kind", "equalto", "pc") | list %}
       {% if pcs %}
       <div class="panel" style="overflow-x:auto">
@@ -162,5 +163,9 @@ L.$("#new-session").addEventListener("click", () => {
     (d) => { location.href = "/journal?entry=" + d.entry.id; });
 });
 L.$$("[data-date]").forEach((el) => { el.textContent = "· " + L.fmtDate(el.dataset.date); });
+const pr = L.$("#party-rest");
+if (pr) L.armed(pr, () => L.act("POST", "/api/campaigns/{{ campaign.id }}/long-rest", {}, (d) => {
+  L.toast("Long rest: " + d.rested.join(", ") + " are back to full HP and spell slots.", "ok"); setTimeout(() => location.reload(), 900);
+}), "Long rest for the whole party?");
 </script>
 {% endblock %}

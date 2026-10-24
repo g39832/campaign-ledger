@@ -631,82 +631,97 @@ def _vitals(c):
     return {k: c[k] for k in VITAL_KEYS}
 
 
+def compute_hp(v, op, data, *, name, linked, max_hp, temp_stacking):
+    """Apply one HP operation to a vitals dict (hp, max_hp, temp_hp, status,
+    death saves). Pure: returns (new_vitals, label, note). Shared by the combat
+    screen, rests and players updating their own character."""
+    before = v
+    v = dict(v)
+    note = ""
+    if op == "damage":
+        amount = _int(data, "amount", 0, 99999)
+        was = v["hp"]
+        v["hp"], v["temp_hp"], absorbed, overflow = apply_damage(v["hp"], v["temp_hp"], amount)
+        label = f"{name} takes {amount} damage"
+        if absorbed:
+            note = f" ({absorbed} absorbed by temp HP)"
+        if was > 0 and v["hp"] == 0:
+            if linked:
+                if v["status"] == "ok":
+                    v["status"] = "unconscious"
+                note += " — drops to 0 HP and falls unconscious"
+                if max_hp and overflow >= max_hp:
+                    note += f"; {overflow} damage past 0 meets massive-damage rules (instant death) — DM's call"
+            else:
+                if v["status"] == "ok":
+                    v["status"] = "defeated"
+                note += " — defeated"
+        elif was == 0 and amount > 0 and linked and v["status"] in ("unconscious", "stable"):
+            note += " while at 0 HP — mark a failed death save (two on a crit)"
+    elif op == "heal":
+        amount = _int(data, "amount", 0, 99999)
+        was = v["hp"]
+        v["hp"] = apply_heal(v["hp"], v["max_hp"], amount)
+        label = f"{name} heals {v['hp'] - was}" + (f" (of {amount})" if v["hp"] - was != amount else "")
+        if was == 0 and v["hp"] > 0 and v["status"] in ("unconscious", "stable", "defeated"):
+            v["status"] = "ok"
+            v["death_successes"] = v["death_failures"] = 0
+            note = " — back on their feet"
+    elif op == "temp":
+        amount = _int(data, "amount", 0, 99999)
+        was = v["temp_hp"]
+        v["temp_hp"] = apply_temp(v["temp_hp"], amount, temp_stacking)
+        label = f"{name} gains temp HP: {was} → {v['temp_hp']}"
+        if not temp_stacking and amount <= was:
+            note = " (kept the higher value; temp HP doesn't stack)"
+    elif op == "set":
+        parts = []
+        if "max_hp" in data:
+            v["max_hp"] = _int(data, "max_hp", 0, 99999)
+            parts.append(f"max {before['max_hp']} → {v['max_hp']}")
+        if "hp" in data:
+            v["hp"] = _int(data, "hp", 0, 99999)
+            parts.append(f"HP {before['hp']} → {v['hp']}")
+        if "temp_hp" in data:
+            v["temp_hp"] = _int(data, "temp_hp", 0, 99999)
+            parts.append(f"temp {before['temp_hp']} → {v['temp_hp']}")
+        if not parts:
+            raise F.ApiError("Nothing to set")
+        if v["max_hp"] and v["hp"] > v["max_hp"]:
+            v["hp"] = v["max_hp"]
+        label = f"{name}: " + ", ".join(parts)
+    else:
+        raise F.ApiError("op must be damage, heal, temp or set")
+    return v, label, note
+
+
+def apply_hp(ctx, cid, data, by=None):
+    """HP change on a combatant inside an encounter: logged, and recorded so
+    the DM's Undo HP can reverse it. `by` names who did it (e.g. a player)."""
+    c = ctx.combatant(cid)
+    before = _vitals(c)
+    v, label, note = compute_hp(before, data.get("op"), data, name=c["name"], linked=c["linked"],
+                                max_hp=c["max_hp"], temp_stacking=ctx.settings["temp_hp_stacking"])
+    if by:
+        label = f"{label} ({by})"
+    if v == before:
+        ctx.log("hp", label + note + " (no change)")
+        return v
+    ctx.set_vitals(c, **v)
+    hp_line = f" — {v['hp']}/{v['max_hp']} HP" + (f" +{v['temp_hp']} temp" if v["temp_hp"] else "")
+    ctx.log("hp", label + note + hp_line)
+    ctx.conn.execute(
+        "INSERT INTO hp_changes (encounter_id, combatant_id, character_id, label, before, after, created_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (ctx.enc["id"], cid, c["character_id"] if c["linked"] else None, label, json.dumps(before), json.dumps(v), now_iso()))
+    return v
+
+
 @bp.post("/combatants/<int:cid>/hp")
 def api_hp(cid):
     eid = _enc_of_combatant(cid)
     data = _body()
-    op = data.get("op")
-
-    def fn(ctx):
-        c = ctx.combatant(cid)
-        before = _vitals(c)
-        v = dict(before)
-        note = ""
-        if op == "damage":
-            amount = _int(data, "amount", 0, 99999)
-            was = v["hp"]
-            v["hp"], v["temp_hp"], absorbed, overflow = apply_damage(v["hp"], v["temp_hp"], amount)
-            label = f"{c['name']} takes {amount} damage"
-            if absorbed:
-                note = f" ({absorbed} absorbed by temp HP)"
-            if was > 0 and v["hp"] == 0:
-                if c["linked"]:
-                    if v["status"] == "ok":
-                        v["status"] = "unconscious"
-                    note += " — drops to 0 HP and falls unconscious"
-                    if c["max_hp"] and overflow >= c["max_hp"]:
-                        note += f"; {overflow} damage past 0 meets massive-damage rules (instant death) — DM's call"
-                else:
-                    if v["status"] == "ok":
-                        v["status"] = "defeated"
-                    note += " — defeated"
-            elif was == 0 and amount > 0 and c["linked"] and v["status"] in ("unconscious", "stable"):
-                note += " while at 0 HP — mark a failed death save (two on a crit)"
-        elif op == "heal":
-            amount = _int(data, "amount", 0, 99999)
-            was = v["hp"]
-            v["hp"] = apply_heal(v["hp"], v["max_hp"], amount)
-            label = f"{c['name']} heals {v['hp'] - was}" + (f" (of {amount})" if v["hp"] - was != amount else "")
-            if was == 0 and v["hp"] > 0 and v["status"] in ("unconscious", "stable", "defeated"):
-                v["status"] = "ok"
-                v["death_successes"] = v["death_failures"] = 0
-                note = " — back on their feet"
-        elif op == "temp":
-            amount = _int(data, "amount", 0, 99999)
-            was = v["temp_hp"]
-            v["temp_hp"] = apply_temp(v["temp_hp"], amount, ctx.settings["temp_hp_stacking"])
-            label = f"{c['name']} gains temp HP: {was} → {v['temp_hp']}"
-            if not ctx.settings["temp_hp_stacking"] and amount <= was:
-                note = " (kept the higher value; temp HP doesn't stack)"
-        elif op == "set":
-            parts = []
-            if "max_hp" in data:
-                v["max_hp"] = _int(data, "max_hp", 0, 99999)
-                parts.append(f"max {before['max_hp']} → {v['max_hp']}")
-            if "hp" in data:
-                v["hp"] = _int(data, "hp", 0, 99999)
-                parts.append(f"HP {before['hp']} → {v['hp']}")
-            if "temp_hp" in data:
-                v["temp_hp"] = _int(data, "temp_hp", 0, 99999)
-                parts.append(f"temp {before['temp_hp']} → {v['temp_hp']}")
-            if not parts:
-                raise F.ApiError("Nothing to set")
-            if v["max_hp"] and v["hp"] > v["max_hp"]:
-                v["hp"] = v["max_hp"]
-            label = f"{c['name']}: " + ", ".join(parts)
-        else:
-            raise F.ApiError("op must be damage, heal, temp or set")
-        if v == before:
-            ctx.log("hp", label + note + " (no change)")
-            return
-        ctx.set_vitals(c, **v)
-        hp_line = f" — {v['hp']}/{v['max_hp']} HP" + (f" +{v['temp_hp']} temp" if v["temp_hp"] else "")
-        ctx.log("hp", label + note + hp_line)
-        ctx.conn.execute(
-            "INSERT INTO hp_changes (encounter_id, combatant_id, character_id, label, before, after, created_at) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (eid, cid, c["character_id"] if c["linked"] else None, label, json.dumps(before), json.dumps(v), now_iso()))
-    return mutate(eid, fn, data.get("op_id"))
+    return mutate(eid, lambda ctx: apply_hp(ctx, cid, data), data.get("op_id"))
 
 
 @bp.post("/encounters/<int:eid>/undo")

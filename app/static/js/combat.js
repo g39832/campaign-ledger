@@ -6,7 +6,7 @@
   const { h, icon, $, $$, signed, boot, act, api, toast, Save, Binder, armed, fmtTime, initials } = L;
   let S = boot("boot-state");
   const chars = boot("boot-chars");
-  const creatures = boot("boot-creatures");
+  let creatures = boot("boot-creatures");
   const CONDITIONS = boot("boot-conditions");
   const EID = S.encounter.id;
   const OUT = new Set(["dead", "defeated", "fled"]);
@@ -198,7 +198,11 @@
         h("button", { type: "button", class: "btn btn-heal", onclick: () => hp("heal") }, icon("heart", "sm"), " Heal"),
         h("button", { type: "button", class: "btn btn-temp", onclick: () => hp("temp"), title: S.settings.temp_hp_stacking ? "Adds to current temp HP" : "Temp HP doesn't stack: keeps the higher value" }, icon("shield-plus", "sm"), " Temp")),
       h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" }, "Enter applies damage · Shift+Enter heals. Damage uses temp HP first."),
-      h("details", { style: "margin-top:10px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Edit HP directly"),
+      h("div", { class: "hp-fix", style: "margin-top:10px" }, h("span", { class: "lbl" }, "Fix HP"),
+        [-5, -1, 1, 5].map((n) => h("button", { type: "button", class: "btn btn-sm", title: "Correct current HP by " + n + " (logged; Undo HP reverses it)",
+          onclick: () => run("POST", "/api/combatants/" + cid + "/hp", { op: "set", hp: Math.max(0, c.max_hp ? Math.min(c.max_hp, c.hp + n) : c.hp + n) }) },
+          n > 0 ? "+" + n : "−" + Math.abs(n)))),
+      h("details", { style: "margin-top:8px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Set exact HP, max HP or temp HP"),
         h("div", { class: "row", style: "margin-top:8px;align-items:center" },
           h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Current"), editCur),
           h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Max"), editMax),
@@ -394,7 +398,12 @@
     const f = e.target;
     const quick = { name: f.name.value.trim(), max_hp: Number(f.max_hp.value), ac: f.ac.value === "" ? 10 : Number(f.ac.value),
       init_mod: f.init_mod.value === "" ? 0 : Number(f.init_mod.value), count: Number(f.count.value) || 1, save_to_library: f.save_to_library.checked };
-    run("POST", "/api/encounters/" + EID + "/combatants", { quick }, () => { f.reset(); f.name.focus(); });
+    run("POST", "/api/encounters/" + EID + "/combatants", { quick }, async () => {
+      f.reset(); f.name.focus();
+      if (quick.save_to_library) { // show the new stat block in the "From library" tab right away
+        try { creatures = (await api("GET", "/api/creatures?campaign_id=" + S.encounter.campaign_id)).creatures; renderAdd(); } catch (e) { /* shows after reload */ }
+      }
+    });
   });
   $("#lib-search").addEventListener("input", renderAdd);
   function renderAdd() {

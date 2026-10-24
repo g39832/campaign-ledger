@@ -35,8 +35,64 @@
   if (window.Dice) Dice.overlayHost = $("#stage");
 
   const roll = (check, e) => Dice.roll({ check: Object.assign({ character_id: S.character.id }, check) }, e);
+  let amtValue = "";
+  async function me(path, body) {
+    try {
+      const d = await api("POST", "/api/play/me/" + path, Object.assign({ op_id: L.uid() }, body));
+      if (d.roll && window.Dice) { Dice.addHistory([d.roll]); Dice.animate(d.roll); if (!Dice.isOpen()) Dice.toggle(true); }
+      load(true);
+      return d;
+    } catch (e) { toast(e.message, "error"); return null; }
+  }
+  function hpControls(c) {
+    const amt = h("input", { type: "number", min: 0, placeholder: "0", value: amtValue, "aria-label": "Amount", "data-keep": "me-amt", inputmode: "numeric",
+      style: "width:5.5ch;text-align:center", oninput: (e) => { amtValue = e.target.value; },
+      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); go(e.shiftKey ? "heal" : "damage"); } } });
+    const go = (op) => {
+      const n = Number(amt.value);
+      if (!amt.value || !Number.isFinite(n) || n < 0) { amt.focus(); return; }
+      amtValue = ""; me("hp", { op, amount: Math.trunc(n) });
+    };
+    const fix = (n) => me("hp", { op: "set", hp: Math.max(0, Math.min(c.max_hp || Infinity, c.current_hp + n)) });
+    return h("div", { style: "display:grid;gap:6px;margin-bottom:10px" },
+      h("div", { class: "roll-row", style: "align-items:center" }, amt,
+        h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => go("damage") }, "Damage"),
+        h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: () => go("heal") }, "Heal"),
+        h("button", { type: "button", class: "btn btn-sm btn-temp", onclick: () => go("temp") }, "Temp")),
+      h("div", { class: "hp-fix" }, h("span", { class: "lbl" }, "Fix HP"),
+        [-5, -1, 1, 5].map((n) => h("button", { type: "button", class: "btn btn-sm", onclick: () => fix(n) }, n > 0 ? "+" + n : "−" + Math.abs(n)))));
+  }
+  function extras(c) {
+    const out = [];
+    if (c.can.edit_hp && (c.current_hp === 0 || c.death_successes || c.death_failures)) {
+      const pips = (field, cls) => h("span", { class: "pips " + cls }, [0, 1, 2].map((i) => h("button", {
+        type: "button", class: "pip" + (i < c[field] ? " on" : ""), "aria-label": field.replace("_", " ") + " " + (i + 1),
+        onclick: () => me("death", { field, value: c[field] === i + 1 ? i : i + 1 }) })));
+      out.push(h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, h("span", { class: "lbl" }, "Death saves"),
+        pips("death_successes", ""), pips("death_failures", "fail")));
+    }
+    const levels = Object.entries(c.spell_slots || {}).filter(([, v]) => v && v.max > 0);
+    if (levels.length) {
+      out.push(h("h4", { class: "lbl", style: "margin:4px 0" }, "Spell slots" + (c.can.spend_slots ? " — tap to spend or regain" : "")),
+        h("div", { class: "roll-row", style: "margin-bottom:8px" }, levels.map(([lv, v]) => h("span", { class: "slot-row", style: "padding:3px 6px" },
+          h("span", { class: "lvl" }, lv),
+          h("span", { class: "pips" }, Array.from({ length: v.max }, (_, i) => h("button", {
+            type: "button", class: "pip slot" + (i < v.max - v.used ? " on" : ""), disabled: !c.can.spend_slots,
+            "aria-label": "Level " + lv + " slot " + (i + 1) + (i < v.max - v.used ? " (available)" : " (spent)"),
+            onclick: () => me("slot", { level: lv, used: i < v.max - v.used ? v.used + 1 : v.used - 1 }) })))))));
+    }
+    if (c.can.hit_dice && c.hit_dice_total) {
+      const left = c.hit_dice_total - c.hit_dice_used;
+      out.push(h("div", { class: "roll-row", style: "align-items:center;margin-bottom:8px" },
+        c.hit_dice_sizes.map((sd) => h("button", { type: "button", class: "btn btn-sm", disabled: left <= 0,
+          title: "Short rest: roll a hit die + Constitution and heal", onclick: () => me("hit-die", { sides: sd }) }, "Spend hit die (d" + sd + ")")),
+        h("span", { class: "faint", style: "font-size:.85rem" }, left + " of " + c.hit_dice_total + " left")));
+    }
+    return out;
+  }
 
   function render() {
+    const a = document.activeElement, keep = a && a.dataset && a.dataset.keep;
     const m = S.map;
     $("#no-map").hidden = !!m;
     if (m) {
@@ -68,6 +124,8 @@
           c.temp_hp ? h("span", { class: "temp", style: "color:var(--temp);font-weight:700" }, "+" + c.temp_hp + " temp") : null,
           h("span", { class: "grow" }), h("span", null, h("b", null, c.ac), " AC")),
         c.conditions.length ? h("div", { class: "c-conds", style: "margin-bottom:8px" }, c.conditions.map((x) => h("span", { class: "tag" }, x))) : null,
+        c.can.edit_hp ? hpControls(c) : null,
+        extras(c),
         h("div", { class: "row", style: "margin-bottom:10px" },
           h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "initiative" }, ev) }, icon("dice-5", "sm"), " Initiative " + signed(d.initiative)),
           c.current_hp === 0 ? h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: (ev) => roll({ type: "death" }, ev) }, "Death save") : null,
@@ -83,6 +141,7 @@
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),
         h("div", { class: "roll-grid" }, SKILLS.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "skill", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.skills[k]))))));
     }
+    if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
     $("#party").replaceChildren(h("h3", { class: "rule-head" }, "Party"),
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),

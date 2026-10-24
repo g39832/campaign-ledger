@@ -71,6 +71,22 @@ Options:
 
 ---
 
+## Fixing HP, and rests
+
+**Fixing HP when something's wrong.** The character sheet, the combat panel and the player screen all have a **Fix HP** row (−5, −1, +1, +5), and you can type exact numbers anywhere HP is shown: current and max on the sheet, or "Set exact HP, max HP or temp HP" in combat. During a fight, a correction is written to the combat log and **Undo HP** reverses it. Undo warns you instead of overwriting anything that changed since.
+
+**Short rest:** on the sheet, the Rest line has **Spend d10** (one button per hit-die size). It rolls the die plus Constitution, heals that much, and shows the roll in the dice tray. Set the character's hit dice first, like `5d10` (or `3d8 + 2d10` for a multiclass).
+
+**Long rest:** the sheet's **Long rest** button rests one character. The Dashboard's **Long rest** rests the whole party (player characters only). A long rest restores:
+
+* all HP, and temp HP ends
+* half the character's hit dice (at least one)
+* all spell slots
+* one level of exhaustion
+* death saves
+
+Conditions are left for you to decide.
+
 ## Dice
 
 Open the dice tray with the **Dice** button in the top bar, or press **D**.
@@ -117,6 +133,15 @@ Your friends join from their own device and see the shared map, the turn order, 
 2. Open the **Players** page. It shows the join code and the addresses to send, e.g. `http://192.168.1.20:5050/join?code=XJ69RE`.
 3. Friends open that address, enter their name and pick their character.
 4. On a map, click **Show to players** (or choose the map on the Players page).
+
+**What players can do with their own character:**
+
+* Damage, Heal, Temp HP and Fix HP
+* Spend or get back spell slots (tap the diamonds)
+* Mark death saves at 0 HP
+* Spend hit dice
+
+During a fight, their changes appear in your combat log with their name, and Undo HP works on them. You can turn each of these off in **Settings → What players can change**. The server enforces it, and they can never change max HP or anyone else's character.
 
 **What players can and can't see.** Everything below is enforced on the server.
 
@@ -224,7 +249,7 @@ Double-click **`run-tests.bat`**, or run:
 .venv\Scripts\python -m pytest -q
 ```
 
-The tests use a temporary database and never touch your real data. There are 103 of them. They cover:
+The tests use a temporary database and never touch your real data. There are 113 of them. They cover:
 
 * derived stats
 * morality recalculation after editing, deleting and reversing events
@@ -249,6 +274,11 @@ The tests use a temporary database and never touch your real data. There are 103
 * server-side fog masking of map images
 * backups that include maps and rolls
 * the v1 → v2 database upgrade
+* rests and hit dice
+* HP corrections and player self-updates, including permission toggles
+* no duplicate character tokens
+
+The test helper sends requests the way the browser does (every write carries a request id), so tests catch problems that only show up from real button clicks.
 
 ---
 
@@ -266,7 +296,8 @@ app/
   dice.py           dice expression parser + roller (no eval)
   rolls.py          roll API, history and visibility
   auth.py           who is the DM / a player; the permission check every request passes
-  play.py           joining, the player screen's data, player token moves
+  play.py           joining, the player screen's data, player token moves and self-updates
+  rest.py           short/long rests, hit dice, HP changes from the sheet
   maps.py           battle maps, tokens, terrain, fog, the player-safe map view
   pages.py          page routes
   templates/        HTML pages
@@ -284,7 +315,8 @@ Packages: Flask (web app), waitress (server), Pillow (blacks out fogged areas of
 
 * Players join with a code instead of accounts and passwords. That's fine for friends at your table, but don't put the app on the open internet without a tunnel or Tailscale.
 * The app checks for updates every 1.5–3 seconds rather than pushing them live, so a player's move or roll shows up for others within a couple of seconds.
-* Players can view their own sheet and roll from it, but only the DM can edit sheets.
+* Players can roll from their sheet and track HP, spell slots, death saves and hit dice. Everything else on the sheet is edited by the DM.
+* Prev turn moves the turn back but doesn't undo effect countdowns (the log says so).
 * Prev turn moves the turn marker back but doesn't wind effect durations back up. The log says so when you use it.
 * There's no built-in spell or monster database. You type in your own stat blocks and spells, so you can use any official or homebrew content.
 * Undo covers HP changes in combat. Other edits are just edited again by hand.

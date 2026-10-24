@@ -54,6 +54,23 @@
         </div>
       </div>
     </section>
+
+    <section class="section" id="player-rules">
+      <h2 class="rule-head">What players can change</h2>
+      <p class="faint" style="font-size:.9rem">For friends who joined from their own device (see Players). They only ever change their own character.</p>
+      <div class="setting">
+        <div><b>Their HP</b></div><div class="desc">Take damage, heal, add temp HP, fix their HP and mark death saves. In a fight, it shows in the combat log and you can undo it.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="players.edit_hp"> Allowed</label></div>
+      </div>
+      <div class="setting">
+        <div><b>Spell slots</b></div><div class="desc">Spend and get back their own spell slots.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="players.spend_slots"> Allowed</label></div>
+      </div>
+      <div class="setting">
+        <div><b>Hit dice</b></div><div class="desc">Spend hit dice to heal on a short rest (rolls the die + Constitution).</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="players.hit_dice"> Allowed</label></div>
+      </div>
+    </section>
     {% endif %}
   </div>
 
@@ -97,5 +114,5 @@
 {% endblock %}
 {% block scripts %}
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=3"></script>
 {% endblock %}

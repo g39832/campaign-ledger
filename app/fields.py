@@ -138,9 +138,12 @@ def decode_row(row, specs):
 
 
 def validate_new(specs, data, required=()):
-    """Validate a dict of fields for an INSERT. Unknown keys are rejected."""
+    """Validate a dict of fields for an INSERT. Unknown keys are rejected,
+    except op_id, the request id every browser action carries."""
     out = {}
     for k, v in (data or {}).items():
+        if k == "op_id":
+            continue
         if k not in specs:
             raise ApiError(f"Unknown field: {k}")
         out[k] = coerce(specs[k], v, k)

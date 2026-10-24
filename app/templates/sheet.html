@@ -46,6 +46,10 @@
         <button class="btn btn-sm btn-heal" type="button" data-hp="heal">Heal</button>
       </div>
       <label class="temp-in"><span class="lbl" style="color:var(--temp)">Temp</span><input data-f="temp_hp" type="number" min="0" aria-label="Temporary hit points"></label>
+      <div class="hp-fix" role="group" aria-label="Fix current HP"><span class="lbl">Fix HP</span>
+        <button type="button" class="btn btn-sm" data-hpfix="-5">−5</button><button type="button" class="btn btn-sm" data-hpfix="-1">−1</button>
+        <button type="button" class="btn btn-sm" data-hpfix="1">+1</button><button type="button" class="btn btn-sm" data-hpfix="5">+5</button>
+        <span class="faint" style="font-size:.78rem">or type the exact numbers above</span></div>
       <span class="hpbar" id="hpbar"><span class="hpbar-fill"></span></span>
     </div>
 
@@ -55,6 +59,7 @@
         <span class="pips fail" data-pips="death_failures" aria-label="Death save failures"></span>
         <button type="button" class="btn btn-sm btn-quiet" data-roll="death" title="Roll a death save">Roll</button></div>
       <div class="line"><span class="lbl">Hit dice</span><input data-f="hit_dice" placeholder="5d8" style="width:7ch;min-height:28px;padding:2px 6px"> <span class="faint">used</span> <input data-f="hit_dice_used" type="number" min="0" style="width:5ch;min-height:28px;padding:2px 6px"></div>
+      <div class="line"><span class="lbl">Rest</span><span id="rest-btns" class="roll-row" style="align-items:center"></span></div>
       <div class="line"><span class="lbl">Exhaustion</span><select data-f="exhaustion" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for i in range(0, 7) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}</select>
         <span class="lbl" style="min-width:0">Status</span><select data-f="status" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for s in ["ok","unconscious","stable","incapacitated","dead"] %}<option value="{{ s }}">{{ "Fine" if s == "ok" else s | capitalize }}</option>{% endfor %}</select></div>
       <div class="line"><span class="lbl">Conditions</span><span id="cond-chips" class="c-conds" style="margin:0"></span>
@@ -185,4 +190,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=2"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=3"></script>{% endblock %}

@@ -3,7 +3,7 @@
    Formulas mirror app/rules.py. */
 (function () {
   "use strict";
-  const { h, icon, $, $$, signed, boot, Binder, act, api, toast } = L;
+  const { h, icon, $, $$, signed, boot, Binder, act, api, toast, armed } = L;
   const char = boot("boot");
   const SKILLS = boot("boot-skills");
   const ABS = ["str", "dex", "con", "int", "wis", "cha"];
@@ -113,29 +113,46 @@
     });
   }
 
-  // ---- HP quick buttons -----------------------------------------------------
+  // ---- HP: damage / heal / fix, all applied by the server ----------------------
+  // Going through the server keeps the same rules as combat, and if this
+  // character is in a running fight the change is logged there and undoable.
+  function hpAction(body, after) {
+    b.later.flush();
+    act("POST", "/api/characters/" + char.id + "/hp", body, (d) => { b.refresh(d.character); renderPips(); derive(); if (after) after(); });
+  }
   $$("[data-hp]").forEach((btn) => btn.addEventListener("click", () => {
     const amtEl = $("#hp-amt");
     const amt = Math.max(0, intOr(amtEl.value, 0));
     if (!amt) { amtEl.focus(); return; }
-    let hp = Number(model.current_hp) || 0, temp = Number(model.temp_hp) || 0;
-    const max = Number(model.max_hp) || 0;
-    if (btn.dataset.hp === "damage") {
-      const soak = Math.min(temp, amt); temp -= soak; const was = hp; hp = Math.max(0, hp - (amt - soak));
-      if (temp !== model.temp_hp) b.set("temp_hp", temp);
-      if (was > 0 && hp === 0 && model.status === "ok") b.set("status", "unconscious");
-    } else {
-      const was = hp; hp = max ? Math.min(max, hp + amt) : hp + amt;
-      if (was === 0 && hp > 0 && ["unconscious", "stable"].includes(model.status)) {
-        b.set("status", "ok"); b.set("death_successes", 0); b.set("death_failures", 0);
-      }
-    }
-    b.set("current_hp", hp, true);
-    ["current_hp", "temp_hp", "status"].forEach(renderField);
-    renderPips(); derive();
-    amtEl.value = "";
+    hpAction({ op: btn.dataset.hp, amount: amt }, () => { amtEl.value = ""; });
   }));
   $("#hp-amt").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("[data-hp='damage']").click(); } });
+  $$("[data-hpfix]").forEach((btn) => btn.addEventListener("click", () => {
+    const max = Number(model.max_hp) || 0;
+    const next = Math.max(0, (Number(model.current_hp) || 0) + Number(btn.dataset.hpfix));
+    hpAction({ op: "set", hp: max ? Math.min(max, next) : next });
+  }));
+
+  // ---- rests ---------------------------------------------------------------------
+  function renderRest() {
+    const box = $("#rest-btns");
+    const pools = [...String(model.hit_dice || "").matchAll(/(\d+)\s*d\s*(\d+)/gi)].map((m) => [Number(m[1]), Number(m[2])]).filter(([n, sd]) => n > 0 && [6, 8, 10, 12].includes(sd));
+    const total = pools.reduce((t, [n]) => t + n, 0), left = Math.max(0, total - (Number(model.hit_dice_used) || 0));
+    const long = h("button", { type: "button", class: "btn btn-sm", title: "All HP, all spell slots, half your hit dice, one less exhaustion" }, icon("moon", "sm"), " Long rest");
+    armed(long, () => act("POST", "/api/characters/" + char.id + "/long-rest", {}, (d) => { b.refresh(d.character); renderSlots(); renderPips(); derive(); renderRest(); toast(model.name + " finished a long rest.", "ok"); }), "Long rest? Click again");
+    box.replaceChildren(
+      total ? [...new Set(pools.map(([, sd]) => sd))].map((sd) => h("button", { type: "button", class: "btn btn-sm", disabled: !left,
+        title: "Short rest: roll a hit die plus Constitution and heal that much",
+        onclick: () => {
+          b.later.flush();
+          act("POST", "/api/characters/" + char.id + "/hit-die", { sides: sd }, (d) => {
+            b.refresh(d.character); derive(); renderRest();
+            if (window.Dice) { Dice.addHistory([d.roll]); Dice.animate(d.roll); if (!Dice.isOpen()) Dice.toggle(true); }
+          });
+        } }, icon("dice-5", "sm"), " Spend d" + sd)) : h("span", { class: "faint", style: "font-size:.85rem" }, "Set hit dice (like 5d10) to spend them"),
+      total ? h("span", { class: "faint", style: "font-size:.85rem" }, left + " of " + total + " left") : null,
+      long);
+  }
 
   // ---- conditions -------------------------------------------------------------
   function renderConds() {
@@ -289,6 +306,7 @@
     if (f === "equipment") renderEquipment();
     if (f === "spells") renderSpells();
     if (f === "spell_slots") renderSlots();
+    if (f === "hit_dice" || f === "hit_dice_used") renderRest();
   }
 
   // ---- tabs ----------------------------------------------------------------------
@@ -347,5 +365,7 @@
     } catch (e) { /* offline; the save indicator already reports it */ }
   }, 4000);
 
-  renderNested(); renderProfs(); renderPips(); renderConds(); renderSlots(); derive();
+  renderNested(); renderProfs(); renderPips(); renderConds(); renderSlots(); renderRest(); derive();
+  $("[data-f='hit_dice']").addEventListener("input", renderRest);
+  $("[data-f='hit_dice_used']").addEventListener("input", renderRest);
 })();

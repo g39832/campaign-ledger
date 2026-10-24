@@ -132,10 +132,13 @@
       this.render();
       const item = this.items[0];
       try {
-        await item.run();
+        const value = await item.run();
         this.items.shift();
         this.attempt = 0;
         this.lastSaved = new Date();
+        // Follow-ups (like opening a page) run only once the queue no longer
+        // counts this write as pending, so navigating away isn't blocked.
+        if (item.done) { this.running = false; this.render(); try { item.done(value); } catch (e) { console.error(e); } }
       } catch (err) {
         if (err instanceof HttpError && err.retryable) {
           this.attempt += 1;
@@ -356,7 +359,8 @@
     body = Object.assign({ op_id: uid() }, body || {});
     return new Promise((resolve) => {
       Save.push({
-        run: async () => { const d = await api(method, url, body); if (onOk) onOk(d); resolve(d); },
+        run: () => api(method, url, body),
+        done: (d) => { if (onOk) onOk(d); resolve(d); },
         fail: (err) => { if (opts.onError) opts.onError(err); else toast(err.message, "error"); resolve(null); },
       });
     });

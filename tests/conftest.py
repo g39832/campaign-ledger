@@ -1,5 +1,6 @@
 import os
 import sys
+import uuid
 
 import pytest
 
@@ -25,8 +26,17 @@ def client(app):
 
 
 class Api:
+    """Calls the API the way the browser does: every write carries a fresh
+    op_id (see act() in static/js/core.js), so tests see real request bodies."""
+
     def __init__(self, client):
         self.c = client
+
+    @staticmethod
+    def _with_op(body):
+        body = dict(body or {})
+        body.setdefault("op_id", uuid.uuid4().hex)
+        return body
 
     def _check(self, resp, expect):
         assert resp.status_code == expect, f"{resp.status_code}: {resp.get_data(as_text=True)}"
@@ -36,13 +46,13 @@ class Api:
         return self._check(self.c.get(url), expect)
 
     def post(self, url, body=None, expect=200):
-        return self._check(self.c.post(url, json=body or {}), expect)
+        return self._check(self.c.post(url, json=self._with_op(body)), expect)
 
     def patch(self, url, body, expect=200):
-        return self._check(self.c.patch(url, json=body), expect)
+        return self._check(self.c.patch(url, json=self._with_op(body)), expect)
 
     def delete(self, url, body=None, expect=200):
-        return self._check(self.c.delete(url, json=body or {}), expect)
+        return self._check(self.c.delete(url, json=self._with_op(body)), expect)
 
     # conveniences
     def campaign(self, name="Test Campaign"):

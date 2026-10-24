@@ -216,7 +216,7 @@
       c.addEventListener("wheel", (e) => { e.preventDefault(); const [x, y] = this.pos(e); this.zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, x, y); }, { passive: false });
       c.addEventListener("pointerdown", (e) => {
         if (!this.map) return;
-        c.setPointerCapture(e.pointerId);
+        try { c.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety; drawing works without it */ }
         const p = this.pos(e);
         this.pointers.set(e.pointerId, p);
         if (this.pointers.size === 2) { // pinch

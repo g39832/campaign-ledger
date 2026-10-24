@@ -4,6 +4,7 @@ The character sheet mirrors these formulas in static/js/rules.js for instant
 feedback while typing; tests cover this Python version.
 """
 import random
+import re
 
 ABILITIES = ["str", "dex", "con", "int", "wis", "cha"]
 ABILITY_NAMES = {
@@ -58,6 +59,11 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "tie_break": "modifier",     # modifier | pc_first | enemy_first | manual
         "auto_sort": True,
         "skip_statuses": ["dead", "defeated", "fled"],
+    },
+    "players": {
+        "edit_hp": True,      # players may apply damage/healing/temp HP to their own character
+        "spend_slots": True,  # players may spend and regain their own spell slots
+        "hit_dice": True,     # players may spend hit dice (short rest healing)
     },
 }
 
@@ -225,3 +231,34 @@ def morality_timeline(start_law, start_good, events, cfg):
     points[0]["plot_law"] = max(-scale, min(scale, start_law))
     points[0]["plot_good"] = max(-scale, min(scale, start_good))
     return points
+
+
+# ---- Rests ------------------------------------------------------------------
+
+HIT_DICE = re.compile(r"(\d+)\s*d\s*(\d+)", re.I)
+
+
+def parse_hit_dice(text):
+    """'5d10' or '3d8 + 2d10' -> [(5, 10)] / [(3, 8), (2, 10)]."""
+    return [(int(n), int(s)) for n, s in HIT_DICE.findall(text or "") if int(n) > 0 and int(s) in (6, 8, 10, 12)]
+
+
+def long_rest_changes(char):
+    """What a long rest restores (5e 2014): all HP, spent hit dice up to half
+    the character's total (minimum one), all spell slots, one level of
+    exhaustion, and death saves. Temporary HP ends. Conditions are left for the DM."""
+    total_dice = sum(n for n, _ in parse_hit_dice(char.get("hit_dice")))
+    regain = max(1, total_dice // 2) if total_dice else char.get("hit_dice_used", 0)
+    slots = {k: dict(v, used=0) for k, v in (char.get("spell_slots") or {}).items()}
+    changes = {
+        "current_hp": char["max_hp"],
+        "temp_hp": 0,
+        "hit_dice_used": max(0, (char.get("hit_dice_used") or 0) - regain),
+        "spell_slots": slots,
+        "exhaustion": max(0, (char.get("exhaustion") or 0) - 1),
+        "death_successes": 0,
+        "death_failures": 0,
+    }
+    if char.get("status") in ("unconscious", "stable", "incapacitated"):
+        changes["status"] = "ok"
+    return changes
