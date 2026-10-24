@@ -671,6 +671,7 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .dice-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font: 700 .72rem/18px var(--sans); text-align: center; padding: 0 4px; }
 .dice-dock { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 60; background: var(--surface); border-left: 1px solid var(--line-strong); box-shadow: var(--shadow); padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; transform: translateX(105%); visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s; overflow-y: auto; }
 .dice-dock.is-open { transform: none; visibility: visible; transition: transform .18s ease; }
+.dice-dock > * { flex-shrink: 0; } /* the dock scrolls; never squash a section so its contents overlap */
 .dd-head { display: flex; align-items: center; gap: 10px; }
 .dd-head h2 { font: 700 1.3rem var(--caps); }
 .dd-keys { font-size: .78rem; flex: 1; line-height: 1.25; }
