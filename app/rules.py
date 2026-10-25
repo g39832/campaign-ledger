@@ -467,7 +467,11 @@ def spell_info(spell):
         rounds = int(spell.get("rounds")) if spell.get("rounds") not in (None, "") else None
     except (TypeError, ValueError):
         rounds = None
-    return {"name": (str(spell.get("name") or "").strip() or "Spell")[:80], "level": spell.get("level"),
+    try:
+        ac = max(-10, min(30, int(spell.get("ac") or 0)))
+    except (TypeError, ValueError):
+        ac = 0
+    return {"name": (str(spell.get("name") or "").strip() or "Spell")[:80], "level": spell.get("level"), "ac": ac,
             "effect": effect, "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
             "condition": str(spell.get("condition") or "").strip()[:60],
             "rounds": rounds if rounds and 0 < rounds <= 1000 else None}
@@ -482,4 +486,21 @@ def spell_expression(dice_text, spell_mod):
         dice_text = re.sub(r"\s*([+-])?\s*\bmod\b", lambda m: (m.group(1) or "+") + str(spell_mod), dice_text, flags=re.I)
         dice_text = dice_text.replace("+-", "-").replace("--", "+")
     return dice_text.replace(" ", "")
+
+
+def ac_bonus(conditions):
+    """Temporary AC from effects (Shield of Faith +2, Shield +5, cover...). An effect
+    stops counting once its duration has run out, even before the DM removes it."""
+    total = 0
+    for x in conditions or []:
+        if isinstance(x, dict) and not x.get("expired"):
+            try:
+                total += int(x.get("ac") or 0)
+            except (TypeError, ValueError):
+                pass
+    return total
+
+
+def effective_ac(ac, conditions):
+    return (ac or 0) + ac_bonus(conditions)
 

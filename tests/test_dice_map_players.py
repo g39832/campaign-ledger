@@ -666,3 +666,37 @@ def test_players_see_and_roll_their_own_spells(api, joined):
     r = pa.post("/api/rolls", {"check": {"type": "spell", "key": 0, "character_id": a["id"]}}, 201)["roll"]
     assert r["kind"] == "heal"
     pa.post("/api/rolls", {"check": {"type": "spell", "key": 0, "character_id": joined["b"]["id"]}}, 403)
+
+
+def test_temporary_ac_from_spells_and_effects(api, client):
+    from app.rules import ac_bonus, spell_info
+    assert ac_bonus([{"name": "Shield of Faith", "ac": 2}, {"name": "Cover", "ac": 2}, {"name": "Old", "ac": 5, "expired": True}]) == 4
+    assert spell_info({"name": "Shield", "effect": "effect", "ac": "5"})["ac"] == 5
+    camp = api.campaign()
+    lux = api.character(camp["id"], name="Lux", max_hp=12, ac=8, spellcasting_ability="wis", spells=[
+        {"name": "Shield of Faith", "level": 1, "effect": "effect", "ac": 2, "rounds": 100}])
+    eid = api.encounter(camp["id"], "Fight")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [lux["id"]], "quick": {"name": "Ogre", "max_hp": 59, "ac": 11}})
+    by = {c["name"]: c for c in st["combatants"]}
+    assert by["Lux"]["spells"][0]["ac"] == 2
+    st = api.post(f"/api/encounters/{eid}/conditions", {"targets": [by["Lux"]["id"]], "name": "Shield of Faith", "ac": 2,
+                                                         "rounds": 100, "caster_id": by["Lux"]["id"]})
+    me = [c for c in st["combatants"] if c["name"] == "Lux"][0]
+    assert (me["ac"], me["ac_base"], me["ac_bonus"]) == (10, 8, 2), "attacks are checked against 10"
+    assert any("+2 AC" in e["message"] for e in st["log"])
+    assert api.get(f"/api/characters/{lux['id']}")["character"]["ac"] == 8, "the sheet keeps its own AC"
+    # cover on the ogre, added by hand
+    st = api.post(f"/api/combatants/{by['Ogre']['id']}/conditions", {"name": "Half cover", "ac": 2})
+    ogre = [c for c in st["combatants"] if c["name"] == "Ogre"][0]
+    assert ogre["ac"] == 13 and ogre["ac_base"] == 11
+    # editing AC changes the base, not the bonus
+    st = api.patch(f"/api/combatants/{me['id']}", {"changes": {"ac": {"from": 8, "to": 9}}})
+    me = [c for c in st["combatants"] if c["name"] == "Lux"][0]
+    assert (me["ac"], me["ac_base"]) == (11, 9)
+    # removing the effect ends the bonus
+    cond = me["conditions"][0]["id"]
+    st = api.delete(f"/api/combatants/{me['id']}/conditions/{cond}")
+    me = [c for c in st["combatants"] if c["name"] == "Lux"][0]
+    assert (me["ac"], me["ac_bonus"]) == (9, 0)
+    api.post(f"/api/encounters/{eid}/conditions", {"targets": [me["id"]], "name": "Shield", "ac": 99}, 400)
+    assert "ac-bonus" in client.get(f"/characters/{lux['id']}").get_data(as_text=True)

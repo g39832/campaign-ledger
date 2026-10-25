@@ -54,7 +54,7 @@
                 {% if c.status != "ok" %}<span class="tag is-bad">{{ c.status }}</span>{% endif %}</div>
               {{ hpbar(c.current_hp, c.max_hp, c.temp_hp) }}
             </td>
-            <td class="r num" style="font-weight:700;font-size:1.1rem">{{ c.ac }}</td>
+            {% set bonus = ac_bonus(c.conditions) %}<td class="r num" style="font-weight:700;font-size:1.1rem"{% if bonus %} title="{{ c.ac }} {{ '%+d'|format(bonus) }} from effects"{% endif %}>{{ c.ac + bonus }}{% if bonus %}<small class="ac-bonus">{{ '%+d'|format(bonus) }}</small>{% endif %}</td>
             <td class="r num hide-sm">{{ c.derived.passive_perception }}</td>
             <td class="hide-sm">{% for cond in c.conditions %}<span class="tag">{{ cond.name }}</span> {% else %}<span class="faint">—</span>{% endfor %}
               {% if c.exhaustion %}<span class="tag is-warn">Exhaustion {{ c.exhaustion }}</span>{% endif %}</td>

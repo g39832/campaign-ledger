@@ -578,6 +578,15 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
   .ledger td .btn { margin-top: 4px; }
 }
 
+/* ---------- temporary AC ---------- */
+.c-ac.has-bonus { color: var(--hp-high); }
+.c-ac.has-bonus small { color: var(--hp-high); }
+.ac-up { color: var(--hp-high); font-weight: 700; }
+.tag.ac-tag { color: var(--hp-high); border-color: var(--hp-high); }
+.tag.ac-tag.is-off { opacity: .5; text-decoration: line-through; }
+.ac-bonus, .ac-bonus-note { color: var(--hp-high); font-weight: 700; font-size: .8rem; }
+.ac-bonus-note { display: block; margin-top: 2px; }
+
 /* ---------- spells ---------- */
 .spell-list { display: grid; gap: 8px; }
 .spell-card { border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; background: var(--surface); }

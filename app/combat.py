@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -60,6 +60,11 @@ def _combatant_dict(r):
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
                  status=r["status"], conditions=json.loads(r["conditions"]), death_successes=0,
                  death_failures=0, portrait=None, subtitle=d["statblock"].get("creature_type", ""), exhaustion=0)
+    # "ac" is what attacks are checked against: the saved AC plus temporary effects.
+    # Editing AC changes "ac_base", the saved value.
+    d["ac_base"] = d["ac"]
+    d["ac_bonus"] = ac_bonus(d["conditions"])
+    d["ac"] = (d["ac"] or 0) + d["ac_bonus"]
     return d
 
 
@@ -574,7 +579,7 @@ def api_patch_combatant(cid):
                 ctx.log("initiative", f"{c['name']}'s initiative set to {to if to not in (None, '') else '—'}")
             elif k == "status" and to != c["status"]:
                 ctx.log("status", f"{c['name']} marked {to}")
-            elif k == "ac" and str(to) != str(c["ac"]):
+            elif k == "ac" and str(to) != str(c["ac_base"]):
                 ctx.log("edit", f"{c['name']}'s AC set to {to}")
             elif k == "name" and to != c["name"]:
                 ctx.log("edit", f"{c['name']} renamed to {to}")
@@ -814,6 +819,7 @@ def api_condition_targets(eid):
 
     def fn(ctx):
         rounds = _int(data, "rounds", 1, 1000) if data.get("rounds") not in (None, "") else None
+        ac = _int(data, "ac", -10, 30) if data.get("ac") not in (None, "", 0) else 0
         caster = ctx.combatant(int(data["caster_id"])) if data.get("caster_id") is not None else None
         added, skipped = [], []
         for cid in dict.fromkeys(targets):
@@ -825,11 +831,14 @@ def api_condition_targets(eid):
             cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": str(data.get("note", ""))[:500],
                     "rounds_left": rounds, "tick": "start" if caster else "end", "tick_on": tick_on, "encounter_id": eid,
                     "auto_expire": False, "expired": False, "applied_round": ctx.enc["round"]}
+            if ac:
+                cond["ac"] = ac
             ctx.set_vitals(c, conditions=c["conditions"] + [cond])
             added.append(c["name"])
         if added:
             rds = f" for {rounds} round{'s' if rounds != 1 else ''}" if rounds else ""
-            ctx.log("condition", ", ".join(added) + (" is " if len(added) == 1 else " are ") + name + rds
+            ctx.log("condition", ", ".join(added) + (" has " if len(added) == 1 else " have ") + name
+                    + (f" ({ac:+d} AC)" if ac else "") + rds
                     + (f" ({caster['name']})" if caster else "") + (f" — {data['note']}" if data.get("note") else ""))
         if skipped:
             ctx.log("condition", ", ".join(skipped) + (" was" if len(skipped) == 1 else " were") + f" already {name}")
@@ -856,6 +865,9 @@ def api_add_condition(cid):
         cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": str(data.get("note", ""))[:500],
                 "rounds_left": rounds, "tick": tick, "tick_on": tick_on, "encounter_id": eid,
                 "auto_expire": bool(data.get("auto_expire")), "expired": False, "applied_round": ctx.enc["round"]}
+        ac = _int(data, "ac", -10, 30) if data.get("ac") not in (None, "", 0) else 0
+        if ac:
+            cond["ac"] = ac
         if any(x["name"].lower() == name.lower() and not x.get("expired") for x in c["conditions"]):
             raise F.ApiError(f"{c['name']} is already {name}")
         ctx.set_vitals(c, conditions=c["conditions"] + [cond])
@@ -863,7 +875,7 @@ def api_add_condition(cid):
         if rounds:
             whose = "their" if tick_on == cid else f"{ctx.combatant(tick_on)['name']}'s"
             desc = f" for {rounds} round{'s' if rounds != 1 else ''} (counts at the {tick} of {whose} turn)"
-        ctx.log("condition", f"{c['name']} is {name}{desc}" + (f" — {cond['note']}" if cond["note"] else ""))
+        ctx.log("condition", f"{c['name']} is {name}" + (f" ({ac:+d} AC)" if ac else "") + desc + (f" — {cond['note']}" if cond["note"] else ""))
     return mutate(eid, fn, data.get("op_id"))
 
 

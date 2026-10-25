@@ -43,6 +43,7 @@
     $("#pp").textContent = 10 + d.skills.perception;
     $("#pi").textContent = 10 + d.skills.insight;
     $("#pv").textContent = 10 + d.skills.investigation;
+    if ($("#ac-bonus")) renderAcBonus();
     $("#spell-dc").textContent = d.spell ? d.spell.dc : "—";
     $("#spell-atk").textContent = d.spell ? signed(d.spell.atk) : "—";
     const max = Number(model.max_hp) || 0, cur = Number(model.current_hp) || 0;
@@ -155,11 +156,19 @@
   }
 
   // ---- conditions -------------------------------------------------------------
+  function renderAcBonus() {
+    const bonus = (model.conditions || []).reduce((n, x) => n + (x.expired ? 0 : Number(x.ac) || 0), 0);
+    const el = $("#ac-bonus");
+    el.hidden = !bonus;
+    el.textContent = bonus ? "now " + ((Number(model.ac) || 0) + bonus) + " (" + signed(bonus) + ")" : "";
+    el.title = bonus ? (model.conditions || []).filter((x) => x.ac && !x.expired).map((x) => x.name + " " + signed(Number(x.ac))).join(", ") : "";
+  }
   function renderConds() {
+    renderAcBonus();
     const wrap = $("#cond-chips");
     const list = model.conditions || [];
     wrap.replaceChildren(...list.map((c) => h("span", { class: "tag" + (c.expired ? " is-warn" : "") },
-      c.name, c.rounds_left != null ? " (" + c.rounds_left + ")" : "",
+      c.name, c.ac && !c.expired ? " " + signed(Number(c.ac)) + " AC" : "", c.rounds_left != null ? " (" + c.rounds_left + ")" : "",
       h("button", { type: "button", "aria-label": "Remove " + c.name, onclick: () => {
         b.set("conditions", (model.conditions || []).filter((x) => x.id !== c.id), true); renderConds();
       } }, icon("x", "sm")))));
@@ -261,7 +270,7 @@
   const SPELL_DOES = [["", "Just notes"], ["damage", "Damage"], ["heal", "Healing"], ["effect", "Effect / condition"]];
   const SPELL_ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
   const SPELL_HIT = [["", "No roll to land"], ["attack", "Spell attack roll"]].concat(SPELL_ABIL.map(([k, l]) => [k, l + " save"]));
-  const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null };
+  const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null, ac: null };
   function renderSpells() {
     const box = $("#spells");
     const list = model.spells || [];
@@ -286,7 +295,8 @@
         s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "spell:" + i, "data-crit": "1", title: "Critical: double the dice" }, "Crit") : null);
       if (does === "heal" && s.dice) rolls.push(h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "spell:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"));
       const save = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, (SPELL_ABIL.find(([k]) => k === s.hit) || [, ""])[1] + " save" + (sp ? " · DC " + sp.dc : "")) : null;
-      const cond = s.condition ? h("span", { class: "tag" }, s.condition + (s.rounds ? " · " + s.rounds + " rds" : "")) : null;
+      const cond = s.condition || (does === "effect" && Number(s.ac)) ? h("span", { class: "tag" + (Number(s.ac) > 0 ? " ac-tag" : "") },
+        (s.condition || s.name) + (Number(s.ac) ? " " + signed(Number(s.ac)) + " AC" : "") + (s.rounds ? " · " + s.rounds + " rds" : "")) : null;
       const del = h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove spell", title: "Remove",
         onclick: () => { const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true); renderSpells(); } }, icon("trash-2", "sm"));
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
@@ -304,7 +314,10 @@
           does === "damage" || does === "effect" ? h("label", { class: "field" }, h("span", null, "Lands by"), pick(i, "hit", SPELL_HIT)) : null,
           does === "effect" || does === "damage" ? h("label", { class: "field" }, h("span", null, does === "effect" ? "Condition / effect" : "Also applies (optional)"),
             text(i, "condition", { placeholder: does === "effect" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => renderSpells() })) : null,
-          s.condition && (does === "effect" || does === "damage") ? h("label", { class: "field" }, h("span", null, "Rounds"),
+          does === "effect" ? h("label", { class: "field" }, h("span", null, "AC change"),
+            h("input", { type: "number", min: -10, max: 30, value: s.ac ?? "", placeholder: "e.g. +2", title: "Temporary AC while it lasts: +2 Shield of Faith, +5 Shield, +3 Mage Armor-ish",
+              oninput: (e) => set(i, "ac", e.target.value === "" ? null : Number(e.target.value)), onchange: () => renderSpells() })) : null,
+          (s.condition || Number(s.ac)) && (does === "effect" || does === "damage") ? h("label", { class: "field" }, h("span", null, "Rounds"),
             h("input", { type: "number", min: 1, max: 1000, value: s.rounds ?? "", placeholder: "—", title: "How many rounds it lasts (1 minute = 10)",
               oninput: (e) => set(i, "rounds", e.target.value === "" ? null : Number(e.target.value)) })) : null,
           h("label", { class: "field spell-notes" }, h("span", null, "Time · range · notes"), text(i, "notes", { placeholder: "1 action · 120 ft" }))));

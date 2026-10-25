@@ -28,7 +28,7 @@
           <span class="roster-sub">{% if c.class_name %}Level {{ c.level }} {{ c.race }} {{ c.class_name }}{% else %}{{ c.race or "No class set" }}{% endif %}</span><br>
           <span class="faint" style="font-size:.86rem">{{ c.alignment or "Alignment unset" }}{% if c.player_name %} · played by {{ c.player_name }}{% endif %}</span>
         </span>
-        <span class="roster-ac">{{ c.ac }}<small>AC</small></span>
+        {% set bonus = ac_bonus(c.conditions) %}<span class="roster-ac"{% if bonus %} title="{{ c.ac }} {{ '%+d'|format(bonus) }} from effects"{% endif %}>{{ c.ac + bonus }}<small>AC{% if bonus %} {{ '%+d'|format(bonus) }}{% endif %}</small></span>
         <span class="hp-text" style="grid-column:2/4;font-size:.9rem;display:flex;justify-content:space-between"><span><b>{{ c.current_hp }}</b> / {{ c.max_hp }} HP{% if c.temp_hp %} <span class="temp">+{{ c.temp_hp }}</span>{% endif %}</span>{% if c.status != "ok" %}<span class="tag is-bad">{{ c.status }}</span>{% endif %}</span>
         {{ hpbar(c.current_hp, c.max_hp, c.temp_hp) }}
       </a>

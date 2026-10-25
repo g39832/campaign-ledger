@@ -14,7 +14,7 @@ from . import fields as F
 from .auth import PLAYER_COOKIE, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
-from .rules import derived, is_healing, spell_info
+from .rules import ac_bonus, derived, is_healing, spell_info
 
 bp = Blueprint("play", __name__)
 
@@ -142,7 +142,9 @@ def _own_character(conn, char_id):
             "status", "death_successes", "death_failures", "exhaustion", "portrait", "abilities", "save_profs",
             "skill_profs", "spell_slots", "spellcasting_ability", "inspiration", "hit_dice", "hit_dice_used")
     out = {k: c[k] for k in keep}
-    out["conditions"] = [x["name"] for x in c["conditions"]]
+    out["conditions"] = [x["name"] + (f" {int(x['ac']):+d} AC" if x.get("ac") and not x.get("expired") else "") for x in c["conditions"]]
+    out["ac_bonus"] = ac_bonus(c["conditions"])
+    out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a)}
                       for i, a in enumerate(c["attacks"] or [])]

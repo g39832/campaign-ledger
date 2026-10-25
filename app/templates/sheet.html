@@ -32,7 +32,7 @@
   </div>
 
   <div class="vitals">
-    <div class="vital shield"><input class="big" data-f="ac" type="number" min="0" max="99" aria-label="Armor class"><span class="lbl">Armor Class</span></div>
+    <div class="vital shield"><input class="big" data-f="ac" type="number" min="0" max="99" aria-label="Armor class"><span class="lbl">Armor Class</span><span class="ac-bonus-note" id="ac-bonus" hidden></span></div>
     <div class="vital"><button type="button" class="big roll-link" id="d-init" data-roll="initiative" title="Roll initiative" style="border:0">+0</button><span class="lbl">Initiative</span><span class="hint" id="d-init-hint">Dex</span></div>
     <div class="vital"><div class="big" id="d-prof">+2</div><span class="lbl">Proficiency</span></div>
     <div class="vital"><label class="check" style="justify-content:center;flex-direction:column;gap:2px"><input type="checkbox" data-f="inspiration" style="width:22px;height:22px"><span class="lbl">Inspiration</span></label></div>
@@ -195,4 +195,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=19"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=20"></script>{% endblock %}

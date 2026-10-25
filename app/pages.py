@@ -8,7 +8,7 @@ from .creatures import list_creatures
 from .db import get_db, get_setting, set_setting, tx
 from .journal import search_entries
 from .morality import morality_state
-from .rules import ABILITY_NAMES, ABILITIES, ALIGNMENTS, CONDITIONS, SKILLS
+from .rules import ABILITY_NAMES, ABILITIES, ALIGNMENTS, CONDITIONS, SKILLS, ac_bonus
 
 bp = Blueprint("pages", __name__)
 
@@ -23,6 +23,7 @@ def _globals():
         "ALIGNMENTS": ALIGNMENTS,
         "CONDITIONS": CONDITIONS,
         "JOURNAL_KINDS": F.JOURNAL_KINDS,
+        "ac_bonus": ac_bonus,
     }
 
 

@@ -150,12 +150,13 @@
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
-            x.name + (x.rounds_left != null ? " " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
+            x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.rounds_left != null ? " · " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
           (c.notes || "").trim() ? h("div", { class: "c-note", title: c.notes }, icon("scroll-text", "sm"), h("span", null, c.notes.trim())) : null),
         h("div", { class: "c-hp" },
           h("div", { class: "hp-text" }, h("span", null, h("b", null, c.hp), " / " + c.max_hp), c.temp_hp ? h("span", { class: "temp" }, "+" + c.temp_hp + " temp") : null),
           hpbar(c)),
-        h("div", { class: "c-ac" }, c.ac, h("small", null, "AC")));
+        h("div", { class: "c-ac" + (c.ac_bonus ? " has-bonus" : ""), title: c.ac_bonus ? c.ac_base + " " + signed(c.ac_bonus) + " from effects" : null },
+          c.ac, h("small", null, c.ac_bonus ? "AC " + signed(c.ac_bonus) : "AC")));
     }));
   }
 
@@ -201,7 +202,8 @@
     sections.push(h("div", { class: "detail-sec" },
       h("div", { class: "hp-readout" }, h("span", { class: "cur" }, c.hp), h("span", { class: "of" }, "/ " + c.max_hp + " HP"),
         c.temp_hp ? h("span", { class: "t" }, "+" + c.temp_hp + " temp") : null,
-        h("span", { class: "grow" }), h("span", { class: "faint", style: "font-size:.85rem" }, "AC " + c.ac)),
+        h("span", { class: "grow" }), h("span", { class: c.ac_bonus ? "ac-up" : "faint", style: "font-size:.85rem" },
+          "AC " + c.ac + (c.ac_bonus ? " (" + c.ac_base + " " + signed(c.ac_bonus) + ")" : ""))),
       hpbar(c),
       h("div", { class: "hp-ctl", style: "margin-top:12px" }, amt,
         h("button", { type: "button", class: "btn btn-dmg", onclick: () => hp("damage") }, icon("swords", "sm"), " Damage"),
@@ -245,15 +247,17 @@
     const tick = h("select", { "aria-label": "Start or end of turn" }, h("option", { value: "end" }, "at end of"), h("option", { value: "start" }, "at start of"));
     const auto = h("input", { type: "checkbox" });
     const note = h("input", { type: "text", placeholder: "Note (save DC, source…)", "aria-label": "Condition note" });
+    const acChange = h("input", { type: "number", min: -10, max: 30, placeholder: "AC ±", "aria-label": "AC change while it lasts", title: "Temporary AC while this lasts, like +2 for Shield of Faith or cover" });
     function addCond(name, withDuration) {
       name = (name || condName.value).trim();
       if (!name) { condName.focus(); return; }
       const body = { name, note: withDuration ? note.value : "" };
+      if (withDuration && acChange.value) body.ac = Number(acChange.value);
       if (withDuration && rounds.value) Object.assign(body, { rounds: Number(rounds.value), tick: tick.value, tick_on: Number(tickOn.value), auto_expire: auto.checked });
       run("POST", "/api/combatants/" + cid + "/conditions", body);
     }
     const condItems = c.conditions.map((x) => h("div", { class: "cond" + (x.expired ? " is-expired" : "") },
-      h("div", { class: "cn" }, x.name),
+      h("div", { class: "cn" }, x.name, x.ac ? h("span", { class: "tag ac-tag" + (x.expired ? " is-off" : "") }, signed(x.ac) + " AC") : null),
       h("div", { class: "ca" },
         x.rounds_left != null && !x.expired ? [
           h("button", { type: "button", class: "icon-btn sm", "aria-label": "One less round", onclick: () => run("PATCH", "/api/combatants/" + cid + "/conditions/" + x.id, { rounds_left: Math.max(0, x.rounds_left - 1) }) }, icon("minus", "sm")),
@@ -268,17 +272,18 @@
       h("div", { class: "cond-quick", "aria-label": "Add a standard condition" },
         CONDITIONS.filter((n) => !c.conditions.some((x) => x.name === n)).map((n) => h("button", { type: "button", onclick: () => addCond(n, false) }, n))),
       h("details", { style: "margin-top:10px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Add with duration or custom effect"),
-        h("div", { class: "cond-add" }, condName, rounds, h("label", { class: "check", style: "font-size:.88rem" }, auto, "Remove automatically"),
+        h("div", { class: "cond-add" }, condName, rounds, acChange, h("label", { class: "check", style: "font-size:.88rem" }, auto, "Remove automatically"),
           h("div", { class: "full row", style: "align-items:center;gap:6px;font-size:.92rem" }, h("span", { class: "faint" }, "Count down"), tick, tickOn),
           h("div", { class: "full" }, note),
           h("button", { type: "button", class: "btn btn-sm full", onclick: () => addCond(null, true) }, icon("plus", "sm"), " Add effect"),
-          h("div", { class: "full faint", style: "font-size:.82rem" }, "Effects count down one per round on the chosen turn. When one runs out it's flagged for you to remove — unless “Remove automatically” is ticked. Either way it's written to the log.")))));
+          h("div", { class: "full faint", style: "font-size:.82rem" }, "Effects count down one per round on the chosen turn. When one runs out it's flagged for you to remove — unless “Remove automatically” is ticked. Either way it's written to the log. AC ± changes their armor class only while the effect lasts (e.g. +2 Shield of Faith, +5 Shield, +2 half cover).")))));
 
     // Initiative & AC
     const modIn = h("input", { type: "number", value: c.init_mod, "aria-label": "Initiative modifier", style: "width:7ch",
       onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { init_mod: { from: c.init_mod, to: Number(e.target.value) } } }) });
-    const acIn = h("input", { type: "number", value: c.ac, min: 0, "aria-label": "Armor class", style: "width:7ch",
-      onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { ac: { from: c.ac, to: Number(e.target.value) } } }) });
+    const acIn = h("input", { type: "number", value: c.ac_base, min: 0, "aria-label": "Armor class (without temporary effects)", style: "width:7ch",
+      title: c.ac_bonus ? "Base AC. Effects add " + signed(c.ac_bonus) + " for now." : "Armor class",
+      onchange: (e) => run("PATCH", "/api/combatants/" + cid, { changes: { ac: { from: c.ac_base, to: Number(e.target.value) } } }) });
     const isCurrent = S.encounter.status === "active" && S.encounter.current_id === cid;
     sections.push(h("div", { class: "detail-sec row", style: "align-items:flex-end" },
       h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Init modifier"), modIn),
@@ -377,7 +382,7 @@
     const chips = others.length ? others.map((x) => h("button", { type: "button", class: "target-chip" + (set.has(x.id) ? " is-on" : "") + (isFoe(c, x) ? " is-foe" : "") + (healing ? " is-heal" : ""),
       "aria-pressed": set.has(x.id) ? "true" : "false", onclick: () => toggle(x.id), title: set.has(x.id) ? "Click to un-pick" : "Click to pick" },
       set.has(x.id) ? icon("check", "sm") : null, h("b", null, x.id === c.id ? x.name + " (self)" : x.name),
-      h("span", { class: "num" }, x.hp + "/" + x.max_hp + (healing ? " HP" : " · AC " + x.ac))))
+      h("span", { class: "num" }, x.hp + "/" + x.max_hp + (healing ? " HP · AC " + x.ac : " · AC " + x.ac))))
       : [h("span", { class: "faint" }, "No one else is in this fight yet.")];
 
     const atks = window.Dice ? attacksFor(c) : [];
@@ -398,10 +403,14 @@
     // Spells from the character sheet that do something.
     const sc = c.spellcasting;
     const putOn = (s) => {
-      if (!set.size) { toast("Pick who " + s.name + " affects first.", "error"); return; }
-      const names = [...set].map((id) => byId(id).name).join(", ");
-      run("POST", "/api/encounters/" + EID + "/conditions", { targets: [...set], name: s.condition, rounds: s.rounds, caster_id: c.id, note: s.name },
-        () => toast(s.condition + " on " + names + ".", "ok"));
+      // A spell that raises AC helps someone: it goes on the people picked under Heal / buff.
+      const buff = s.ac > 0, who = buff ? chosenTargets(c, "heal") : set;
+      const label = s.condition || s.name;
+      if (buff && !healing) { modeOf.set(c.id, "heal"); renderDetail(); }
+      if (!who.size) { toast("Pick who gets " + label + (buff ? " (you can pick " + c.name + ")" : "") + ", then click it again.", "error"); return; }
+      const names = [...who].map((id) => byId(id).name).join(", ");
+      run("POST", "/api/encounters/" + EID + "/conditions", { targets: [...who], name: label, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition ? s.name : "" },
+        () => toast(label + (s.ac ? " (" + signed(s.ac) + " AC)" : "") + " on " + names + ".", "ok"));
     };
     const spellRows = window.Dice && (c.spells || []).length ? h("div", { class: "hit-attacks hit-spells" },
       h("div", { class: "lbl" }, "Spells", sc ? h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" }, " · save DC " + sc.dc + " · attack " + signed(sc.attack)) : null),
@@ -416,8 +425,8 @@
           s.effect === "damage" && s.dice && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => rollSpell(e, true).then(after("dmg")) }, "Crit") : null,
           s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: (e) => rollSpell(e, false).then(after("heal")) }, icon("heart", "sm"), " Heal " + s.dice) : null,
           saveTag,
-          s.condition ? h("button", { type: "button", class: "btn btn-sm", title: "Put " + s.condition + " on everyone picked above", onclick: () => putOn(s) },
-            icon("zap", "sm"), " " + s.condition + (s.rounds ? " · " + s.rounds + " rds" : "")) : null);
+          s.condition || s.ac ? h("button", { type: "button", class: "btn btn-sm" + (s.ac > 0 ? " btn-heal" : ""), title: "Put " + (s.condition || s.name) + " on everyone picked above", onclick: () => putOn(s) },
+            icon(s.ac > 0 ? "shield-plus" : "zap", "sm"), " " + (s.condition || s.name) + (s.ac ? " " + signed(s.ac) + " AC" : "") + (s.rounds ? " · " + s.rounds + " rds" : "")) : null);
       })) : null;
 
     const la = lastAttack.get(c.id);
@@ -428,10 +437,10 @@
 
     const seg = h("div", { class: "seg hit-mode", role: "group", "aria-label": "Damage or heal" },
       h("button", { type: "button", class: healing ? "" : "is-on", "aria-pressed": String(!healing), onclick: () => setMode("damage") }, icon("swords", "sm"), " Damage"),
-      h("button", { type: "button", class: healing ? "is-on" : "", "aria-pressed": String(healing), onclick: () => setMode("heal") }, icon("heart", "sm"), " Heal"));
+      h("button", { type: "button", class: healing ? "is-on" : "", "aria-pressed": String(healing), onclick: () => setMode("heal") }, icon("heart", "sm"), " Heal / buff"));
     const label = set.size > 1 ? (healing ? " Heal all " : " Damage all ") + set.size : (healing ? " Heal" : " Deal damage");
     return h("div", { class: "detail-sec hit-box" + (healing ? " is-heal" : "") },
-      h("h3", { class: "rule-head" }, healing ? "Heal someone" : "Hit a target", h("span", { class: "count" }, c.name + (healing ? " heals" : " attacks"))),
+      h("h3", { class: "rule-head" }, healing ? "Heal or help someone" : "Hit a target", h("span", { class: "count" }, c.name + (healing ? " helps" : " attacks"))),
       h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, seg),
       h("div", { class: "target-chips" }, chips),
       atkRows, spellRows, verdict,
@@ -440,7 +449,7 @@
           icon(healing ? "heart" : "swords", "sm"), label),
         healing ? null : h("button", { type: "button", class: "btn", disabled: !set.size, title: "Half damage, rounded down — for targets that made their save (Shift+Enter)", onclick: () => deal(true) }, "Half (saved)")),
       h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" },
-        healing ? (set.size ? "Roll healing above or type it, then heal. HP won't go over max." : "Click who " + c.name + " is healing.")
+        healing ? (set.size ? "Roll healing above or type it, then heal. HP won't go over max. AC spells go on whoever is picked here." : "Click who " + c.name + " is healing or helping.")
           : set.size ? "Roll damage above or type it, then deal it. Pick more than one target for area spells." : "Click who " + c.name + " is attacking."));
   }
   // Damage rolls in the dice history can be applied — but only when the DM clicks.
