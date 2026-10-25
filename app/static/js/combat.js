@@ -322,94 +322,112 @@
       c.linked ? h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" }, "Uses the character sheet's saves.") : null);
   }
 
-  // ---- hit a target: the selected combatant attacks, the DM picks who takes the damage ----
-  const targetsOf = new Map(); // attacker id -> Set of target ids (kept while the page is open)
-  const amountOf = new Map();  // attacker id -> damage typed or rolled, so a re-render doesn't lose it
+  // ---- hit a target: the selected combatant attacks (or heals), the DM picks who it lands on ----
+  const targetsOf = new Map(); // "attacker:mode" -> Set of target ids (kept while the page is open)
+  const amountOf = new Map();  // attacker id -> amount typed or rolled, so a re-render doesn't lose it
   const lastAttack = new Map(); // attacker id -> { label, total, natural }
+  const modeOf = new Map();    // attacker id -> "damage" | "heal"
   const isFoe = (a, b) => (a.kind === "enemy") !== (b.kind === "enemy");
-  function chosenTargets(attacker) {
-    if (!targetsOf.has(attacker.id)) {
-      // Start with the obvious choice: the only opponent still standing.
+  const modeFor = (c) => modeOf.get(c.id) || "damage";
+  function chosenTargets(attacker, mode) {
+    mode = mode || modeFor(attacker);
+    const key = attacker.id + ":" + mode;
+    if (!targetsOf.has(key)) {
+      // Start with the obvious choice: the only opponent still standing. Healing starts empty.
       const foes = S.combatants.filter((x) => x.id !== attacker.id && isFoe(attacker, x) && !OUT.has(x.status));
-      targetsOf.set(attacker.id, new Set(foes.length === 1 ? [foes[0].id] : []));
+      targetsOf.set(key, new Set(mode === "damage" && foes.length === 1 ? [foes[0].id] : []));
     }
-    const set = targetsOf.get(attacker.id);
+    const set = targetsOf.get(key);
     [...set].forEach((id) => { if (!byId(id)) set.delete(id); });
     return set;
   }
   function attacksFor(c) {
     const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
-    if (c.linked) return (c.attacks || []).map((a, i) => ({ name: a.name,
-      hit: a.has_hit ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e) : null, hitLabel: "Hit",
-      dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: "Dmg" }));
+    if (c.linked) return (c.attacks || []).map((a, i) => ({ name: a.name, heal: !!a.heal,
+      hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e) : null, hitLabel: "Hit",
+      dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: a.heal ? "Heal" : "Dmg" }));
     if (c.kind !== "enemy") return [];
     return attackLines(c.statblock.attacks).map((a) => ({ name: a.name,
       hit: a.hit ? (e) => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }, e) : null, hitLabel: "Hit " + a.hit,
       dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }, e) : null, dmgLabel: "Dmg " + a.dmg }));
   }
   function targetSection(c) {
-    const set = chosenTargets(c);
-    const others = S.combatants.filter((x) => x.id !== c.id && (!OUT.has(x.status) || set.has(x.id)))
-      .sort((a, b) => (isFoe(c, b) - isFoe(c, a)));
-    const amt = h("input", { type: "number", min: 0, placeholder: "0", "aria-label": "Damage to deal", "data-keep": "hit-amt-" + c.id, inputmode: "numeric",
+    const mode = modeFor(c), healing = mode === "heal";
+    const set = chosenTargets(c, mode);
+    const setMode = (m) => { if (m !== mode) { modeOf.set(c.id, m); renderDetail(); } };
+    // Healing lists allies first; damage lists opponents first.
+    const others = S.combatants.filter((x) => (healing || x.id !== c.id) && (healing || !OUT.has(x.status) || set.has(x.id)))
+      .sort((a, b) => healing ? (isFoe(c, a) - isFoe(c, b)) : (isFoe(c, b) - isFoe(c, a)));
+    const amt = h("input", { type: "number", min: 0, placeholder: "0", "aria-label": healing ? "Healing amount" : "Damage to deal", "data-keep": "hit-amt-" + c.id, inputmode: "numeric",
       value: amountOf.get(c.id) ?? "", oninput: (e) => amountOf.set(c.id, e.target.value),
-      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); deal(e.shiftKey); } } });
+      onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); deal(!healing && e.shiftKey); } } });
     function deal(half) {
       const n = Number(amt.value);
-      if (!set.size) { toast("Pick who gets hit first.", "error"); return; }
+      if (!set.size) { toast(healing ? "Pick who gets healed first." : "Pick who gets hit first.", "error"); return; }
       if (amt.value === "" || !Number.isFinite(n) || n < 0) { amt.focus(); return; }
       const names = [...set].map((id) => byId(id).name).join(", ");
       const dealt = half ? Math.floor(Math.trunc(n) / 2) : Math.trunc(n);
-      run("POST", "/api/encounters/" + EID + "/damage", { targets: [...set], amount: Math.trunc(n), half: !!half, attacker_id: c.id }, () => {
-        toast(dealt + " damage to " + names + ".", "ok", { action: { label: "Undo", run: () => run("POST", "/api/encounters/" + EID + "/undo", {}) } });
+      run("POST", "/api/encounters/" + EID + "/damage", { targets: [...set], amount: Math.trunc(n), op: mode, half: !!half, attacker_id: c.id }, () => {
+        toast(healing ? "Healed " + names + " for " + dealt + "." : dealt + " damage to " + names + ".", "ok",
+          { action: { label: "Undo", run: () => run("POST", "/api/encounters/" + EID + "/undo", {}) } });
       });
       amountOf.delete(c.id);
     }
     const toggle = (id) => { set.has(id) ? set.delete(id) : set.add(id); renderDetail(); };
-    const chips = others.length ? others.map((x) => h("button", { type: "button", class: "target-chip" + (set.has(x.id) ? " is-on" : "") + (isFoe(c, x) ? " is-foe" : ""),
-      "aria-pressed": set.has(x.id) ? "true" : "false", onclick: () => toggle(x.id), title: set.has(x.id) ? "Click to un-target" : "Click to target" },
-      set.has(x.id) ? icon("check", "sm") : null, h("b", null, x.name), h("span", { class: "num" }, x.hp + "/" + x.max_hp + " · AC " + x.ac)))
+    const chips = others.length ? others.map((x) => h("button", { type: "button", class: "target-chip" + (set.has(x.id) ? " is-on" : "") + (isFoe(c, x) ? " is-foe" : "") + (healing ? " is-heal" : ""),
+      "aria-pressed": set.has(x.id) ? "true" : "false", onclick: () => toggle(x.id), title: set.has(x.id) ? "Click to un-pick" : "Click to pick" },
+      set.has(x.id) ? icon("check", "sm") : null, h("b", null, x.id === c.id ? x.name + " (self)" : x.name),
+      h("span", { class: "num" }, x.hp + "/" + x.max_hp + (healing ? " HP" : " · AC " + x.ac))))
       : [h("span", { class: "faint" }, "No one else is in this fight yet.")];
 
     const atks = window.Dice ? attacksFor(c) : [];
-    const after = (label) => (r) => { // a damage roll fills in the amount; an attack roll is checked against AC
+    const after = (what) => (r) => { // a damage or healing roll fills in the amount; an attack roll is checked against AC
       if (!r) return;
-      if (label === "dmg") { amountOf.set(c.id, String(r.total)); }
-      else lastAttack.set(c.id, { label: r.label, total: r.total, natural: r.result && r.result.natural });
+      if (what === "heal") { modeOf.set(c.id, "heal"); amountOf.set(c.id, String(r.total)); }
+      else if (what === "dmg") { modeOf.set(c.id, "damage"); amountOf.set(c.id, String(r.total)); }
+      else { modeOf.set(c.id, "damage"); lastAttack.set(c.id, { label: r.label, total: r.total, natural: r.result && r.result.natural }); }
       renderDetail();
     };
     const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
       a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then(after("hit")) }, a.hitLabel) : null,
-      a.dmg ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.dmg(e, false).then(after("dmg")) }, a.dmgLabel) : null,
-      a.dmg ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;
+      a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then(after(a.heal ? "heal" : "dmg")) },
+        a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
+      a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;
 
     const la = lastAttack.get(c.id);
-    const verdict = la && set.size ? h("div", { class: "hit-verdict" }, la.label + ": ", h("b", null, la.total), " — ",
+    const verdict = !healing && la && set.size ? h("div", { class: "hit-verdict" }, la.label + ": ", h("b", null, la.total), " — ",
       [...set].map((id) => { const t = byId(id); const hits = la.natural === 20 || (la.natural !== 1 && la.total >= t.ac);
         return h("span", { class: hits ? "hits" : "misses" }, t.name + (la.natural === 20 ? " crit!" : hits ? " hit" : " missed") + " (AC " + t.ac + ")"); })
         .flatMap((x, i) => i ? [", ", x] : [x])) : null;
 
-    return h("div", { class: "detail-sec hit-box" },
-      h("h3", { class: "rule-head" }, "Hit a target", h("span", { class: "count" }, c.name + " attacks")),
+    const seg = h("div", { class: "seg hit-mode", role: "group", "aria-label": "Damage or heal" },
+      h("button", { type: "button", class: healing ? "" : "is-on", "aria-pressed": String(!healing), onclick: () => setMode("damage") }, icon("swords", "sm"), " Damage"),
+      h("button", { type: "button", class: healing ? "is-on" : "", "aria-pressed": String(healing), onclick: () => setMode("heal") }, icon("heart", "sm"), " Heal"));
+    const label = set.size > 1 ? (healing ? " Heal all " : " Damage all ") + set.size : (healing ? " Heal" : " Deal damage");
+    return h("div", { class: "detail-sec hit-box" + (healing ? " is-heal" : "") },
+      h("h3", { class: "rule-head" }, healing ? "Heal someone" : "Hit a target", h("span", { class: "count" }, c.name + (healing ? " heals" : " attacks"))),
+      h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, seg),
       h("div", { class: "target-chips" }, chips),
       atkRows, verdict,
       h("div", { class: "hp-ctl", style: "margin-top:10px" }, amt,
-        h("button", { type: "button", class: "btn btn-dmg", disabled: !set.size, onclick: () => deal(false) }, icon("swords", "sm"),
-          set.size > 1 ? " Damage all " + set.size : " Deal damage"),
-        h("button", { type: "button", class: "btn", disabled: !set.size, title: "Half damage, rounded down — for targets that made their save (Shift+Enter)", onclick: () => deal(true) }, "Half (saved)")),
+        h("button", { type: "button", class: "btn " + (healing ? "btn-heal" : "btn-dmg"), disabled: !set.size, onclick: () => deal(false) },
+          icon(healing ? "heart" : "swords", "sm"), label),
+        healing ? null : h("button", { type: "button", class: "btn", disabled: !set.size, title: "Half damage, rounded down — for targets that made their save (Shift+Enter)", onclick: () => deal(true) }, "Half (saved)")),
       h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" },
-        set.size ? "Roll damage above or type it, then deal it. Pick more than one target for area spells." : "Click who " + c.name + " is attacking."));
+        healing ? (set.size ? "Roll healing above or type it, then heal. HP won't go over max." : "Click who " + c.name + " is healing.")
+          : set.size ? "Roll damage above or type it, then deal it. Pick more than one target for area spells." : "Click who " + c.name + " is attacking."));
   }
   // Damage rolls in the dice history can be applied — but only when the DM clicks.
   const applied = new Map(); // roll id -> what was applied, so one roll can't be applied twice by accident
   if (window.Dice) {
     Dice.actions = (r) => {
+      if (r.kind === "heal") return healAction(r);
       if (r.kind !== "damage") return null;
       if (applied.has(r.id)) return h("div", { class: "dh-actions faint" }, "Applied " + applied.get(r.id));
       const sel = byId(selected);
       if (!sel) return h("div", { class: "dh-actions faint" }, "Select a combatant to apply this damage");
-      const chosen = [...chosenTargets(sel)].map(byId).filter(Boolean);
+      const chosen = [...chosenTargets(sel, "damage")].map(byId).filter(Boolean);
       const targets = chosen.length ? chosen : [sel];
       const names = targets.map((t) => t.name).join(", ");
       const apply = (half) => {
@@ -421,6 +439,22 @@
         h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => apply(false) }, "Apply " + r.total + " to " + names),
         h("button", { type: "button", class: "btn btn-sm", title: "Half damage, rounded down (successful save)", onclick: () => apply(true) }, "Half (" + Math.floor(r.total / 2) + ")"));
     };
+  }
+
+  // Healing rolls go to whoever the healer picked (or the selected combatant).
+  function healAction(r) {
+    if (applied.has(r.id)) return h("div", { class: "dh-actions faint" }, "Healed " + applied.get(r.id));
+    const sel = byId(selected);
+    if (!sel) return h("div", { class: "dh-actions faint" }, "Select a combatant to apply this healing");
+    const chosen = [...chosenTargets(sel, "heal")].map(byId).filter(Boolean);
+    const targets = chosen.length ? chosen : [sel];
+    const names = targets.map((t) => t.name).join(", ");
+    return h("div", { class: "dh-actions" },
+      h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: () => {
+        applied.set(r.id, names + " for " + r.total);
+        Dice.renderHistory();
+        run("POST", "/api/encounters/" + EID + "/damage", { targets: targets.map((t) => t.id), amount: r.total, op: "heal", attacker_id: chosen.length ? sel.id : null });
+      } }, "Heal " + names + " for " + r.total));
   }
 
   function condDesc(x, c) {

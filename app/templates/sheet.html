@@ -17,13 +17,13 @@
       </div>
       {% if char.archived %}<div class="warn-box" style="margin:8px 0 0">This character is archived. They're hidden from lists and the party, but nothing has been deleted.</div>{% endif %}
       <div class="sheet-ident">
-        <label class="uline"><input data-f="class_name" placeholder="â€”"><span>Class</span></label>
-        <label class="uline"><input data-f="subclass" placeholder="â€”"><span>Subclass</span></label>
+        <label class="uline"><input data-f="class_name" placeholder="—"><span>Class</span></label>
+        <label class="uline"><input data-f="subclass" placeholder="—"><span>Subclass</span></label>
         <label class="uline"><input data-f="level" type="number" min="1" max="30"><span>Level</span></label>
-        <label class="uline"><input data-f="race" placeholder="â€”"><span>Species</span></label>
-        <label class="uline"><input data-f="background" placeholder="â€”"><span>Background</span></label>
-        <label class="uline"><input data-f="player_name" placeholder="â€”"><span>Player</span></label>
-        <label class="uline"><input data-f="alignment" list="alignments" placeholder="â€”"><span>Alignment</span></label>
+        <label class="uline"><input data-f="race" placeholder="—"><span>Species</span></label>
+        <label class="uline"><input data-f="background" placeholder="—"><span>Background</span></label>
+        <label class="uline"><input data-f="player_name" placeholder="—"><span>Player</span></label>
+        <label class="uline"><input data-f="alignment" list="alignments" placeholder="—"><span>Alignment</span></label>
         <label class="uline"><input data-f="xp" type="number" min="0"><span>Experience</span></label>
         <label class="uline"><input data-f="speed" placeholder="30 ft."><span>Speed</span></label>
       </div>
@@ -47,7 +47,7 @@
       </div>
       <label class="temp-in"><span class="lbl" style="color:var(--temp)">Temp</span><input data-f="temp_hp" type="number" min="0" aria-label="Temporary hit points"></label>
       <div class="hp-fix" role="group" aria-label="Fix current HP"><span class="lbl">Fix HP</span>
-        <button type="button" class="btn btn-sm" data-hpfix="-5">âˆ’5</button><button type="button" class="btn btn-sm" data-hpfix="-1">âˆ’1</button>
+        <button type="button" class="btn btn-sm" data-hpfix="-5">−5</button><button type="button" class="btn btn-sm" data-hpfix="-1">−1</button>
         <button type="button" class="btn btn-sm" data-hpfix="1">+1</button><button type="button" class="btn btn-sm" data-hpfix="5">+5</button>
         <span class="faint" style="font-size:.78rem">or type the exact numbers above</span></div>
       <span class="hpbar" id="hpbar"><span class="hpbar-fill"></span></span>
@@ -63,7 +63,7 @@
       <div class="line"><span class="lbl">Exhaustion</span><select data-f="exhaustion" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for i in range(0, 7) %}<option value="{{ i }}">{{ i }}</option>{% endfor %}</select>
         <span class="lbl" style="min-width:0">Status</span><select data-f="status" style="width:auto;min-height:28px;padding:2px 26px 2px 8px">{% for s in ["ok","unconscious","stable","incapacitated","dead"] %}<option value="{{ s }}">{{ "Fine" if s == "ok" else s | capitalize }}</option>{% endfor %}</select></div>
       <div class="line"><span class="lbl">Conditions</span><span id="cond-chips" class="c-conds" style="margin:0"></span>
-        <select id="cond-add" style="width:auto;min-height:28px;padding:2px 26px 2px 8px"><option value="">Addâ€¦</option>{% for c in CONDITIONS %}<option>{{ c }}</option>{% endfor %}<option value="__custom">Customâ€¦</option></select></div>
+        <select id="cond-add" style="width:auto;min-height:28px;padding:2px 26px 2px 8px"><option value="">Add…</option>{% for c in CONDITIONS %}<option>{{ c }}</option>{% endfor %}<option value="__custom">Custom…</option></select></div>
     </div>
   </div>
 
@@ -129,7 +129,7 @@
       </section>
       <section class="section">
         <h3 class="rule-head">Features &amp; traits</h3>
-        <textarea data-f="features" rows="10" class="prose" placeholder="Class features, racial traits, featsâ€¦"></textarea>
+        <textarea data-f="features" rows="10" class="prose" placeholder="Class features, racial traits, feats…"></textarea>
       </section>
       <section class="section">
         <h3 class="rule-head">Proficiencies &amp; languages</h3>
@@ -158,8 +158,8 @@
     <div class="row" style="margin-bottom:16px;align-items:center">
       <label class="field" style="flex:0 0 200px"><span>Spellcasting ability</span>
         <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
-      <div class="vital" style="flex:0 0 110px"><div class="big" id="spell-dc">â€”</div><span class="lbl">Save DC</span></div>
-      <div class="vital" style="flex:0 0 110px"><button type="button" class="big roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack" style="border:0">â€”</button><span class="lbl">Spell attack</span></div>
+      <div class="vital" style="flex:0 0 110px"><div class="big" id="spell-dc">—</div><span class="lbl">Save DC</span></div>
+      <div class="vital" style="flex:0 0 110px"><button type="button" class="big roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack" style="border:0">—</button><span class="lbl">Spell attack</span></div>
       <button class="btn btn-sm" type="button" id="long-rest" style="margin-left:auto">{{ icon("moon", "sm") }} Restore all slots</button>
     </div>
     <h3 class="rule-head">Spell slots <span class="count">set the total, click diamonds to spend</span></h3>
@@ -183,10 +183,10 @@
 
   <section data-pane="notes" hidden>
     <div class="story-grid">
-      <label class="field full"><span>Notes</span><textarea data-f="notes" rows="16" class="prose" placeholder="Anything else â€” homebrew rules, secrets, reminders"></textarea></label>
+      <label class="field full"><span>Notes</span><textarea data-f="notes" rows="16" class="prose" placeholder="Anything else — homebrew rules, secrets, reminders"></textarea></label>
       <div class="full">
         <h3 class="rule-head">Mentioned in the journal</h3>
-        <ul class="stack-list" id="backlinks"><li class="faint">Loadingâ€¦</li></ul>
+        <ul class="stack-list" id="backlinks"><li class="faint">Loading…</li></ul>
       </div>
     </div>
   </section>
@@ -194,4 +194,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=12"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=13"></script>{% endblock %}

@@ -18,15 +18,15 @@
       <input type="search" id="book-q" placeholder="Search monsters" aria-label="Search the Monster Book" style="flex:1 1 200px">
       <select id="book-cr" aria-label="Challenge rating" style="width:auto">
         <option value="">Any challenge</option>
-        <option value="0-0.5">CR 0 â€“ 1/2 (easy)</option>
-        <option value="1-2">CR 1 â€“ 2</option>
-        <option value="3-5">CR 3 â€“ 5</option>
+        <option value="0-0.5">CR 0 – 1/2 (easy)</option>
+        <option value="1-2">CR 1 – 2</option>
+        <option value="3-5">CR 3 – 5</option>
         <option value="6-30">CR 6 and up</option>
       </select>
       <button class="btn btn-sm" type="button" id="book-add-all">{{ icon("plus", "sm") }} Add all shown</button>
     </div>
   </div>
-  <ul class="book-list" id="book-list"><li class="faint">Loadingâ€¦</li></ul>
+  <ul class="book-list" id="book-list"><li class="faint">Loading…</li></ul>
   <p class="faint book-credit" id="book-credit"></p>
 </section>
 <div class="bestiary">
@@ -41,5 +41,5 @@
 {% endblock %}
 {% block scripts %}
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/creatures.js') }}?v=12"></script>
+<script src="{{ url_for('static', filename='js/creatures.js') }}?v=13"></script>
 {% endblock %}

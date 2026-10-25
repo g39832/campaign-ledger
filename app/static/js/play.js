@@ -135,7 +135,7 @@
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"), ...c.attacks.map((a) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, a.name || "Attack"),
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "attack", key: a.index }, ev) }, "Hit " + a.bonus) : null,
-          a.damage ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "damage", key: a.index }, ev) }, "Dmg") : null))] : null,
+          a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) }, a.heal ? "Heal" : "Dmg") : null))] : null,
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
         h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),

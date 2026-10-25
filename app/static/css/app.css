@@ -575,6 +575,9 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .target-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hit-attacks { display: grid; gap: 6px; margin-top: 10px; }
 .hit-verdict { margin-top: 8px; font-size: .92rem; }
+.hit-box.is-heal { background: color-mix(in srgb, var(--hp-high) 10%, transparent); }
+.target-chip.is-heal.is-on { background: var(--hp-high); border-color: var(--hp-high); color: #10140c; }
+.target-chip.is-heal.is-on .num { color: rgba(16, 20, 12, .8); }
 .hit-verdict .hits { color: var(--ok); font-weight: 700; }
 .hit-verdict .misses { color: var(--text-3); }
 

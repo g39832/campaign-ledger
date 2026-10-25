@@ -233,10 +233,14 @@
     { key: "notes", label: "Notes", placeholder: "Versatile (1d10)" },
   ], { name: "", bonus: "", damage: "", notes: "" }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
-    rowActions: (i) => h("span", { class: "roll-row" },
-      h("button", { type: "button", class: "btn btn-sm", "data-roll": "attack:" + i, title: "Roll to hit (shift = advantage)" }, "Hit"),
-      h("button", { type: "button", class: "btn btn-sm", "data-roll": "damage:" + i, title: "Roll damage" }, "Dmg"),
-      h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "damage:" + i, "data-crit": "1", title: "Critical hit: double the damage dice" }, "Crit")),
+    // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
+    rowActions: (i, row) => L.isHealing(row)
+      ? h("span", { class: "roll-row" },
+        h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "damage:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"))
+      : h("span", { class: "roll-row" },
+        h("button", { type: "button", class: "btn btn-sm", "data-roll": "attack:" + i, title: "Roll to hit (shift = advantage)" }, "Hit"),
+        h("button", { type: "button", class: "btn btn-sm", "data-roll": "damage:" + i, title: "Roll damage" }, "Dmg"),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "damage:" + i, "data-crit": "1", title: "Critical hit: double the damage dice" }, "Crit")),
   });
 
   function eqWeight() {

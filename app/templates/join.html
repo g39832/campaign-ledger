@@ -2,8 +2,8 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Join a game Â· Campaign Ledger</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=12">
+<title>Join a game · Campaign Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=13">
 </head>
 <body class="page-join">
 {% include "_sprite.svg" %}
@@ -26,7 +26,7 @@
   </div>
 </main>
 <div id="toasts" class="toasts" aria-live="polite"></div>
-<script src="{{ url_for('static', filename='js/core.js') }}?v=12"></script>
+<script src="{{ url_for('static', filename='js/core.js') }}?v=13"></script>
 <script>
 (() => {
   const { $, h, api, toast, debounce } = L;
@@ -39,7 +39,7 @@
       $("#found").textContent = "Game found: " + d.campaign;
       const sel = f.character_id;
       sel.replaceChildren(h("option", { value: "" }, "Just watching / no character yet"),
-        ...d.characters.map((c) => h("option", { value: c.id, disabled: c.claimed }, c.name + (c.class_name ? " â€” " + c.class_name + " " + c.level : "") + (c.claimed ? " (taken)" : ""))));
+        ...d.characters.map((c) => h("option", { value: c.id, disabled: c.claimed }, c.name + (c.class_name ? " — " + c.class_name + " " + c.level : "") + (c.claimed ? " (taken)" : ""))));
       $("#char-field").hidden = !d.characters.length;
     } catch (e) { $("#found").textContent = e.message; $("#char-field").hidden = true; }
   }, 300);

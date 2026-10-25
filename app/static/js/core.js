@@ -35,6 +35,10 @@
     }
     return el;
   }
+  // Same rule as rules.is_healing on the server: a sheet attack row that restores HP.
+  function isHealing(row) {
+    return /\b(heal|heals|healing|cure|cures)\b/i.test([row && row.name, row && row.damage, row && row.notes].filter(Boolean).join(" "));
+  }
   function icon(name, cls) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
@@ -404,5 +408,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

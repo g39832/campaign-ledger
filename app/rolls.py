@@ -16,7 +16,7 @@ from . import fields as F
 from .auth import current_identity
 from .campaigns import active_campaign
 from .db import get_db, new_uid, now_iso, tx
-from .rules import ABILITIES, ABILITY_NAMES, SKILLS, ability_mod, derived
+from .rules import ABILITIES, ABILITY_NAMES, SKILLS, ability_mod, derived, is_healing
 
 bp = Blueprint("rolls", __name__, url_prefix="/api")
 
@@ -107,6 +107,8 @@ def build_check(conn, check):
         if not expr:
             raise F.ApiError(f"{atk_name} has no damage dice (like 1d8+3) in its damage column")
         dtype = str(atk.get("damage", "")).replace(expr, "").strip()
+        if is_healing(atk):
+            return expr, f"{atk_name} healing", "heal", name, ids
         return expr, f"{atk_name} damage" + (f" ({dtype})" if dtype else ""), "damage", name, ids
     raise F.ApiError("Unknown roll type")
 
@@ -187,7 +189,7 @@ def api_roll():
     else:
         expr = data.get("expression")
         label = str(data.get("label") or "")[:120]
-        kind = data.get("kind") if data.get("kind") in ("damage", "attack", "save", "custom") else "custom"
+        kind = data.get("kind") if data.get("kind") in ("damage", "heal", "attack", "save", "custom") else "custom"
         subject = str(data.get("subject") or "")[:120]
     if viewer["role"] == "dm" and data.get("encounter_id"):
         ids["encounter_id"] = int(data["encounter_id"])

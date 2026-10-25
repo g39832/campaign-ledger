@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20
+from .rules import apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -54,7 +54,7 @@ def _combatant_dict(r):
                  exhaustion=r["ch_exhaustion"],
                  # Attack names (in sheet order) so combat can offer the sheet's Hit / Dmg rolls.
                  attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
-                           "has_dmg": bool(str(a.get("damage") or "").strip())}
+                           "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a)}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
@@ -731,25 +731,29 @@ def api_hp(cid):
 
 @bp.post("/encounters/<int:eid>/damage")
 def api_damage_targets(eid):
-    """Deal damage to one or more combatants at once (one attack, or an area spell).
-    {targets: [combatant ids], amount, half: bool, attacker_id}. `half` is for targets
-    that made their save; it rounds down. All targets change together or none do."""
+    """Deal damage to (or heal) one or more combatants at once: one attack, an area
+    spell, or a healing ability. {targets: [combatant ids], amount, op: damage|heal,
+    half: bool, attacker_id}. `half` is for targets that made their save; it rounds
+    down. All targets change together or none do."""
     data = _body()
+    op = data.get("op", "damage")
+    if op not in ("damage", "heal"):
+        raise F.ApiError("op must be damage or heal")
     targets = data.get("targets")
     if not isinstance(targets, list) or not targets or len(targets) > 100 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
         raise F.ApiError("Choose who takes the damage")
     amount = data.get("amount")
     if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0 or amount > 100000:
         raise F.ApiError("Damage must be a whole number, 0 or more")
-    if data.get("half"):
+    if data.get("half") and op == "damage":
         amount //= 2
 
     def fn(ctx):
         by = None
         if data.get("attacker_id") is not None:
-            by = "from " + ctx.combatant(int(data["attacker_id"]))["name"]
+            by = ("from " if op == "damage" else "by ") + ctx.combatant(int(data["attacker_id"]))["name"]
         for cid in dict.fromkeys(targets):
-            apply_hp(ctx, cid, {"op": "damage", "amount": amount}, by)
+            apply_hp(ctx, cid, {"op": op, "amount": amount}, by)
     return mutate(eid, fn, data.get("op_id"))
 
 

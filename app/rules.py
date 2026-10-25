@@ -439,3 +439,15 @@ def saints_sinners_level(score):
 def saints_sinners_all():
     """Every level with its details, highest first (for the 'All levels' list)."""
     return [dict(saints_sinners_level(lo), score=None) for lo, _hi, _t, _d in reversed(SAINTS_SINNERS_LEVELS)]
+
+
+_HEAL_WORDS = re.compile(r"\b(heal|heals|healing|cure|cures)\b", re.I)
+
+
+def is_healing(attack):
+    """A sheet attack row that restores HP instead of dealing damage: its damage or
+    notes column says "heal" (e.g. Mend · 1d8 · Heal), or its name does (Healing Word)."""
+    if not isinstance(attack, dict):
+        return False
+    text = " ".join(str(attack.get(k) or "") for k in ("name", "damage", "notes"))
+    return bool(_HEAL_WORDS.search(text))

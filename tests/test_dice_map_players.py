@@ -569,7 +569,7 @@ def test_hit_one_or_many_targets(api):
     eid = api.encounter(camp["id"], "Rats")["encounter"]["id"]
     st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Rat", "max_hp": 10, "count": 3}})
     by = {c["name"]: c for c in st["combatants"]}
-    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True}], "sheet attacks reach combat"
+    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True, "heal": False}], "sheet attacks reach combat"
     url = f"/api/encounters/{eid}/damage"
     st = api.post(url, {"targets": [by["Rat 1"]["id"]], "amount": 7, "attacker_id": by["Hero"]["id"], "op_id": "a1"})
     hp = {c["name"]: c["hp"] for c in st["combatants"]}
@@ -587,3 +587,32 @@ def test_hit_one_or_many_targets(api):
     api.post(url, {"targets": [999999], "amount": 3}, expect=404)
     roll = api.post("/api/rolls", {"check": {"type": "damage", "key": 0, "combatant_id": by["Hero"]["id"]}, "encounter_id": eid}, 201)["roll"]
     assert 4 <= roll["total"] <= 11 and roll["kind"] == "damage"
+
+
+def test_healing_abilities_heal(api, client):
+    from app.rules import is_healing
+    assert is_healing({"name": "Mend", "damage": "1d8", "notes": "Heal"})
+    assert is_healing({"name": "Healing Word", "damage": "1d4+3"})
+    assert not is_healing({"name": "Bite", "damage": "1d8", "notes": "Damage"})
+    assert not is_healing({"name": "Longsword", "damage": "1d8+3 slashing"})
+    camp = api.campaign()
+    lux = api.character(camp["id"], name="Lux", max_hp=12, attacks=[
+        {"name": "Mend", "bonus": "", "damage": "1d8", "notes": "Heal"},
+        {"name": "Bite", "bonus": "", "damage": "1d8", "notes": "Damage"}])
+    yam = api.character(camp["id"], name="Yamato", max_hp=18)
+    eid = api.encounter(camp["id"], "Mush Rush")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [lux["id"], yam["id"]]})
+    by = {c["name"]: c for c in st["combatants"]}
+    assert [a["heal"] for a in by["Lux"]["attacks"]] == [True, False]
+    roll = api.post("/api/rolls", {"check": {"type": "damage", "key": 0, "combatant_id": by["Lux"]["id"]}, "encounter_id": eid}, 201)["roll"]
+    assert roll["kind"] == "heal" and roll["label"] == "Mend healing" and 1 <= roll["total"] <= 8
+    assert api.post("/api/rolls", {"check": {"type": "damage", "key": 1, "combatant_id": by["Lux"]["id"]}}, 201)["roll"]["kind"] == "damage"
+    url = f"/api/encounters/{eid}/damage"
+    api.post(url, {"targets": [by["Yamato"]["id"]], "amount": 10})
+    st = api.post(url, {"targets": [by["Yamato"]["id"], by["Lux"]["id"]], "amount": 6, "op": "heal", "attacker_id": by["Lux"]["id"]})
+    hp = {c["name"]: c["hp"] for c in st["combatants"]}
+    assert hp == {"Lux": 12, "Yamato": 14}, "heals, never above max"
+    assert any("by Lux" in e["message"] for e in st["log"])
+    assert api.get(f"/api/characters/{yam['id']}")["character"]["current_hp"] == 14, "healing reaches the sheet"
+    api.post(url, {"targets": [by["Lux"]["id"]], "amount": 3, "op": "steal"}, expect=400)
+    assert "btn-heal" in client.get("/static/js/sheet.js").get_data(as_text=True)
