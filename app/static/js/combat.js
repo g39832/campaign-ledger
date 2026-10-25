@@ -418,7 +418,7 @@
         const rollSpell = (e, crit) => Dice.roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit, encounter_id: EID }, e);
         const saveTag = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "")) : null;
         return h("div", { class: "roll-row", style: "align-items:center" },
-          h("b", { style: "min-width:7ch" }, s.name, s.level ? h("span", { class: "faint", style: "font-weight:400" }, " " + s.level) : null),
+          h("b", { style: "min-width:7ch" }, s.name),
           s.effect === "damage" && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) =>
             Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e).then(after("hit")) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
           s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => rollSpell(e, false).then(after("dmg")) }, "Dmg " + s.dice) : null,

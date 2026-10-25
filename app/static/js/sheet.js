@@ -301,9 +301,6 @@
         onclick: () => { const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true); renderSpells(); } }, icon("trash-2", "sm"));
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
         h("div", { class: "spell-top" },
-          h("label", { class: "check", title: "Prepared" }, h("input", { type: "checkbox", checked: !!s.prepared, "aria-label": "Prepared", onchange: (e) => set(i, "prepared", e.target.checked) }), h("span", { class: "sr-only" }, "Prepared")),
-          h("input", { type: "number", min: 0, max: 9, value: s.level ?? "", "aria-label": "Spell level", title: "Level (0 = cantrip)", class: "spell-lvl",
-            oninput: (e) => set(i, "level", e.target.value === "" ? null : Number(e.target.value)) }),
           text(i, "name", { placeholder: "Spell name", "aria-label": "Spell name", class: "spell-name" }),
           h("div", { class: "spell-rolls roll-row" }, rolls, save, cond),
           del),
@@ -323,18 +320,57 @@
           h("label", { class: "field spell-notes" }, h("span", null, "Time · range · notes"), text(i, "notes", { placeholder: "1 action · 120 ft" }))));
     });
     box.replaceChildren(
-      list.length ? h("div", { class: "spell-list" }, cards) : h("p", { class: "faint", style: "margin:4px 0" }, "No spells recorded."),
-      h("button", { type: "button", class: "btn btn-sm btn-quiet add-row", onclick: () => {
-        b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK)]), true);
-        renderSpells();
-        const names = $$(".spell-name", box); if (names.length) names[names.length - 1].focus();
-      } }, icon("plus", "sm"), " Add spell"));
+      list.length ? h("div", { class: "spell-list" }, cards) : h("p", { class: "faint", style: "margin:4px 0" }, "No spells yet."),
+      h("div", { class: "row", style: "gap:6px;margin-top:6px" },
+        h("button", { type: "button", class: "btn btn-sm btn-quiet add-row", style: "margin:0", onclick: () => {
+          b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK)]), true);
+          renderSpells();
+          const names = $$(".spell-name", box); if (names.length) names[names.length - 1].focus();
+        } }, icon("plus", "sm"), " Add spell"),
+        h("button", { type: "button", class: "btn btn-sm", id: "sb-toggle", "aria-expanded": String(!$("#spell-book").hidden), onclick: () => {
+          const panel = $("#spell-book"); panel.hidden = !panel.hidden;
+          $("#sb-toggle").setAttribute("aria-expanded", String(!panel.hidden));
+          if (!panel.hidden) { renderSpellBook(); $("#sb-q").focus(); }
+        } }, icon("book-open", "sm"), " Add from spell list")));
+    if (!$("#spell-book").hidden) renderSpellBook();
   }
+
+  // ---- the spell list: common spells ready to add ---------------------------------------
+  const BOOK = (window.SPELL_BOOK && window.SPELL_BOOK.spells) || [];
+  const KIND_LABEL = { damage: "Damage", heal: "Healing", effect: "Effect" };
+  function bookSummary(s) {
+    const bits = [KIND_LABEL[s.effect]];
+    if (s.dice) bits.push(s.dice);
+    if (s.hit === "attack") bits.push("spell attack");
+    else if (s.hit) bits.push(s.hit.toUpperCase() + " save");
+    if (s.condition && s.condition !== s.name) bits.push(s.condition);
+    if (s.ac) bits.push(signed(s.ac) + " AC");
+    if (s.rounds) bits.push(s.rounds + (s.rounds === 1 ? " round" : " rounds"));
+    return bits.join(" · ");
+  }
+  function renderSpellBook() {
+    const q = $("#sb-q").value.trim().toLowerCase(), kind = $("#sb-kind").value;
+    const have = new Set((model.spells || []).map((s) => (s.name || "").trim().toLowerCase()));
+    const items = BOOK.filter((s) => (!kind || s.effect === kind) && (!q || [s.name, s.notes, bookSummary(s)].join(" ").toLowerCase().includes(q)));
+    $("#sb-credit").textContent = (window.SPELL_BOOK || {}).attribution || "";
+    $("#sb-list").replaceChildren(...(items.length ? items.map((s) => h("li", { class: have.has(s.name.toLowerCase()) ? "is-added" : "" },
+      h("span", { class: "sb-name" }, h("b", null, s.name), h("span", { class: "faint" }, bookSummary(s)), h("span", { class: "faint sb-notes" }, s.notes)),
+      have.has(s.name.toLowerCase())
+        ? h("span", { class: "book-done" }, icon("check", "sm"), " Added")
+        : h("button", { type: "button", class: "btn btn-sm", onclick: () => {
+          b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK, s)]), true);
+          renderSpells();
+          toast(s.name + " added.", "ok");
+        } }, icon("plus", "sm"), " Add"))) : [h("li", { class: "faint" }, "No spells match.")]));
+  }
+  $("#sb-q").addEventListener("input", renderSpellBook);
+  $("#sb-kind").addEventListener("change", renderSpellBook);
   renderSpells();
   $("[data-f='spellcasting_ability']").addEventListener("change", () => setTimeout(renderSpells, 0));
 
   // ---- spell slots ----------------------------------------------------------------
   function renderSlots() {
+    if (!$("#slots")) return; // spell slots aren't shown; saved slot numbers are kept as they are
     const slots = model.spell_slots || {};
     $("#slots").replaceChildren(...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => {
       const s = slots[lv] || { max: 0, used: 0 };
@@ -363,7 +399,7 @@
       return h("div", { class: "slot-row" }, h("span", { class: "lvl" }, lv), maxIn, pipWrap);
     }));
   }
-  $("#long-rest").addEventListener("click", () => {
+  if ($("#long-rest")) $("#long-rest").addEventListener("click", () => {
     const all = clone(model.spell_slots) || {};
     Object.values(all).forEach((s) => { s.used = 0; });
     b.set("spell_slots", all, true); renderSlots();

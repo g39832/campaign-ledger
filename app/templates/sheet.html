@@ -69,7 +69,6 @@
 
   <div class="tabs" role="tablist">
     <button type="button" class="is-on" data-tab="main" role="tab">Sheet</button>
-    <button type="button" data-tab="spells" role="tab">Spells</button>
     <button type="button" data-tab="story" role="tab">Story</button>
     <button type="button" data-tab="notes" role="tab">Notes <span class="tab-dot" id="notes-dot" hidden title="This character has notes"></span></button>
     <a href="{{ url_for('pages.morality_overview') }}">{{ icon("scale", "sm") }} Team morality</a>
@@ -123,9 +122,29 @@
     </div>
 
     <div class="col-2">
-      <section class="section">
-        <h3 class="rule-head">Attacks &amp; weapons</h3>
+      <section class="section" id="attacks-spells">
+        <h3 class="rule-head">Attacks &amp; spells</h3>
         <div id="attacks"></div>
+        <h4 class="sub-head">Spells</h4>
+        <div class="spellcasting">
+          <label class="field"><span>Spellcasting ability</span>
+            <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
+          <div class="sc-stat"><b id="spell-dc">—</b><span class="lbl">Save DC</span></div>
+          <div class="sc-stat"><button type="button" class="roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack">—</button><span class="lbl">Spell attack</span></div>
+        </div>
+        <p class="faint sc-help">Set what each spell does to roll it here and use it in combat. Write <b>mod</b> in dice for the spellcasting modifier, like 1d8+mod.</p>
+        <div id="spells"></div>
+        <div class="spell-book panel" id="spell-book" hidden>
+          <div class="row" style="align-items:center">
+            <input type="search" id="sb-q" placeholder="Search spells" aria-label="Search the spell list" style="flex:1 1 160px">
+            <select id="sb-kind" aria-label="Kind of spell" style="width:auto">
+              <option value="">All spells</option><option value="damage">Damage</option><option value="heal">Healing</option><option value="effect">Effects &amp; AC</option>
+            </select>
+          </div>
+          <ul class="sb-list" id="sb-list"></ul>
+          <p class="faint sb-credit" id="sb-credit"></p>
+        </div>
+        <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Baned"><option value="Outlined"><option value="Concentrating"></datalist>
       </section>
       <section class="section">
         <h3 class="rule-head">Features &amp; traits</h3>
@@ -154,20 +173,6 @@
     </div>
   </section>
 
-  <section data-pane="spells" hidden>
-    <div class="row" style="margin-bottom:16px;align-items:center">
-      <label class="field" style="flex:0 0 200px"><span>Spellcasting ability</span>
-        <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
-      <div class="vital" style="flex:0 0 110px"><div class="big" id="spell-dc">—</div><span class="lbl">Save DC</span></div>
-      <div class="vital" style="flex:0 0 110px"><button type="button" class="big roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack" style="border:0">—</button><span class="lbl">Spell attack</span></div>
-      <button class="btn btn-sm" type="button" id="long-rest" style="margin-left:auto">{{ icon("moon", "sm") }} Restore all slots</button>
-    </div>
-    <h3 class="rule-head">Spell slots <span class="count">set the total, click diamonds to spend</span></h3>
-    <div class="slots" id="slots"></div>
-    <h3 class="rule-head">Spells known &amp; prepared <span class="count">set what a spell does to roll it here and use it in combat · write mod for your spellcasting modifier</span></h3>
-    <div id="spells"></div>
-    <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Concentrating"></datalist>
-  </section>
 
   <section data-pane="story" hidden>
     <div class="story-grid">
@@ -195,4 +200,5 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=20"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/spellbook.js') }}?v=22"></script>
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=22"></script>{% endblock %}

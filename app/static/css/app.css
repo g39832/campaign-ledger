@@ -578,6 +578,23 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
   .ledger td .btn { margin-top: 4px; }
 }
 
+/* ---------- attacks & spells section ---------- */
+.sub-head { font: 700 .82rem var(--caps); letter-spacing: .05em; color: var(--text-2); margin: 18px 0 8px; }
+.spellcasting { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; }
+.spellcasting .field { flex: 0 1 190px; margin: 0; }
+.sc-stat { display: flex; flex-direction: column; align-items: center; min-width: 72px; }
+.sc-stat b, .sc-stat .roll-link { font: 700 1.35rem/1.1 var(--sans); background: none; border: 0; color: var(--text); padding: 0; }
+.sc-stat .roll-link { cursor: pointer; text-decoration: underline dotted; }
+.sc-help { font-size: .84rem; margin: 6px 0 8px; }
+.spell-book { margin-top: 10px; padding: 10px 12px; }
+.sb-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 380px; overflow-y: auto; border-top: 1px solid var(--line); }
+.sb-list li { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--line); }
+.sb-list li.is-added { opacity: .7; }
+.sb-name { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sb-name .faint { font-size: .84rem; }
+.sb-notes { font-size: .8rem !important; }
+.sb-credit { font-size: .76rem; margin: 8px 0 0; }
+
 /* ---------- temporary AC ---------- */
 .c-ac.has-bonus { color: var(--hp-high); }
 .c-ac.has-bonus small { color: var(--hp-high); }
