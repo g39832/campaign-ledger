@@ -92,7 +92,9 @@ def guard():
     path = request.path
     if cross_site():
         return jsonify({"error": "Blocked a request from another website."}), 403
-    if path.startswith("/static/"):
+    if path.startswith("/static/") or path == "/dm-login":
+        # The DM-link page checks its own key, and must work on a device that
+        # already joined as a player (otherwise it would bounce to /play).
         return None
     ident = current_identity()
     if ident and ident["role"] == "dm":
@@ -145,7 +147,8 @@ def dm_login():
     raw = request.args.get("key", "")
     stored = get_setting("dm_key_hash")
     if not raw or not stored or not secrets.compare_digest(token_hash(raw), stored):
-        return "That DM link is invalid or has been replaced. Make a new one on the Table page.", 403
+        return ("That DM link is invalid or has been replaced by a newer one. "
+                "On the DM's computer, open Players and click Make DM link, then use the newest link."), 403
     resp = redirect("/")
     resp.set_cookie(DM_COOKIE, raw, max_age=60 * 60 * 24 * 365, httponly=True, samesite="Lax")
     return resp

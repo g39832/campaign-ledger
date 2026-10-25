@@ -486,3 +486,18 @@ def test_share_addresses_put_home_network_first(monkeypatch):
         (2, 1, 6, "", ("100.112.51.35", 0)), (2, 1, 6, "", ("172.17.144.1", 0)), (2, 1, 6, "", ("192.168.1.10", 0))])
     assert [a["ip"] for a in play.lan_addresses()] == ["192.168.1.10", "100.112.51.35"]
     assert "Tailscale" in play.lan_addresses()[1]["label"]
+
+
+def test_dm_link_works_on_a_device_that_already_joined_as_a_player(app, api):
+    """A tablet that joined as a player must still be able to become DM with a DM link."""
+    camp = api.campaign()
+    code = api.post(f"/api/campaigns/{camp['id']}/join-code", {"action": "new"})["join_code"]
+    tablet = remote_client(app, "192.168.1.13")
+    Api(tablet).post("/api/join", {"code": code, "name": "Tablet"})
+    assert tablet.get("/api/campaigns").status_code == 403, "a player isn't the DM"
+    key = api.post("/api/dm-key")["key"]
+    r = tablet.get(f"/dm-login?key={key}")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/")
+    assert tablet.get("/api/campaigns").status_code == 200
+    assert tablet.get("/morality").status_code == 200
+    assert tablet.get("/dm-login?key=wrong").status_code == 403
