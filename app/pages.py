@@ -162,8 +162,9 @@ def journal():
 @bp.get("/creatures")
 def creatures():
     camp = active_campaign()
+    encounters = [e for e in list_encounters(camp["id"]) if e["status"] != "ended"] if camp else []
     return render_template("creatures.html", **_shell(
-        "creatures", camp, creatures=list_creatures(camp["id"] if camp else None)))
+        "creatures", camp, creatures=list_creatures(camp["id"] if camp else None), encounters=encounters))
 
 
 @bp.get("/settings")

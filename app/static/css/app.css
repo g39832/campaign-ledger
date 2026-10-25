@@ -563,6 +563,25 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .sb-texts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
 .sb-texts .full { grid-column: 1 / -1; }
 
+/* ---------- monster book ---------- */
+.book { padding: 12px 16px; margin-bottom: 20px; }
+.book-head p { font-size: .9rem; margin: 0 0 10px; }
+.book-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 420px; overflow-y: auto; border-top: 1px solid var(--line); }
+.book-list li { display: grid; grid-template-columns: 6.5ch minmax(0, 1fr) auto auto; gap: 4px 14px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.book-list li.is-added { opacity: .7; }
+.book-cr { font: 700 .82rem var(--caps); color: var(--brass); letter-spacing: .03em; }
+.book-name { display: flex; flex-direction: column; min-width: 0; }
+.book-name .faint { font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-stats { font-size: .88rem; white-space: nowrap; }
+.book-done { display: inline-flex; align-items: center; gap: 4px; font-size: .88rem; color: var(--ok); white-space: nowrap; }
+.book-credit { font-size: .78rem; margin: 8px 0 0; }
+.to-encounter, .to-encounter + .row { max-width: 760px; }
+.to-encounter { padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 640px) {
+  .book-list li { grid-template-columns: 6ch minmax(0, 1fr) auto; }
+  .book-stats { grid-column: 2; }
+}
+
 /* ---------- settings ---------- */
 .settings-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
 .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }

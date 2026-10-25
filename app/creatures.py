@@ -66,3 +66,48 @@ def api_delete(cr_id):
             raise F.NotFound("Creature not found")
         conn.execute("DELETE FROM creatures WHERE id = ?", (cr_id,))
     return jsonify({"deleted": cr_id})
+
+
+# ---- Monster Book: ready-made stat blocks to copy into the library ---------------
+
+def _library_names(conn, campaign_id):
+    rows = conn.execute("SELECT name FROM creatures WHERE campaign_id IS NULL OR campaign_id = ?", (campaign_id,)).fetchall()
+    return {r["name"].strip().lower() for r in rows}
+
+
+@bp.get("/monster-book")
+def api_monster_book():
+    from .monster_book import ATTRIBUTION, MONSTERS, cr_value
+    have = _library_names(get_db(), request.args.get("campaign_id", type=int))
+    items = [{"name": m["name"], "creature_type": m["creature_type"], "cr": m["cr"], "max_hp": m["max_hp"], "ac": m["ac"],
+              "in_library": m["name"].lower() in have} for m in MONSTERS]
+    items.sort(key=lambda m: (cr_value(m["cr"]), m["name"]))
+    return jsonify({"monsters": items, "attribution": ATTRIBUTION})
+
+
+@bp.post("/monster-book/add")
+def api_monster_book_add():
+    """Copy chosen Monster Book entries into the shared creature library.
+    Monsters already in the library (same name) are skipped, never duplicated."""
+    from .monster_book import BY_NAME
+    data = request.get_json(silent=True) or {}
+    names = data.get("names")
+    if not isinstance(names, list) or not names or len(names) > 200 or not all(isinstance(n, str) for n in names):
+        raise F.ApiError("Choose at least one monster")
+    unknown = [n for n in names if n not in BY_NAME]
+    if unknown:
+        raise F.ApiError(f"Not in the Monster Book: {', '.join(map(str, unknown[:3]))}")
+    added, skipped = [], []
+    ts = now_iso()
+    with tx() as conn:
+        have = _library_names(conn, data.get("campaign_id"))
+        for name in dict.fromkeys(names):  # keep order, drop repeats
+            if name.lower() in have:
+                skipped.append(name)
+                continue
+            values = F.validate_new(F.CREATURE, BY_NAME[name])
+            F.insert(conn, "creatures", F.CREATURE, values,
+                     {"uid": new_uid(), "campaign_id": None, "created_at": ts, "updated_at": ts})
+            have.add(name.lower())
+            added.append(name)
+    return jsonify({"added": added, "skipped": skipped, "creatures": list_creatures(data.get("campaign_id"))})

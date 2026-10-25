@@ -55,7 +55,7 @@ Options:
 | **Combat** | Build an encounter from the party, the creature library, or a quick enemy (name, HP, AC and initiative modifier only). Enter or roll initiative. Turn order sorts itself, and the arrows let you change it by hand. Then use Next/Prev turn (keys **N** / **P**), damage, heal, temp HP, undo the last HP change, conditions with round-based durations, and a combat log. Each goblin has its own HP. Damage to a PC changes their character sheet too. |
 | **Morality (Saints & Sinners)** | One −100 to +100 score for the whole party, starting at 0. Use the **−1** / **+1** buttons or type a number and press Enter (anything past ±100 is kept at the limit). It shows the level title and description (Absolute Sinner, Notorious Villain, Corrupted, Morally Questionable, Unproven, Virtuous, Hero, Saint, Paragon of Good) and whether the party is on the saintly or sinful side. Below it: the **benefits and drawbacks** of the current level, suggested **bonuses & penalties** for rolls (applied by you, not automatically), **examples** of how it plays out, and **dice rolls** you can click (they roll in the dice tray), plus a list of all levels. The Dashboard shows the score too. |
 | **Journal** | Sessions, NPCs, locations, quests, factions, discoveries, decisions, mysteries, plot hooks, loot and notes. Entries can have a status, tags and links to characters, encounters or morality events. Search is at the top. |
-| **Creatures** | A library of stat blocks you can reuse. Enemies added to a fight take a *copy* of the stats, so editing a creature here never changes a fight already set up. |
+| **Creatures** | Your monster library. **Monster Book** has 33 ready-made monsters (goblins, orcs, wolves, skeletons, ogres, a troll, dragons and more): search or filter by challenge rating, then **Add** one or **Add all shown**. Already-added ones are marked and never duplicated. **New creature** makes your own. Each stat block can be edited and has **Add to encounter** (pick a fight and how many). Enemies in a fight get a *copy* of the stats, so editing the library never changes a fight already set up. Monster Book stat blocks are based on the D&D 5e SRD 5.1 (CC BY 4.0). |
 | **Campaigns** | Create, rename, switch between and archive campaigns. Archiving never deletes anything. Each campaign's characters, fights, notes and morality history are kept separate. |
 | **Battle map** | See [Battle map](#battle-map). |
 | **Players** | Who has joined, the join code, which map players see, and DM links for your other devices. |
@@ -249,7 +249,7 @@ Double-click **`run-tests.bat`**, or run:
 .venv\Scripts\python -m pytest -q
 ```
 
-The tests use a temporary database and never touch your real data. There are 153 of them. They cover:
+The tests use a temporary database and never touch your real data. There are 192 of them. They cover:
 
 * derived stats
 * morality recalculation after editing, deleting and reversing events
@@ -278,6 +278,7 @@ The tests use a temporary database and never touch your real data. There are 153
 * rests and hit dice
 * HP corrections and player self-updates, including permission toggles
 * no duplicate character tokens
+* the Monster Book: every stat block valid and rollable, adding without duplicates, using added monsters in combat
 
 The test helper sends requests the way the browser does (every write carries a request id), so tests catch problems that only show up from real button clicks.
 
