@@ -1,79 +1,32 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
-{% block title %}{{ state.character.name }} · Morality{% endblock %}
+{% block title %}Saints &amp; Sinners{% endblock %}
 {% block content %}
 <div class="page-head" style="border-bottom:0;margin-bottom:6px">
-  <div><div class="eyebrow">Morality &amp; alignment</div><h1>{{ state.character.name }}</h1></div>
-  <div class="actions"><a class="btn btn-sm" href="{{ url_for('pages.sheet', char_id=state.character.id) }}">{{ icon("user", "sm") }} Character sheet</a></div>
+  <div><div class="eyebrow">Team morality</div><h1>Saints &amp; Sinners</h1>
+    <div class="sub">One score for the whole party, from −100 to +100.</div></div>
 </div>
-<nav class="char-tabs" aria-label="Characters">
-  {% for o in others %}<a href="{{ url_for('pages.character_morality', char_id=o.id) }}" class="{% if o.id == state.character.id %}is-on{% endif %}">{{ o.name }}</a>{% endfor %}
-</nav>
 
-<section class="ss panel" id="saints-sinners" aria-labelledby="ss-label">
+<section class="ss panel" id="saints-sinners" data-side="{{ saints_sinners.side }}" aria-labelledby="ss-label">
   <div class="ss-row">
     <div class="ss-counter" role="group" aria-labelledby="ss-label">
       <button type="button" class="btn ss-btn ss-down" id="ss-down" aria-label="Down one point (−1)" title="Down one point">−1</button>
       <div class="ss-score-box">
-        <div class="lbl" id="ss-label">Saints &amp; Sinners</div>
-        <output class="ss-score num" id="ss-score" aria-live="polite">0</output>
+        <label class="lbl" id="ss-label" for="ss-score">Party score</label>
+        <input class="ss-score num" id="ss-score" type="number" inputmode="numeric" min="-100" max="100" step="1"
+               value="{{ saints_sinners.score }}" aria-describedby="ss-hint">
       </div>
       <button type="button" class="btn ss-btn ss-up" id="ss-up" aria-label="Up one point (+1)" title="Up one point">+1</button>
     </div>
     <div class="ss-text">
       <div class="ss-side" id="ss-side"></div>
-      <div class="ss-title" id="ss-title"></div>
-      <p class="ss-desc" id="ss-desc"></p>
+      <div class="ss-title" id="ss-title">{{ saints_sinners.title }}</div>
+      <p class="ss-desc" id="ss-desc">{{ saints_sinners.description }}</p>
     </div>
   </div>
   <div class="ss-bar" aria-hidden="true"><span class="ss-fill" id="ss-fill"></span><span class="ss-zero"></span></div>
   <div class="ss-ends"><span>Sinner −100</span><span>0</span><span>Saint +100</span></div>
+  <p class="faint" id="ss-hint" style="font-size:.85rem;margin:8px 0 0">Use the buttons, or type a number and press Enter.</p>
 </section>
-
-<div class="moral-grid">
-  <div>
-    <div class="align-now">
-      <div><div class="lbl">Current alignment</div><div class="name" id="align-name"></div></div>
-      <div id="align-note" class="muted" style="font-size:.95rem"></div>
-    </div>
-    <svg class="align-chart" id="chart" viewBox="0 0 400 400" role="img" aria-labelledby="chart-title"><title id="chart-title">Alignment chart showing how scores moved over time</title></svg>
-    <div class="axis-meter" id="meters"></div>
-
-    <section class="section" style="margin-top:22px">
-      <h3 class="rule-head">How alignment is decided</h3>
-      <div class="setting">
-        <div><b>Automatic alignment</b></div>
-        <div class="desc">When on, the alignment follows the scores below, and every change is announced and marked in the ledger. Turn it off to set alignment by hand — scores keep being tracked either way.</div>
-        <div class="ctl"><label class="check"><input type="checkbox" id="auto-align"> Automatic</label></div>
-      </div>
-      <div class="setting" id="manual-row">
-        <div><b>Alignment (manual)</b></div>
-        <div class="desc">Used while automatic alignment is off.</div>
-        <div class="ctl"><select id="manual-align" style="width:auto"><option value="">Unset</option>{% for a in ALIGNMENTS %}<option>{{ a }}</option>{% endfor %}</select></div>
-      </div>
-      <div class="setting">
-        <div><b>Starting scores</b></div>
-        <div class="desc">Where the character began before any recorded events. Useful for a character who starts out lawful or wicked.</div>
-        <div class="ctl row" style="flex-wrap:nowrap">
-          <label class="field"><span>Law</span><input type="number" id="law-start" style="width:80px"></label>
-          <label class="field"><span>Good</span><input type="number" id="good-start" style="width:80px"></label>
-        </div>
-      </div>
-      <p class="faint" style="font-size:.9rem;margin-top:10px" id="scale-explainer"></p>
-    </section>
-  </div>
-
-  <div>
-    <section class="section">
-      <h2 class="rule-head">Record a deed</h2>
-      <form id="deed-form" class="deed-form panel panel-pad"></form>
-    </section>
-    <section class="section">
-      <h2 class="rule-head">Ledger <span class="count" id="ledger-count"></span></h2>
-      <ol class="deeds" id="deeds"></ol>
-    </section>
-  </div>
-</div>
-<script type="application/json" id="boot">{{ state | tojson }}</script>
+<script type="application/json" id="boot">{{ saints_sinners | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=5"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=6"></script>{% endblock %}

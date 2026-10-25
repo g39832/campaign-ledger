@@ -23,7 +23,7 @@
         <label class="uline"><input data-f="race" placeholder="—"><span>Species</span></label>
         <label class="uline"><input data-f="background" placeholder="—"><span>Background</span></label>
         <label class="uline"><input data-f="player_name" placeholder="—"><span>Player</span></label>
-        <label class="uline"><input data-f="alignment" list="alignments" placeholder="—"><span>Alignment <a href="{{ url_for('pages.character_morality', char_id=char.id) }}" style="letter-spacing:0;font-family:var(--sans)">history</a></span></label>
+        <label class="uline"><input data-f="alignment" list="alignments" placeholder="—"><span>Alignment</span></label>
         <label class="uline"><input data-f="xp" type="number" min="0"><span>Experience</span></label>
         <label class="uline"><input data-f="speed" placeholder="30 ft."><span>Speed</span></label>
       </div>
@@ -72,7 +72,7 @@
     <button type="button" data-tab="spells" role="tab">Spells</button>
     <button type="button" data-tab="story" role="tab">Story</button>
     <button type="button" data-tab="notes" role="tab">Notes</button>
-    <a href="{{ url_for('pages.character_morality', char_id=char.id) }}">{{ icon("scale", "sm") }} Morality &amp; alignment</a>
+    <a href="{{ url_for('pages.morality_overview') }}">{{ icon("scale", "sm") }} Team morality</a>
   </div>
 
   <section data-pane="main" class="sheet-body">
@@ -190,4 +190,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=5"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=6"></script>{% endblock %}

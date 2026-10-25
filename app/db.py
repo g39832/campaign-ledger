@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 MIGRATIONS = {
     1: """
@@ -336,6 +336,11 @@ MIGRATIONS = {
     # Additive only: existing rows get the starting score of 0.
     3: """
     ALTER TABLE characters ADD COLUMN morality_score INTEGER NOT NULL DEFAULT 0;
+    """,
+    # v4: Saints & Sinners is one score for the whole party, kept on the campaign.
+    # Additive only (the per-character column from v3 is left as it was).
+    4: """
+    ALTER TABLE campaigns ADD COLUMN morality_score INTEGER NOT NULL DEFAULT 0;
     """,
 }
 

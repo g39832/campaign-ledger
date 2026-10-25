@@ -1,4 +1,5 @@
-"""Saints & Sinners morality tracker: a -100..+100 score moved one point at a time."""
+"""Saints & Sinners: one -100..+100 morality score for the whole party (campaign),
+moved with +1/-1 buttons or set by typing a number."""
 import os
 import sqlite3
 
@@ -41,116 +42,132 @@ def test_every_boundary(score, title):
 
 def test_levels_cover_every_score_exactly_once():
     for score in range(-100, 101):
-        matches = [t for lo, hi, t, _ in SAINTS_SINNERS_LEVELS if lo <= score <= hi]
-        assert len(matches) == 1, score
-
-
-def step(api, cid, n, expect=200):
-    return api.post(f"/api/characters/{cid}/saints-sinners", {"step": n}, expect)
+        assert len([t for lo, hi, t, _ in SAINTS_SINNERS_LEVELS if lo <= score <= hi]) == 1, score
 
 
 @pytest.fixture
-def char(api):
-    camp = api.campaign()
-    return api.character(camp["id"], name="Mira")
+def camp(api):
+    return api.campaign("Party")
 
 
-def test_starts_at_zero_unproven(api, char):
-    s = api.get(f"/api/characters/{char['id']}/morality")["saints_sinners"]
+def url(c):
+    return f"/api/campaigns/{c['id']}/saints-sinners"
+
+
+def score(api, c):
+    return api.get(url(c))["saints_sinners"]
+
+
+def test_party_starts_at_zero_unproven(api, camp):
+    s = score(api, camp)
     assert s["score"] == 0 and s["title"] == "Unproven"
-    assert api.get(f"/api/characters/{char['id']}")["character"]["morality_score"] == 0
 
 
-def test_buttons_move_exactly_one_point(api, char):
-    assert step(api, char["id"], 1)["saints_sinners"]["score"] == 1
-    assert step(api, char["id"], 1)["saints_sinners"]["score"] == 2
-    assert step(api, char["id"], -1)["saints_sinners"]["score"] == 1
-    for bad in (2, -2, 0, 5, "1", True, None):
-        api.post(f"/api/characters/{char['id']}/saints-sinners", {"step": bad}, 400)
-    assert api.get(f"/api/characters/{char['id']}/morality")["saints_sinners"]["score"] == 1
+def test_buttons_move_exactly_one_point(api, camp):
+    assert api.post(url(camp), {"step": 1})["saints_sinners"]["score"] == 1
+    assert api.post(url(camp), {"step": 1})["saints_sinners"]["score"] == 2
+    assert api.post(url(camp), {"step": -1})["saints_sinners"]["score"] == 1
+    for bad in (2, -2, 0, "1", True, None):
+        api.post(url(camp), {"step": bad}, 400)
+    assert score(api, camp)["score"] == 1
 
 
-def test_walking_the_whole_scale(api, char):
-    """Every boundary reached through the buttons themselves, title and description always matching."""
+def test_typing_a_number(api, camp):
+    s = api.post(url(camp), {"value": -42})["saints_sinners"]
+    assert s["score"] == -42 and s["title"] == "Corrupted" and s["description"] == DESCRIPTIONS["Corrupted"]
+    assert api.post(url(camp), {"value": "57"})["saints_sinners"]["title"] == "Saint", "typed text numbers work"
+    assert api.post(url(camp), {"value": 0})["saints_sinners"]["title"] == "Unproven"
+    assert api.post(url(camp), {"value": 250})["saints_sinners"]["score"] == 100, "kept within +100"
+    assert api.post(url(camp), {"value": -999})["saints_sinners"]["score"] == -100, "kept within -100"
+    for bad in ("abc", "1.5", 1.5, "", True, [3]):
+        api.post(url(camp), {"value": bad}, 400)
+    assert score(api, camp)["score"] == -100
+
+
+def test_walking_the_whole_scale(api, camp):
     seen = {}
-    score = 0
     for _ in range(100):
-        score = step(api, char["id"], 1)["saints_sinners"]["score"]
-        seen[score] = step_result = api.get(f"/api/characters/{char['id']}/morality")["saints_sinners"]
-        assert step_result["title"] == saints_sinners_level(score)["title"]
-    assert score == 100
-    assert step(api, char["id"], 1)["saints_sinners"]["score"] == 100, "can't go above +100"
+        r = api.post(url(camp), {"step": 1})["saints_sinners"]
+        seen[r["score"]] = r
+    assert r["score"] == 100
+    assert api.post(url(camp), {"step": 1})["saints_sinners"]["score"] == 100, "can't go above +100"
     for _ in range(200):
-        r = step(api, char["id"], -1)["saints_sinners"]
+        r = api.post(url(camp), {"step": -1})["saints_sinners"]
         seen[r["score"]] = r
     assert r["score"] == -100
-    assert step(api, char["id"], -1)["saints_sinners"]["score"] == -100, "can't go below -100"
+    assert api.post(url(camp), {"step": -1})["saints_sinners"]["score"] == -100, "can't go below -100"
+    assert len(seen) == 201
     for s, title in EXPECTED.items():
         assert seen[s]["title"] == title and seen[s]["description"] == DESCRIPTIONS[title], s
 
 
-def test_retried_click_counts_once(api, char):
+def test_retried_click_counts_once(api, camp):
     body = {"step": 1, "op_id": "same-click"}
-    api.post(f"/api/characters/{char['id']}/saints-sinners", body)
-    r = api.post(f"/api/characters/{char['id']}/saints-sinners", body)
-    assert r["saints_sinners"]["score"] == 1
+    api.post(url(camp), body)
+    assert api.post(url(camp), body)["saints_sinners"]["score"] == 1
 
 
-def test_scores_are_per_character(api):
-    camp = api.campaign()
-    a, b = api.character(camp["id"], name="A"), api.character(camp["id"], name="B")
-    step(api, a["id"], -1)
-    assert api.get(f"/api/characters/{b['id']}/morality")["saints_sinners"]["score"] == 0
+def test_one_score_per_party_and_campaigns_are_separate(api, camp):
+    api.character(camp["id"], name="A")
+    api.character(camp["id"], name="B")
+    api.post(url(camp), {"value": 30})
+    other = api.campaign("Other party")
+    assert score(api, other)["score"] == 0
+    assert score(api, camp)["score"] == 30
 
 
-def test_does_not_touch_the_existing_morality_system(api, char):
-    url = f"/api/characters/{char['id']}/morality"
-    api.post(url, {"title": "Spared the bandit", "good_delta": 20}, 201)
-    before = api.get(url)
-    step(api, char["id"], -1)
-    after = api.get(url)
-    for k in ("law", "good", "events", "timeline", "computed_alignment"):
+def test_leaves_the_old_deed_data_alone(api, camp):
+    ch = api.character(camp["id"], name="Mira")
+    murl = f"/api/characters/{ch['id']}/morality"
+    api.post(murl, {"title": "Spared the bandit", "good_delta": 20}, 201)
+    before = api.get(murl)
+    api.post(url(camp), {"value": -60})
+    after = api.get(murl)
+    for k in ("law", "good", "events", "computed_alignment"):
         assert after[k] == before[k]
-    assert after["character"]["alignment"] == before["character"]["alignment"]
 
 
 def test_score_survives_restart(data_dir):
     a = Api(create_app({"DATA_DIR": data_dir}).test_client())
-    cid = a.character(a.campaign()["id"], name="Kael")["id"]
+    c = a.campaign("Persist")
     for _ in range(30):
-        a.post(f"/api/characters/{cid}/saints-sinners", {"step": -1})
+        a.post(url(c), {"step": -1})
     b = Api(create_app({"DATA_DIR": data_dir}).test_client())
-    s = b.get(f"/api/characters/{cid}/morality")["saints_sinners"]
+    s = score(b, c)
     assert s["score"] == -30 and s["title"] == "Corrupted"
 
 
 def test_existing_database_upgrades_without_changing_data(tmp_path):
-    """A v2 database (before this feature) keeps every value; characters start at 0."""
     data = tmp_path / "data"
     data.mkdir()
     path = str(data / "dnd_tracker.sqlite3")
     conn = sqlite3.connect(path)
-    for v in (1, 2):
+    for v in (1, 2, 3):
         for stmt in appdb._split_sql(appdb.MIGRATIONS[v]):
             conn.execute(stmt)
-    conn.execute("PRAGMA user_version = 2")
-    conn.execute("INSERT INTO campaigns (uid, name, created_at, updated_at) VALUES ('c', 'Old', 'x', 'x')")
-    conn.execute("INSERT INTO characters (uid, campaign_id, name, current_hp, max_hp, alignment, created_at, updated_at) "
-                 "VALUES ('h', 1, 'Old Hero', 7, 20, 'Lawful Good', 'x', 'x')")
+    conn.execute("PRAGMA user_version = 3")
+    conn.execute("INSERT INTO campaigns (uid, name, description, created_at, updated_at) VALUES ('c', 'Old', 'kept', 'x', 'x')")
+    conn.execute("INSERT INTO characters (uid, campaign_id, name, current_hp, max_hp, morality_score, created_at, updated_at) "
+                 "VALUES ('h', 1, 'Old Hero', 7, 20, 12, 'x', 'x')")
     conn.commit()
-    before = dict(zip([d[0] for d in conn.execute("SELECT * FROM characters").description], conn.execute("SELECT * FROM characters").fetchone()))
     conn.close()
     app = create_app({"DATA_DIR": str(data), "AUTO_SNAPSHOT": False})
-    assert any(f.startswith("pre-migration-v2-to-v3") for f in os.listdir(data / "backups"))
-    ch = Api(app.test_client()).get("/api/characters/1")["character"]
-    for k, v in before.items():
-        if k in ("abilities", "save_profs", "save_bonus", "skill_profs", "skill_bonus", "attacks", "spell_slots",
-                 "spells", "equipment", "currency", "conditions"):
-            continue  # JSON columns come back decoded
-        assert ch[k] == (bool(v) if k in ("archived", "inspiration", "auto_alignment") else v), k
-    assert ch["morality_score"] == 0
+    assert any(f.startswith("pre-migration-v3-to-v4") for f in os.listdir(data / "backups"))
+    a = Api(app.test_client())
+    camp = a.get("/api/campaigns")["campaigns"][0]
+    assert camp["name"] == "Old" and camp["description"] == "kept"
+    ch = a.get("/api/characters/1")["character"]
+    assert (ch["name"], ch["current_hp"], ch["max_hp"], ch["morality_score"]) == ("Old Hero", 7, 20, 12), "existing data untouched"
+    assert score(a, camp)["score"] == 0
 
 
-def test_morality_page_shows_tracker(api, client, char):
-    html = client.get(f"/characters/{char['id']}/morality").get_data(as_text=True)
-    assert 'id="saints-sinners"' in html and "−1" in html and "+1" in html
+def test_morality_page_is_just_the_tracker(api, client, camp):
+    html = client.get("/morality").get_data(as_text=True)
+    assert 'id="saints-sinners"' in html and 'id="ss-score"' in html and 'type="number"' in html
+    assert "−1" in html and "+1" in html
+    for gone in ('id="deed-form"', 'id="chart"', 'id="deeds"', 'id="manual-align"'):
+        assert gone not in html
+    ch = api.character(camp["id"], name="Mira")
+    r = client.get(f"/characters/{ch['id']}/morality")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/morality")
+    assert "Saints &amp; Sinners" in client.get("/").get_data(as_text=True)

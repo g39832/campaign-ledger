@@ -65,8 +65,9 @@ def dashboard():
     morality = conn.execute(
         """SELECT m.*, c.name AS character_name FROM morality_events m JOIN characters c ON c.id = m.character_id
            WHERE m.campaign_id = ? ORDER BY m.created_at DESC LIMIT 5""", (camp["id"],)).fetchall()
+    from .morality import team_morality
     return render_template(
-        "dashboard.html",
+        "dashboard.html", saints_sinners=team_morality(camp["id"]),
         **_shell("dashboard", camp, characters=chars, encounters=encounters[:5], active=active_state,
                  journal=journal, last_session=sessions[0] if sessions else None,
                  threads=[dict(r) for r in open_threads], morality=[dict(r) for r in morality]))
@@ -99,13 +100,13 @@ def sheet(char_id):
 
 @bp.get("/characters/<int:char_id>/morality")
 def character_morality(char_id):
+    """Morality is tracked for the whole party now; old links go to the team page."""
     try:
-        state = morality_state(char_id)
+        char = get_character(char_id)
     except F.NotFound:
         abort(404)
-    camp = _switch_to(state["character"]["campaign_id"])
-    others = list_characters(camp["id"])
-    return render_template("morality.html", **_shell("morality", camp, state=state, others=others))
+    _switch_to(char["campaign_id"])
+    return redirect(url_for("pages.morality_overview"))
 
 
 @bp.get("/morality")
@@ -113,11 +114,8 @@ def morality_overview():
     camp = _require_campaign()
     if camp is None:
         return redirect(url_for("pages.dashboard"))
-    chars = list_characters(camp["id"])
-    if chars:
-        pcs = [c for c in chars if c["kind"] == "pc"] or chars
-        return redirect(url_for("pages.character_morality", char_id=pcs[0]["id"]))
-    return render_template("morality_empty.html", **_shell("morality", camp))
+    from .morality import team_morality
+    return render_template("morality.html", **_shell("morality", camp, saints_sinners=team_morality(camp["id"])))
 
 
 @bp.get("/combat")

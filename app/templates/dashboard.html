@@ -124,22 +124,11 @@
     </section>
 
     <section class="section">
-      <h2 class="rule-head">Recent deeds</h2>
-      {% if morality %}
-      <ul class="stack-list">
-        {% for m in morality %}
-        <li>
-          <div><a href="{{ url_for('pages.character_morality', char_id=m.character_id) }}">{{ m.character_name }}</a> — {{ m.title }}</div>
-          <div class="meta">
-            {% if m.law_delta %}<span class="delta {{ 'law' if m.law_delta > 0 else 'chaos' }}">{{ signed(m.law_delta) }} {{ 'Lawful' if m.law_delta > 0 else 'Chaotic' }}</span>{% endif %}
-            {% if m.good_delta %}<span class="delta {{ 'good' if m.good_delta > 0 else 'evil' }}">{{ signed(m.good_delta) }} {{ 'Good' if m.good_delta > 0 else 'Evil' }}</span>{% endif %}
-            {% if not m.law_delta and not m.good_delta %}<span class="delta zero">No shift</span>{% endif %}
-            {% if m.session_label %} · {{ m.session_label }}{% endif %}
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}<p class="faint">Morality events you record will show up here.</p>{% endif %}
+      <h2 class="rule-head">Saints &amp; Sinners</h2>
+      <a class="ss-mini" data-side="{{ saints_sinners.side }}" href="{{ url_for('pages.morality_overview') }}">
+        <span class="ss-mini-score num">{{ ("+" ~ saints_sinners.score) if saints_sinners.score > 0 else ("−" ~ (saints_sinners.score | abs)) if saints_sinners.score < 0 else "0" }}</span>
+        <span><b>{{ saints_sinners.title }}</b><br><span class="faint" style="font-size:.9rem">{{ saints_sinners.description }}</span></span>
+      </a>
     </section>
 
     <section class="section">

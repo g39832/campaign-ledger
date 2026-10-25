@@ -37,7 +37,6 @@ def morality_state(char_id, conn=None):
         "law": last["law"],
         "good": last["good"],
         "computed_alignment": last["alignment"],
-        "saints_sinners": saints_sinners_level(ch["morality_score"]),
     }
 
 
@@ -193,21 +192,41 @@ def api_overview(cid):
     return jsonify({"config": cfg, "characters": out})
 
 
-@bp.post("/characters/<int:char_id>/saints-sinners")
-def api_saints_sinners(char_id):
-    """Move the Saints & Sinners score by exactly one point (+1 or -1),
-    never past -100 or +100. A retried request (same op_id) counts once."""
+def team_morality(campaign_id, conn=None):
+    row = (conn or get_db()).execute("SELECT morality_score FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
+    if row is None:
+        raise F.NotFound("Campaign not found")
+    return saints_sinners_level(row["morality_score"])
+
+
+@bp.get("/campaigns/<int:cid>/saints-sinners")
+def api_team_morality(cid):
+    return jsonify({"saints_sinners": team_morality(cid)})
+
+
+@bp.post("/campaigns/<int:cid>/saints-sinners")
+def api_team_morality_change(cid):
+    """The party's Saints & Sinners score: {"step": 1 | -1} moves it by exactly
+    one point, {"value": n} sets a typed number. Always kept within -100..+100.
+    A retried request (same op_id) counts once."""
     data = request.get_json(silent=True) or {}
-    step = data.get("step")
-    if step not in (1, -1) or isinstance(step, bool):
+    step, value = data.get("step"), data.get("value")
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            if isinstance(value, str) and value.strip().lstrip("+-").isdigit():
+                value = int(value.strip())
+            else:
+                raise F.ApiError("Type a whole number from -100 to 100")
+    elif step not in (1, -1) or isinstance(step, bool):
         raise F.ApiError("step must be 1 or -1")
     with tx() as conn:
-        row = conn.execute("SELECT morality_score FROM characters WHERE id = ?", (char_id,)).fetchone()
+        row = conn.execute("SELECT morality_score FROM campaigns WHERE id = ?", (cid,)).fetchone()
         if row is None:
-            raise F.NotFound("Character not found")
+            raise F.NotFound("Campaign not found")
         if claim_op(conn, data.get("op_id")):
-            new = max(SAINTS_SINNERS_MIN, min(SAINTS_SINNERS_MAX, row["morality_score"] + step))
+            target = value if value is not None else row["morality_score"] + step
+            new = max(SAINTS_SINNERS_MIN, min(SAINTS_SINNERS_MAX, target))
             if new != row["morality_score"]:
-                conn.execute("UPDATE characters SET morality_score = ?, updated_at = ? WHERE id = ?", (new, now_iso(), char_id))
-        score = conn.execute("SELECT morality_score FROM characters WHERE id = ?", (char_id,)).fetchone()["morality_score"]
-    return jsonify({"saints_sinners": saints_sinners_level(score)})
+                conn.execute("UPDATE campaigns SET morality_score = ?, updated_at = ? WHERE id = ?", (new, now_iso(), cid))
+        level = team_morality(cid, conn)
+    return jsonify({"saints_sinners": level})
