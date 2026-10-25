@@ -31,7 +31,8 @@ def _combatant_rows(conn, enc_id):
         """SELECT c.*, ch.name AS ch_name, ch.current_hp AS ch_hp, ch.max_hp AS ch_max, ch.temp_hp AS ch_temp,
                   ch.ac AS ch_ac, ch.status AS ch_status, ch.conditions AS ch_conditions,
                   ch.death_successes AS ch_ds, ch.death_failures AS ch_df, ch.portrait AS ch_portrait,
-                  ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion
+                  ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
+                  ch.attacks AS ch_attacks
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
@@ -50,7 +51,11 @@ def _combatant_dict(r):
                  status=r["ch_status"], conditions=json.loads(r["ch_conditions"]),
                  death_successes=r["ch_ds"], death_failures=r["ch_df"], portrait=r["ch_portrait"],
                  subtitle=" ".join(x for x in (r["ch_class"] or "", f"{r['ch_level']}" if r["ch_class"] else "") if x),
-                 exhaustion=r["ch_exhaustion"])
+                 exhaustion=r["ch_exhaustion"],
+                 # Attack names (in sheet order) so combat can offer the sheet's Hit / Dmg rolls.
+                 attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
+                           "has_dmg": bool(str(a.get("damage") or "").strip())}
+                          for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
                  status=r["status"], conditions=json.loads(r["conditions"]), death_successes=0,
@@ -722,6 +727,30 @@ def api_hp(cid):
     eid = _enc_of_combatant(cid)
     data = _body()
     return mutate(eid, lambda ctx: apply_hp(ctx, cid, data), data.get("op_id"))
+
+
+@bp.post("/encounters/<int:eid>/damage")
+def api_damage_targets(eid):
+    """Deal damage to one or more combatants at once (one attack, or an area spell).
+    {targets: [combatant ids], amount, half: bool, attacker_id}. `half` is for targets
+    that made their save; it rounds down. All targets change together or none do."""
+    data = _body()
+    targets = data.get("targets")
+    if not isinstance(targets, list) or not targets or len(targets) > 100 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        raise F.ApiError("Choose who takes the damage")
+    amount = data.get("amount")
+    if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0 or amount > 100000:
+        raise F.ApiError("Damage must be a whole number, 0 or more")
+    if data.get("half"):
+        amount //= 2
+
+    def fn(ctx):
+        by = None
+        if data.get("attacker_id") is not None:
+            by = "from " + ctx.combatant(int(data["attacker_id"]))["name"]
+        for cid in dict.fromkeys(targets):
+            apply_hp(ctx, cid, {"op": "damage", "amount": amount}, by)
+    return mutate(eid, fn, data.get("op_id"))
 
 
 @bp.post("/encounters/<int:eid>/undo")

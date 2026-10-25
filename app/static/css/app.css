@@ -563,6 +563,21 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .sb-texts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
 .sb-texts .full { grid-column: 1 / -1; }
 
+/* ---------- combat: hit a target ---------- */
+.hit-box { background: var(--accent-soft); }
+.target-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.target-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line-strong, var(--line)); border-radius: 999px; background: var(--surface, transparent); color: var(--text); font: inherit; font-size: .92rem; cursor: pointer; }
+.target-chip .num { font-size: .8rem; color: var(--text-3); }
+.target-chip.is-foe { border-style: solid; }
+.target-chip:not(.is-foe) { border-style: dashed; }
+.target-chip.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.target-chip.is-on .num { color: rgba(255, 255, 255, .85); }
+.target-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hit-attacks { display: grid; gap: 6px; margin-top: 10px; }
+.hit-verdict { margin-top: 8px; font-size: .92rem; }
+.hit-verdict .hits { color: var(--ok); font-weight: 700; }
+.hit-verdict .misses { color: var(--text-3); }
+
 /* ---------- notes: always easy to spot ---------- */
 .note-box { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .98rem; line-height: 1.5; color: var(--text); background: var(--brass-soft); border-left: 3px solid var(--brass); border-radius: 4px; padding: 8px 12px; max-height: 320px; overflow-y: auto; }
 .note-box.is-empty { color: var(--text-2); font-style: italic; background: none; border-left-style: dashed; }

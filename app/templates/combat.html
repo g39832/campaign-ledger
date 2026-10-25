@@ -8,7 +8,7 @@
     <input class="input enc-name" id="enc-name" aria-label="Encounter name">
   </div>
   <div class="round-box"><span class="lbl">Round</span><span class="n" id="round">0</span></div>
-  <div class="turn-now"><span class="lbl">Now acting</span><span class="who" id="now">—</span></div>
+  <div class="turn-now"><span class="lbl">Now acting</span><span class="who" id="now">â€”</span></div>
   <div class="controls">
     <button class="btn" type="button" id="undo" title="Undo the most recent HP change">{{ icon("undo-2", "sm") }} <span>Undo HP</span></button>
     <button class="btn" type="button" id="prev">{{ icon("skip-back", "sm") }} Prev<span class="kbd">P</span></button>
@@ -75,4 +75,4 @@
 <script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=11"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=12"></script>{% endblock %}

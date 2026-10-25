@@ -49,7 +49,7 @@
 
     <div class="panel">
       <h3 class="rule-head">Map notes <span class="count">only you see these</span></h3>
-      <textarea data-m="notes" rows="4" class="note-input" aria-label="Map notes" placeholder="Secrets, traps, what's behind the door…"></textarea>
+      <textarea data-m="notes" rows="4" class="note-input" aria-label="Map notes" placeholder="Secrets, traps, what's behind the doorâ€¦"></textarea>
     </div>
 
     <div class="panel">
@@ -61,7 +61,7 @@
       <h3 class="rule-head">Tokens <span class="count" id="token-count"></span></h3>
       <div class="row" style="margin-bottom:8px">
         <button type="button" class="btn btn-sm" id="from-enc">{{ icon("swords", "sm") }} Add encounter</button>
-        <select id="add-char" style="width:auto;flex:1;min-width:0"><option value="">Add character…</option>{% for c in characters %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+        <select id="add-char" style="width:auto;flex:1;min-width:0"><option value="">Add characterâ€¦</option>{% for c in characters %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
       </div>
       <ul class="token-list" id="tokens"></ul>
     </div>
@@ -99,6 +99,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=11"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=11"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=12"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=12"></script>
 {% endblock %}

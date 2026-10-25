@@ -560,3 +560,30 @@ def test_notes_are_shown_where_you_look(api, client):
     mid = api.post(f"/api/campaigns/{camp['id']}/maps", {"name": "Cave"}, 201)["map"]["id"]
     page = client.get(f"/map/{mid}").get_data(as_text=True)
     assert page.index('data-m="notes"') < page.index("Map &amp; grid settings"), "map notes sit outside the settings panel"
+
+
+def test_hit_one_or_many_targets(api):
+    camp = api.campaign()
+    hero = api.character(camp["id"], name="Hero", max_hp=20,
+                         attacks=[{"name": "Longsword", "bonus": "+5", "damage": "1d8+3 slashing"}])
+    eid = api.encounter(camp["id"], "Rats")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Rat", "max_hp": 10, "count": 3}})
+    by = {c["name"]: c for c in st["combatants"]}
+    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True}], "sheet attacks reach combat"
+    url = f"/api/encounters/{eid}/damage"
+    st = api.post(url, {"targets": [by["Rat 1"]["id"]], "amount": 7, "attacker_id": by["Hero"]["id"], "op_id": "a1"})
+    hp = {c["name"]: c["hp"] for c in st["combatants"]}
+    assert hp == {"Hero": 20, "Rat 1": 3, "Rat 2": 10, "Rat 3": 10}
+    assert any("from Hero" in e["message"] for e in st["log"]), "the log says who did it"
+    api.post(url, {"targets": [by["Rat 1"]["id"]], "amount": 7, "op_id": "a1"})  # retried click counts once
+    st = api.post(url, {"targets": [by["Rat 2"]["id"], by["Rat 3"]["id"]], "amount": 9, "half": True})
+    hp = {c["name"]: c["hp"] for c in st["combatants"]}
+    assert hp == {"Hero": 20, "Rat 1": 3, "Rat 2": 6, "Rat 3": 6}, "area damage, halved for a save (rounded down)"
+    st = api.post(f"/api/encounters/{eid}/undo", {})
+    assert {c["name"]: c["hp"] for c in st["combatants"]}["Rat 3"] == 10
+    for bad in ({"targets": [], "amount": 3}, {"targets": [by["Rat 1"]["id"]], "amount": -1},
+                {"targets": [by["Rat 1"]["id"]], "amount": "5"}, {"targets": [True], "amount": 3}):
+        api.post(url, bad, expect=400)
+    api.post(url, {"targets": [999999], "amount": 3}, expect=404)
+    roll = api.post("/api/rolls", {"check": {"type": "damage", "key": 0, "combatant_id": by["Hero"]["id"]}, "encounter_id": eid}, 201)["roll"]
+    assert 4 <= roll["total"] <= 11 and roll["kind"] == "damage"

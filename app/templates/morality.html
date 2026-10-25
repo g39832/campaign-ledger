@@ -3,13 +3,13 @@
 {% block content %}
 <div class="page-head" style="border-bottom:0;margin-bottom:6px">
   <div><div class="eyebrow">Team morality</div><h1>Saints &amp; Sinners</h1>
-    <div class="sub">One score for the whole party, from −100 to +100.</div></div>
+    <div class="sub">One score for the whole party, from âˆ’100 to +100.</div></div>
 </div>
 
 <section class="ss panel" id="saints-sinners" data-side="{{ saints_sinners.side }}" aria-labelledby="ss-label">
   <div class="ss-row">
     <div class="ss-counter" role="group" aria-labelledby="ss-label">
-      <button type="button" class="btn ss-btn ss-down" id="ss-down" aria-label="Down one point (−1)" title="Down one point">−1</button>
+      <button type="button" class="btn ss-btn ss-down" id="ss-down" aria-label="Down one point (âˆ’1)" title="Down one point">âˆ’1</button>
       <div class="ss-score-box">
         <label class="lbl" id="ss-label" for="ss-score">Party score</label>
         <input class="ss-score num" id="ss-score" type="number" inputmode="numeric" min="-100" max="100" step="1"
@@ -24,11 +24,11 @@
     </div>
   </div>
   <div class="ss-bar" aria-hidden="true"><span class="ss-fill" id="ss-fill"></span><span class="ss-zero"></span></div>
-  <div class="ss-ends"><span>Sinner −100</span><span>0</span><span>Saint +100</span></div>
+  <div class="ss-ends"><span>Sinner âˆ’100</span><span>0</span><span>Saint +100</span></div>
   <p class="faint" id="ss-hint" style="font-size:.85rem;margin:8px 0 0">Use the buttons, or type a number and press Enter.</p>
 </section>
 <section class="ss-effects" id="ss-effects" aria-labelledby="ss-effects-title">
-  <h2 class="rule-head" id="ss-effects-title"><span>What “<span id="ss-effects-name">{{ saints_sinners.title }}</span>” means for the party</span></h2>
+  <h2 class="rule-head" id="ss-effects-title"><span>What â€œ<span id="ss-effects-name">{{ saints_sinners.title }}</span>â€ means for the party</span></h2>
   <div class="ss-cols">
     <div class="ss-col is-pro">
       <h3 class="lbl">Benefits</h3>
@@ -70,4 +70,4 @@
 </section>
 <script type="application/json" id="boot">{{ saints_sinners | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=11"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=12"></script>{% endblock %}
