@@ -16,7 +16,7 @@ from . import fields as F
 from .auth import current_identity
 from .campaigns import active_campaign
 from .db import get_db, new_uid, now_iso, tx
-from .rules import ABILITIES, ABILITY_NAMES, SKILLS, ability_mod, derived, is_healing
+from .rules import ABILITIES, ABILITY_NAMES, SKILLS, ability_mod, derived, is_healing, spell_expression, spell_info
 
 bp = Blueprint("rolls", __name__, url_prefix="/api")
 
@@ -91,6 +91,19 @@ def build_check(conn, check):
         if not d["spell"]:
             raise F.ApiError("Set a spellcasting ability on the Spells tab first")
         return f"1d20{_signed(d['spell']['attack'])}", "Spell attack", "attack", name, ids
+    if t == "spell":
+        try:
+            sp = spell_info((ch.get("spells") or [])[int(key)])
+        except (TypeError, ValueError, IndexError):
+            raise F.ApiError("That spell no longer exists — the sheet may have changed")
+        if sp["effect"] not in ("damage", "heal") or not sp["dice"]:
+            raise F.ApiError(f"{sp['name']} has no dice to roll — set what it does and its dice on the Spells tab")
+        expr = spell_expression(sp["dice"], d["mods"][d["spell"]["ability"]] if d["spell"] else None)
+        if expr is None:
+            raise F.ApiError(f"{sp['name']} uses mod — set a spellcasting ability on the Spells tab first")
+        if sp["effect"] == "heal":
+            return expr, f"{sp['name']} healing", "heal", name, ids
+        return expr, f"{sp['name']} damage", "damage", name, ids
     if t in ("attack", "damage"):
         attacks = ch.get("attacks") or []
         try:

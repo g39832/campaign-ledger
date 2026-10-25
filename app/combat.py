@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing
+from .rules import apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -70,10 +70,24 @@ def _encounter_row(conn, enc_id):
     return row
 
 
+def _add_spells(conn, c):
+    """Spells that do something (damage, healing, an effect) plus the caster's save DC
+    and spell attack, so combat can offer them next to weapon attacks."""
+    row = conn.execute("SELECT * FROM characters WHERE id = ?", (c["character_id"],)).fetchone()
+    ch = F.decode_row(row, F.CHARACTER)
+    spell = derived(ch)["spell"]
+    c["spellcasting"] = {"dc": spell["dc"], "attack": spell["attack"]} if spell else None
+    c["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
+                   if spell_info(s)["effect"]]
+
+
 def encounter_state(enc_id, conn=None, log_limit=400):
     conn = conn or get_db()
     enc = dict(_encounter_row(conn, enc_id))
     combatants = [_combatant_dict(r) for r in _combatant_rows(conn, enc_id)]
+    for c in combatants:
+        if c["linked"]:
+            _add_spells(conn, c)
     log = [dict(r) for r in conn.execute(
         "SELECT * FROM (SELECT * FROM combat_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id",
         (enc_id, log_limit),
@@ -783,6 +797,44 @@ def api_undo(eid):
 
 
 # ---- conditions ----------------------------------------------------------------
+
+@bp.post("/encounters/<int:eid>/conditions")
+def api_condition_targets(eid):
+    """Put one condition on several combatants at once (an effect spell like Fear or
+    Hold Person). {targets, name, rounds, caster_id, note}. With a caster, the rounds
+    count down at the start of the caster's turn, like a spell's duration. Anyone who
+    already has it is skipped."""
+    data = _body()
+    targets = data.get("targets")
+    if not isinstance(targets, list) or not targets or len(targets) > 100 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        raise F.ApiError("Choose who it affects")
+    name = str(data.get("name", "")).strip()[:60]
+    if not name:
+        raise F.ApiError("Name the condition or effect")
+
+    def fn(ctx):
+        rounds = _int(data, "rounds", 1, 1000) if data.get("rounds") not in (None, "") else None
+        caster = ctx.combatant(int(data["caster_id"])) if data.get("caster_id") is not None else None
+        added, skipped = [], []
+        for cid in dict.fromkeys(targets):
+            c = ctx.combatant(cid)
+            if any(x["name"].lower() == name.lower() and not x.get("expired") for x in c["conditions"]):
+                skipped.append(c["name"])
+                continue
+            tick_on = caster["id"] if caster else cid
+            cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": str(data.get("note", ""))[:500],
+                    "rounds_left": rounds, "tick": "start" if caster else "end", "tick_on": tick_on, "encounter_id": eid,
+                    "auto_expire": False, "expired": False, "applied_round": ctx.enc["round"]}
+            ctx.set_vitals(c, conditions=c["conditions"] + [cond])
+            added.append(c["name"])
+        if added:
+            rds = f" for {rounds} round{'s' if rounds != 1 else ''}" if rounds else ""
+            ctx.log("condition", ", ".join(added) + (" is " if len(added) == 1 else " are ") + name + rds
+                    + (f" ({caster['name']})" if caster else "") + (f" — {data['note']}" if data.get("note") else ""))
+        if skipped:
+            ctx.log("condition", ", ".join(skipped) + (" was" if len(skipped) == 1 else " were") + f" already {name}")
+    return mutate(eid, fn, data.get("op_id"))
+
 
 @bp.post("/combatants/<int:cid>/conditions")
 def api_add_condition(cid):

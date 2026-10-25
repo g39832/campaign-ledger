@@ -202,8 +202,8 @@
     function render() {
       const list = model[field] || [];
       const rows = list.map((row, i) => h("tr", null,
-        opts.rowActions ? h("td", { class: "acts-cell" }, opts.rowActions(i, row)) : null,
-        cols.map((c) => h("td", { style: c.width ? "width:" + c.width : null },
+        opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, opts.rowActions(i, row)) : null,
+        cols.map((c) => h("td", { style: c.width ? "width:" + c.width : null, "data-label": c.label, class: "f-" + c.key },
           c.type === "check"
             ? h("input", { type: "checkbox", checked: !!row[c.key], "aria-label": c.label, onchange: (e) => update(i, c.key, e.target.checked) })
             : h("input", { type: c.type === "number" ? "number" : "text", value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
@@ -254,12 +254,65 @@
     { key: "notes", label: "Notes" },
   ], { qty: 1, name: "", weight: null, notes: "" }, { addLabel: "Add item", empty: "Pack is empty.", after: eqWeight });
 
-  const renderSpells = listEditor($("#spells"), "spells", [
-    { key: "prepared", label: "Prep", type: "check", width: "46px" },
-    { key: "level", label: "Lvl", type: "number", width: "60px" },
-    { key: "name", label: "Spell", placeholder: "Magic Missile" },
-    { key: "notes", label: "Time · range · notes", placeholder: "1 action · 120 ft" },
-  ], { prepared: false, level: 1, name: "", notes: "" }, { addLabel: "Add spell", empty: "No spells recorded." });
+  // ---- spells: each one can just be notes, or deal damage, heal, or put an effect on someone ----
+  const SPELL_DOES = [["", "Just notes"], ["damage", "Damage"], ["heal", "Healing"], ["effect", "Effect / condition"]];
+  const SPELL_ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
+  const SPELL_HIT = [["", "No roll to land"], ["attack", "Spell attack roll"]].concat(SPELL_ABIL.map(([k, l]) => [k, l + " save"]));
+  const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null };
+  function renderSpells() {
+    const box = $("#spells");
+    const list = model.spells || [];
+    const set = (i, key, val, redraw) => {
+      const l = clone(model.spells) || [];
+      l[i] = Object.assign({}, SPELL_BLANK, l[i], { [key]: val });
+      b.set("spells", l, !!redraw);
+      if (redraw) renderSpells();
+    };
+    const sp = derived().spell;
+    const text = (i, key, attrs) => h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs));
+    const pick = (i, key, options, attrs) => h("select", Object.assign({ onchange: (e) => set(i, key, e.target.value, true) }, attrs),
+      options.map(([v, l]) => h("option", { value: v, selected: (list[i][key] || "") === v }, l)));
+    const cards = list.map((s, i) => {
+      const does = s.effect || "";
+      const rolls = [];
+      if (does === "damage" && s.hit === "attack") rolls.push(h("button", { type: "button", class: "btn btn-sm", "data-roll": "spell_attack", title: "Roll a spell attack" }, "Attack" + (sp ? " " + signed(sp.atk) : "")));
+      if (does === "damage" && s.dice) rolls.push(h("button", { type: "button", class: "btn btn-sm", "data-roll": "spell:" + i, title: "Roll damage" }, "Dmg"),
+        s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "spell:" + i, "data-crit": "1", title: "Critical: double the dice" }, "Crit") : null);
+      if (does === "heal" && s.dice) rolls.push(h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "spell:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"));
+      const save = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, (SPELL_ABIL.find(([k]) => k === s.hit) || [, ""])[1] + " save" + (sp ? " · DC " + sp.dc : "")) : null;
+      const cond = s.condition ? h("span", { class: "tag" }, s.condition + (s.rounds ? " · " + s.rounds + " rds" : "")) : null;
+      const del = h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove spell", title: "Remove",
+        onclick: () => { const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true); renderSpells(); } }, icon("trash-2", "sm"));
+      return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
+        h("div", { class: "spell-top" },
+          h("label", { class: "check", title: "Prepared" }, h("input", { type: "checkbox", checked: !!s.prepared, "aria-label": "Prepared", onchange: (e) => set(i, "prepared", e.target.checked) }), h("span", { class: "sr-only" }, "Prepared")),
+          h("input", { type: "number", min: 0, max: 9, value: s.level ?? "", "aria-label": "Spell level", title: "Level (0 = cantrip)", class: "spell-lvl",
+            oninput: (e) => set(i, "level", e.target.value === "" ? null : Number(e.target.value)) }),
+          text(i, "name", { placeholder: "Spell name", "aria-label": "Spell name", class: "spell-name" }),
+          h("div", { class: "spell-rolls roll-row" }, rolls, save, cond),
+          del),
+        h("div", { class: "spell-fields" },
+          h("label", { class: "field" }, h("span", null, "Does"), pick(i, "effect", SPELL_DOES)),
+          does === "damage" || does === "heal" ? h("label", { class: "field" }, h("span", null, does === "heal" ? "Healing dice" : "Damage dice"),
+            text(i, "dice", { placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => renderSpells() })) : null,
+          does === "damage" || does === "effect" ? h("label", { class: "field" }, h("span", null, "Lands by"), pick(i, "hit", SPELL_HIT)) : null,
+          does === "effect" || does === "damage" ? h("label", { class: "field" }, h("span", null, does === "effect" ? "Condition / effect" : "Also applies (optional)"),
+            text(i, "condition", { placeholder: does === "effect" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => renderSpells() })) : null,
+          s.condition && (does === "effect" || does === "damage") ? h("label", { class: "field" }, h("span", null, "Rounds"),
+            h("input", { type: "number", min: 1, max: 1000, value: s.rounds ?? "", placeholder: "—", title: "How many rounds it lasts (1 minute = 10)",
+              oninput: (e) => set(i, "rounds", e.target.value === "" ? null : Number(e.target.value)) })) : null,
+          h("label", { class: "field spell-notes" }, h("span", null, "Time · range · notes"), text(i, "notes", { placeholder: "1 action · 120 ft" }))));
+    });
+    box.replaceChildren(
+      list.length ? h("div", { class: "spell-list" }, cards) : h("p", { class: "faint", style: "margin:4px 0" }, "No spells recorded."),
+      h("button", { type: "button", class: "btn btn-sm btn-quiet add-row", onclick: () => {
+        b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK)]), true);
+        renderSpells();
+        const names = $$(".spell-name", box); if (names.length) names[names.length - 1].focus();
+      } }, icon("plus", "sm"), " Add spell"));
+  }
+  renderSpells();
+  $("[data-f='spellcasting_ability']").addEventListener("change", () => setTimeout(renderSpells, 0));
 
   // ---- spell slots ----------------------------------------------------------------
   function renderSlots() {

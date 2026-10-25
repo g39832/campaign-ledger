@@ -451,3 +451,35 @@ def is_healing(attack):
         return False
     text = " ".join(str(attack.get(k) or "") for k in ("name", "damage", "notes"))
     return bool(_HEAL_WORDS.search(text))
+
+
+SPELL_EFFECTS = ("", "damage", "heal", "effect")  # "" = just notes, nothing to roll
+
+
+def spell_info(spell):
+    """Normalise one spell row from the sheet. Rows written before spells could roll
+    have only prepared/level/name/notes; they come back as plain notes."""
+    if not isinstance(spell, dict):
+        spell = {}
+    effect = spell.get("effect") if spell.get("effect") in SPELL_EFFECTS else ""
+    hit = spell.get("hit") if spell.get("hit") in ("attack", *ABILITIES) else ""
+    try:
+        rounds = int(spell.get("rounds")) if spell.get("rounds") not in (None, "") else None
+    except (TypeError, ValueError):
+        rounds = None
+    return {"name": (str(spell.get("name") or "").strip() or "Spell")[:80], "level": spell.get("level"),
+            "effect": effect, "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
+            "condition": str(spell.get("condition") or "").strip()[:60],
+            "rounds": rounds if rounds and 0 < rounds <= 1000 else None}
+
+
+def spell_expression(dice_text, spell_mod):
+    """'1d8+mod' -> '1d8+3' using the spellcasting modifier. Returns None when the
+    text uses mod but the character has no spellcasting ability set."""
+    if re.search(r"\bmod\b", dice_text, re.I):
+        if spell_mod is None:
+            return None
+        dice_text = re.sub(r"\s*([+-])?\s*\bmod\b", lambda m: (m.group(1) or "+") + str(spell_mod), dice_text, flags=re.I)
+        dice_text = dice_text.replace("+-", "-").replace("--", "+")
+    return dice_text.replace(" ", "")
+

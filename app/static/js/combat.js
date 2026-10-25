@@ -395,6 +395,31 @@
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
       a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;
 
+    // Spells from the character sheet that do something.
+    const sc = c.spellcasting;
+    const putOn = (s) => {
+      if (!set.size) { toast("Pick who " + s.name + " affects first.", "error"); return; }
+      const names = [...set].map((id) => byId(id).name).join(", ");
+      run("POST", "/api/encounters/" + EID + "/conditions", { targets: [...set], name: s.condition, rounds: s.rounds, caster_id: c.id, note: s.name },
+        () => toast(s.condition + " on " + names + ".", "ok"));
+    };
+    const spellRows = window.Dice && (c.spells || []).length ? h("div", { class: "hit-attacks hit-spells" },
+      h("div", { class: "lbl" }, "Spells", sc ? h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" }, " · save DC " + sc.dc + " · attack " + signed(sc.attack)) : null),
+      c.spells.map((s) => {
+        const rollSpell = (e, crit) => Dice.roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit, encounter_id: EID }, e);
+        const saveTag = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "")) : null;
+        return h("div", { class: "roll-row", style: "align-items:center" },
+          h("b", { style: "min-width:7ch" }, s.name, s.level ? h("span", { class: "faint", style: "font-weight:400" }, " " + s.level) : null),
+          s.effect === "damage" && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) =>
+            Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e).then(after("hit")) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
+          s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => rollSpell(e, false).then(after("dmg")) }, "Dmg " + s.dice) : null,
+          s.effect === "damage" && s.dice && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => rollSpell(e, true).then(after("dmg")) }, "Crit") : null,
+          s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: (e) => rollSpell(e, false).then(after("heal")) }, icon("heart", "sm"), " Heal " + s.dice) : null,
+          saveTag,
+          s.condition ? h("button", { type: "button", class: "btn btn-sm", title: "Put " + s.condition + " on everyone picked above", onclick: () => putOn(s) },
+            icon("zap", "sm"), " " + s.condition + (s.rounds ? " · " + s.rounds + " rds" : "")) : null);
+      })) : null;
+
     const la = lastAttack.get(c.id);
     const verdict = !healing && la && set.size ? h("div", { class: "hit-verdict" }, la.label + ": ", h("b", null, la.total), " — ",
       [...set].map((id) => { const t = byId(id); const hits = la.natural === 20 || (la.natural !== 1 && la.total >= t.ac);
@@ -409,7 +434,7 @@
       h("h3", { class: "rule-head" }, healing ? "Heal someone" : "Hit a target", h("span", { class: "count" }, c.name + (healing ? " heals" : " attacks"))),
       h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, seg),
       h("div", { class: "target-chips" }, chips),
-      atkRows, verdict,
+      atkRows, spellRows, verdict,
       h("div", { class: "hp-ctl", style: "margin-top:10px" }, amt,
         h("button", { type: "button", class: "btn " + (healing ? "btn-heal" : "btn-dmg"), disabled: !set.size, onclick: () => deal(false) },
           icon(healing ? "heart" : "swords", "sm"), label),

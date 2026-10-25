@@ -164,8 +164,9 @@
     </div>
     <h3 class="rule-head">Spell slots <span class="count">set the total, click diamonds to spend</span></h3>
     <div class="slots" id="slots"></div>
-    <h3 class="rule-head">Spells known &amp; prepared</h3>
+    <h3 class="rule-head">Spells known &amp; prepared <span class="count">set what a spell does to roll it here and use it in combat · write mod for your spellcasting modifier</span></h3>
     <div id="spells"></div>
+    <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Concentrating"></datalist>
   </section>
 
   <section data-pane="story" hidden>
@@ -194,4 +195,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=13"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=14"></script>{% endblock %}

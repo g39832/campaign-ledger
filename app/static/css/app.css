@@ -563,6 +563,44 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .sb-texts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
 .sb-texts .full { grid-column: 1 / -1; }
 
+/* ---------- spells ---------- */
+.spell-list { display: grid; gap: 8px; }
+.spell-card { border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; background: var(--surface); }
+.spell-card.does-damage { border-left-color: var(--accent); }
+.spell-card.does-heal { border-left-color: var(--hp-high); }
+.spell-card.does-effect { border-left-color: var(--brass); }
+.spell-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spell-top .check { margin: 0; flex: 0 0 auto; width: auto; }
+.spell-top .check input { width: 18px; height: 18px; }
+.spell-top .spell-lvl { flex: 0 0 56px; width: 56px; min-height: 32px; padding: 4px 6px; text-align: center; }
+.spell-top .spell-name { flex: 1 1 160px; width: auto; min-width: 0; font-weight: 700; min-height: 32px; padding: 4px 8px; }
+.spell-top .icon-btn { flex: 0 0 auto; margin-left: auto; }
+.spell-rolls { flex-wrap: wrap; gap: 4px; align-items: center; }
+.spell-rolls .btn { min-height: 28px; padding: 3px 8px; }
+.spell-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 10px; margin-top: 8px; }
+.spell-fields .field > span { font-size: .72rem; }
+.spell-fields input, .spell-fields select { min-height: 32px; padding: 4px 8px; }
+.spell-fields .spell-notes { grid-column: 1 / -1; }
+.hit-spells .lbl { margin-top: 2px; }
+
+/* Attack, equipment and other list tables turn into stacked cards when their column is narrow
+   (phones, tablets, and the three-column sheet on smaller laptops), so nothing is cut off. */
+.list-wrap, [id="attacks"], [id="equipment"] { container-type: inline-size; }
+@container (max-width: 520px) {
+  .list-editor, .list-editor tbody, .list-editor tr, .list-editor td { display: block; width: auto !important; }
+  .list-editor thead { display: none; }
+  .list-editor tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; position: relative; padding: 8px 30px 8px 0; border-bottom: 1px solid var(--line); }
+  .list-editor td { border: 0; padding: 0; }
+  .list-editor td[data-label]::before { content: attr(data-label); display: block; font: 500 .66rem var(--caps); letter-spacing: .07em; color: var(--text-3); padding: 0 6px; }
+  .list-editor td.f-name, .list-editor td.acts-cell, .list-editor td.f-notes { grid-column: 1 / -1; }
+  .list-editor td.f-name input { font-weight: 700; }
+  .list-editor td.acts-cell { order: 9; white-space: normal; margin-top: 4px; }
+  .list-editor td.acts-cell::before { display: none !important; }
+  .list-editor td.acts-cell .roll-row { flex-wrap: wrap; }
+  .list-editor td.del { position: absolute; top: 8px; right: 0; width: auto; }
+  .list-editor input { border-color: var(--line); }
+}
+
 /* ---------- combat: hit a target ---------- */
 .hit-box { background: var(--accent-soft); }
 .target-chips { display: flex; flex-wrap: wrap; gap: 6px; }

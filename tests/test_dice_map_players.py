@@ -616,3 +616,53 @@ def test_healing_abilities_heal(api, client):
     assert api.get(f"/api/characters/{yam['id']}")["character"]["current_hp"] == 14, "healing reaches the sheet"
     api.post(url, {"targets": [by["Lux"]["id"]], "amount": 3, "op": "steal"}, expect=400)
     assert "btn-heal" in client.get("/static/js/sheet.js").get_data(as_text=True)
+
+
+def test_spells_damage_heal_and_effects(api, client):
+    from app.rules import spell_expression, spell_info
+    assert spell_expression("1d8+mod", 3) == "1d8+3" and spell_expression("2d4 + mod", -1) == "2d4-1"
+    assert spell_expression("8d6", None) == "8d6" and spell_expression("1d8+mod", None) is None
+    assert spell_info({"name": "Old", "level": 1, "notes": "x"})["effect"] == "", "old spell rows are plain notes"
+    camp = api.campaign()
+    lux = api.character(camp["id"], name="Lux", max_hp=12, level=1, spellcasting_ability="wis",
+                        abilities={"str": 10, "dex": 16, "con": 16, "int": 10, "wis": 16, "cha": 10}, spells=[
+        {"name": "Cure Wounds", "level": 1, "effect": "heal", "dice": "1d8+mod"},
+        {"name": "Fireball", "level": 3, "effect": "damage", "dice": "8d6", "hit": "dex"},
+        {"name": "Cause Fear", "level": 1, "effect": "effect", "hit": "wis", "condition": "Frightened", "rounds": 10},
+        {"name": "Light", "level": 0, "notes": "just notes"}])
+    eid = api.encounter(camp["id"], "Mush Rush")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [lux["id"]], "quick": {"name": "Goblin", "max_hp": 30, "count": 2}})
+    by = {c["name"]: c for c in st["combatants"]}
+    me = by["Lux"]
+    assert [s["name"] for s in me["spells"]] == ["Cure Wounds", "Fireball", "Cause Fear"], "only spells that do something"
+    assert me["spellcasting"] == {"dc": 13, "attack": 5}
+    heal = api.post("/api/rolls", {"check": {"type": "spell", "key": 0, "combatant_id": me["id"]}, "encounter_id": eid}, 201)["roll"]
+    assert heal["kind"] == "heal" and heal["expression"] == "1d8+3" and 4 <= heal["total"] <= 11
+    fire = api.post("/api/rolls", {"check": {"type": "spell", "key": 1, "character_id": lux["id"]}}, 201)["roll"]
+    assert fire["kind"] == "damage" and fire["label"] == "Fireball damage" and 8 <= fire["total"] <= 48
+    api.post("/api/rolls", {"check": {"type": "spell", "key": 2, "character_id": lux["id"]}}, 400)  # effect: nothing to roll
+    api.post("/api/rolls", {"check": {"type": "spell", "key": 9, "character_id": lux["id"]}}, 400)
+    gobs = [by["Goblin 1"]["id"], by["Goblin 2"]["id"]]
+    curl = f"/api/encounters/{eid}/conditions"
+    st = api.post(curl, {"targets": gobs, "name": "Frightened", "rounds": 10, "caster_id": me["id"], "note": "Cause Fear"})
+    conds = {c["name"]: c["conditions"] for c in st["combatants"]}
+    assert [x["name"] for x in conds["Goblin 1"]] == ["Frightened"] and conds["Goblin 2"][0]["rounds_left"] == 10
+    assert conds["Goblin 1"][0]["tick_on"] == me["id"], "a spell's rounds count on the caster's turn"
+    st = api.post(curl, {"targets": gobs, "name": "Frightened", "rounds": 10})
+    assert len([x for x in st["combatants"] if x["name"] == "Goblin 1"][0]["conditions"]) == 1, "no doubles"
+    api.post(curl, {"targets": gobs, "name": ""}, 400)
+    api.post(curl, {"targets": [], "name": "Prone"}, 400)
+
+
+def test_players_see_and_roll_their_own_spells(api, joined):
+    a = joined["a"]
+    api.patch(f"/api/characters/{a['id']}", {"changes": {
+        "spellcasting_ability": {"from": "", "to": "wis"},
+        "spells": {"from": [], "to": [{"name": "Healing Word", "level": 1, "effect": "heal", "dice": "1d4+mod"},
+                                      {"name": "Mage Hand", "level": 0}]}}})
+    pa = joined["pa"]
+    spells = pa.get("/api/play/state")["character"]["spells"]
+    assert [(s["name"], s["effect"]) for s in spells] == [("Healing Word", "heal")]
+    r = pa.post("/api/rolls", {"check": {"type": "spell", "key": 0, "character_id": a["id"]}}, 201)["roll"]
+    assert r["kind"] == "heal"
+    pa.post("/api/rolls", {"check": {"type": "spell", "key": 0, "character_id": joined["b"]["id"]}}, 403)

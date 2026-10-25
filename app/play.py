@@ -14,7 +14,7 @@ from . import fields as F
 from .auth import PLAYER_COOKIE, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
-from .rules import derived, is_healing
+from .rules import derived, is_healing, spell_info
 
 bp = Blueprint("play", __name__)
 
@@ -146,6 +146,7 @@ def _own_character(conn, char_id):
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a)}
                       for i, a in enumerate(c["attacks"] or [])]
+    out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or []) if spell_info(s)["effect"]]
     out["derived"] = d
     from .campaigns import get_campaign
     from .rules import parse_hit_dice
