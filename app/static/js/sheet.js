@@ -206,8 +206,11 @@
         cols.map((c) => h("td", { style: c.width ? "width:" + c.width : null, "data-label": c.label, class: "f-" + c.key },
           c.type === "check"
             ? h("input", { type: "checkbox", checked: !!row[c.key], "aria-label": c.label, onchange: (e) => update(i, c.key, e.target.checked) })
-            : h("input", { type: c.type === "number" ? "number" : "text", value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
-                oninput: (e) => update(i, c.key, c.type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value) }))),
+            : c.type === "number"
+              ? h("input", { type: "number", value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
+                oninput: (e) => update(i, c.key, e.target.value === "" ? null : Number(e.target.value)) })
+              : L.wrapText({ value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
+                oninput: (e) => update(i, c.key, e.target.value) }))),
         h("td", { class: "del" }, h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove row", title: "Remove",
           onclick: () => { const l = clone(model[field]); l.splice(i, 1); b.set(field, l, true); render(); if (opts.after) opts.after(); } }, icon("trash-2", "sm")))));
       container.replaceChildren(
@@ -218,7 +221,7 @@
           b.set(field, (clone(model[field]) || []).concat([Object.assign({}, blank)]), true);
           if (opts.sort) model[field] = opts.sort(model[field]);
           render();
-          const inputs = $$("tbody tr:last-child input[type=text]", container);
+          const inputs = $$("tbody tr:last-child textarea, tbody tr:last-child input[type=text]", container);
           if (inputs[0]) inputs[0].focus();
         } }, icon("plus", "sm"), " ", opts.addLabel || "Add"));
       if (opts.after) opts.after();
@@ -269,7 +272,10 @@
       if (redraw) renderSpells();
     };
     const sp = derived().spell;
-    const text = (i, key, attrs) => h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs));
+    // Short fields (dice, condition with its suggestion list) stay inputs; names and notes wrap.
+    const text = (i, key, attrs) => (attrs && attrs.list) || key === "dice"
+      ? h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs))
+      : L.wrapText(Object.assign({ value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs));
     const pick = (i, key, options, attrs) => h("select", Object.assign({ onchange: (e) => set(i, key, e.target.value, true) }, attrs),
       options.map(([v, l]) => h("option", { value: v, selected: (list[i][key] || "") === v }, l)));
     const cards = list.map((s, i) => {

@@ -35,6 +35,42 @@
     }
     return el;
   }
+  // A one-line text box that wraps and grows instead of hiding long text past its edge.
+  // Enter doesn't add a line (it's still one value); pasted line breaks become spaces.
+  const growObserver = window.ResizeObserver ? new ResizeObserver((entries) => entries.forEach((e) => grow(e.target))) : null;
+  function grow(el) {
+    if (!el.isConnected || !el.offsetWidth) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
+  }
+  function wrapText(attrs) {
+    const a = Object.assign({}, attrs);
+    a.class = ((a.class || "") + " wrap-input").trim();
+    delete a.type;
+    const el = h("textarea", Object.assign({ rows: 1 }, a));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+    el.addEventListener("input", () => {
+      if (/[\r\n]/.test(el.value)) { const at = el.selectionStart; el.value = el.value.replace(/[\r\n]+/g, " "); el.setSelectionRange(at, at); }
+      grow(el);
+    }, true);
+    if (growObserver) growObserver.observe(el); else requestAnimationFrame(() => grow(el));
+    return el;
+  }
+  // List tables stack into cards on phones; each cell is labelled with its column heading.
+  function labelTables(root) {
+    (root || document).querySelectorAll("table.ledger").forEach((t) => {
+      const heads = [...t.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+      if (!heads.length) return;
+      t.querySelectorAll("tbody tr").forEach((tr) => [...tr.children].forEach((td, i) => { if (heads[i] && !td.dataset.label) td.dataset.label = heads[i]; }));
+    });
+  }
+  labelTables();
+  if (window.MutationObserver) new MutationObserver(() => labelTables()).observe(document.body, { childList: true, subtree: true });
+
+  // Sticky bars sit under the top bar, whose height changes when the menu wraps.
+  const topbar = document.querySelector(".topbar");
+  if (topbar && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty("--head-h", topbar.offsetHeight + "px")).observe(topbar);
+
   // Same rule as rules.is_healing on the server: a sheet attack row that restores HP.
   function isHealing(row) {
     return /\b(heal|heals|healing|cure|cures)\b/i.test([row && row.name, row && row.damage, row && row.notes].filter(Boolean).join(" "));
@@ -408,5 +444,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

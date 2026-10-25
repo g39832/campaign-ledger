@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ campaign_name }} · Campaign Ledger</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=14">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=19">
 </head>
 <body class="page-play" data-role="player">
 {% include "_sprite.svg" %}
 <header class="topbar">
   <div class="topbar-inner">
     <span class="wordmark">Campaign <span>Ledger</span></span>
-    <span class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ campaign_name }} · playing as <b>{{ ident.name }}</b></span>
+    <span class="muted" style="overflow-wrap:anywhere">{{ campaign_name }} · playing as <b>{{ ident.name }}</b></span>
     <div class="topbar-right">
       <span class="save-status" id="save-status" data-state="saved"><span class="dot"></span><span class="save-text">Connected</span><button type="button" class="link-btn save-retry" hidden>Retry now</button></span>
       <button type="button" class="btn btn-sm dice-btn" data-dice-open aria-expanded="false" title="Dice tray (D)">{{ icon("dice-5", "sm") }} Dice<span class="dice-mode-flag" hidden></span><span class="dice-badge" hidden></span></button>
@@ -41,9 +41,9 @@
 </main>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 {% set role = "player" %}{% include "_dice_dock.html" %}
-<script src="{{ url_for('static', filename='js/core.js') }}?v=14"></script>
-<script src="{{ url_for('static', filename='js/dice.js') }}?v=14"></script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=14"></script>
-<script src="{{ url_for('static', filename='js/play.js') }}?v=14"></script>
+<script src="{{ url_for('static', filename='js/core.js') }}?v=19"></script>
+<script src="{{ url_for('static', filename='js/dice.js') }}?v=19"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=19"></script>
+<script src="{{ url_for('static', filename='js/play.js') }}?v=19"></script>
 </body>
 </html>

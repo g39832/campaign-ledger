@@ -146,7 +146,7 @@
         h("div", { class: "c-init" }, initIn, h("span", { class: "m" }, signed(c.init_mod))),
         token(c),
         h("div", { class: "c-main" },
-          h("div", { class: "c-name" }, h("span", { style: "overflow:hidden;text-overflow:ellipsis" }, c.name), isCur ? h("span", { class: "acting" }, "acting") : null),
+          h("div", { class: "c-name" }, h("span", null, c.name), isCur ? h("span", { class: "acting" }, "acting") : null),
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },

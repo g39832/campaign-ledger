@@ -189,10 +189,18 @@
       }
       if (this.opts.showLabels !== false && this.view.s * cp > 34) {
         ctx.font = `600 ${cp * 0.26}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "top";
-        const label = t.display.length > 16 ? t.display.slice(0, 15) + "…" : t.display;
-        const lw = ctx.measureText(label).width + cp * 0.16, ly = cy + r + cp * 0.18;
-        ctx.fillStyle = "rgba(20,16,12,.75)"; ctx.fillRect(cx - lw / 2, ly, lw, cp * 0.32);
-        ctx.fillStyle = "#f3ead6"; ctx.fillText(label, cx, ly + cp * 0.03);
+        // Whole name, wrapped by word onto as many lines as it needs (about two squares wide).
+        const maxW = cp * 2.2 * Math.max(1, t.size || 1), lines = [];
+        for (const word of String(t.display).split(/\s+/)) {
+          const tryLine = lines.length ? lines[lines.length - 1] + " " + word : word;
+          if (lines.length && ctx.measureText(tryLine).width <= maxW) lines[lines.length - 1] = tryLine; else lines.push(word);
+        }
+        const lh = cp * 0.3, ly = cy + r + cp * 0.18;
+        lines.forEach((line, n) => {
+          const lw = ctx.measureText(line).width + cp * 0.16;
+          ctx.fillStyle = "rgba(20,16,12,.75)"; ctx.fillRect(cx - lw / 2, ly + n * lh, lw, lh + cp * 0.02);
+          ctx.fillStyle = "#f3ead6"; ctx.fillText(line, cx, ly + n * lh + cp * 0.03);
+        });
       }
       ctx.restore();
     }
