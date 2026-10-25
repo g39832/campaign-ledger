@@ -10,6 +10,26 @@
   {% for o in others %}<a href="{{ url_for('pages.character_morality', char_id=o.id) }}" class="{% if o.id == state.character.id %}is-on{% endif %}">{{ o.name }}</a>{% endfor %}
 </nav>
 
+<section class="ss panel" id="saints-sinners" aria-labelledby="ss-label">
+  <div class="ss-row">
+    <div class="ss-counter" role="group" aria-labelledby="ss-label">
+      <button type="button" class="btn ss-btn ss-down" id="ss-down" aria-label="Down one point (−1)" title="Down one point">−1</button>
+      <div class="ss-score-box">
+        <div class="lbl" id="ss-label">Saints &amp; Sinners</div>
+        <output class="ss-score num" id="ss-score" aria-live="polite">0</output>
+      </div>
+      <button type="button" class="btn ss-btn ss-up" id="ss-up" aria-label="Up one point (+1)" title="Up one point">+1</button>
+    </div>
+    <div class="ss-text">
+      <div class="ss-side" id="ss-side"></div>
+      <div class="ss-title" id="ss-title"></div>
+      <p class="ss-desc" id="ss-desc"></p>
+    </div>
+  </div>
+  <div class="ss-bar" aria-hidden="true"><span class="ss-fill" id="ss-fill"></span><span class="ss-zero"></span></div>
+  <div class="ss-ends"><span>Sinner −100</span><span>0</span><span>Saint +100</span></div>
+</section>
+
 <div class="moral-grid">
   <div>
     <div class="align-now">
@@ -56,4 +76,4 @@
 </div>
 <script type="application/json" id="boot">{{ state | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=4"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=5"></script>{% endblock %}

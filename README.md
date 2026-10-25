@@ -53,6 +53,7 @@ Options:
 | **Characters** | Add PCs and NPCs. A character needs only a name to start. Archive characters you're not using. Only archived characters can be deleted for good. |
 | **Character sheet** | Edit everything on the sheet. Ability modifiers, saves, skills (click the dot: proficient, then expertise), passive scores, proficiency bonus, initiative and spell DC/attack are worked out for you. "Homebrew adjustments" has overrides. The sheet also covers HP, temp HP, quick damage and heal, death saves, hit dice, exhaustion, conditions, attacks, equipment and coins, spells and spell slots, story, notes and a portrait. |
 | **Combat** | Build an encounter from the party, the creature library, or a quick enemy (name, HP, AC and initiative modifier only). Enter or roll initiative. Turn order sorts itself, and the arrows let you change it by hand. Then use Next/Prev turn (keys **N** / **P**), damage, heal, temp HP, undo the last HP change, conditions with round-based durations, and a combat log. Each goblin has its own HP. Damage to a PC changes their character sheet too. |
+| **Saints & Sinners** | At the top of the Morality page: a −100 to +100 score per character, starting at 0, moved with **−1** and **+1** buttons. It shows a title and description for the score (Absolute Sinner, Notorious Villain, Corrupted, Morally Questionable, Unproven, Virtuous, Hero, Saint, Paragon of Good) and whether the character is on the saintly or sinful side. It's separate from the deed ledger below it. |
 | **Morality** | Two scores (law ↔ chaos and good ↔ evil) built from the events you record. There's a 3×3 alignment chart showing the character's path, plus a ledger with running totals and a line where the alignment changed. Events can be edited, reversed or deleted. You can turn automatic alignment off and set it by hand. |
 | **Journal** | Sessions, NPCs, locations, quests, factions, discoveries, decisions, mysteries, plot hooks, loot and notes. Entries can have a status, tags and links to characters, encounters or morality events. Search is at the top. |
 | **Creatures** | A library of stat blocks you can reuse. Enemies added to a fight take a *copy* of the stats, so editing a creature here never changes a fight already set up. |
@@ -249,7 +250,7 @@ Double-click **`run-tests.bat`**, or run:
 .venv\Scripts\python -m pytest -q
 ```
 
-The tests use a temporary database and never touch your real data. There are 113 of them. They cover:
+The tests use a temporary database and never touch your real data. There are 140 of them. They cover:
 
 * derived stats
 * morality recalculation after editing, deleting and reversing events
@@ -274,6 +275,7 @@ The tests use a temporary database and never touch your real data. There are 113
 * server-side fog masking of map images
 * backups that include maps and rolls
 * the v1 → v2 database upgrade
+* Saints & Sinners: ±1 steps, the −100/+100 limits, every level boundary, persistence and the v2 → v3 upgrade
 * rests and hit dice
 * HP corrections and player self-updates, including permission toggles
 * no duplicate character tokens

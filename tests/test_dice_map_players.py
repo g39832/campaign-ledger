@@ -457,7 +457,7 @@ def test_v1_database_is_backed_up_and_upgraded(tmp_path):
     conn.commit()
     conn.close()
     app = create_app({"DATA_DIR": str(data), "AUTO_SNAPSHOT": False})
-    snaps = [f for f in os.listdir(data / "backups") if f.startswith("pre-migration-v1-to-v2")]
+    snaps = [f for f in os.listdir(data / "backups") if f.startswith(f"pre-migration-v1-to-v{appdb.SCHEMA_VERSION}")]
     assert len(snaps) == 1
     s = sqlite3.connect(str(data / "backups" / snaps[0]))
     assert s.execute("PRAGMA user_version").fetchone()[0] == 1

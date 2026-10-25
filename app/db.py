@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS = {
     1: """
@@ -331,6 +331,11 @@ MIGRATIONS = {
         updated_at TEXT NOT NULL
     );
     CREATE INDEX idx_tokens_map ON map_tokens(map_id);
+    """,
+    # v3: Saints & Sinners morality score per character (-100..+100, starts at 0).
+    # Additive only: existing rows get the starting score of 0.
+    3: """
+    ALTER TABLE characters ADD COLUMN morality_score INTEGER NOT NULL DEFAULT 0;
     """,
 }
 

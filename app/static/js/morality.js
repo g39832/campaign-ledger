@@ -220,7 +220,29 @@
     run("POST", "/api/characters/" + CID + "/morality/settings", { [ax + "_start"]: v });
   }));
 
+  // ---- Saints & Sinners: a -100..+100 score moved one point at a time ----
+  function renderSaintsSinners() {
+    const ss = M.saints_sinners;
+    const box = $("#saints-sinners");
+    box.dataset.side = ss.side;
+    $("#ss-score").textContent = ss.score > 0 ? "+" + ss.score : ss.score < 0 ? "−" + Math.abs(ss.score) : "0";
+    $("#ss-title").textContent = ss.title;
+    $("#ss-desc").textContent = ss.description;
+    $("#ss-side").textContent = ss.side === "saint" ? "Saintly side" : ss.side === "sinner" ? "Sinful side" : "Neither side yet";
+    const fill = $("#ss-fill"), pct = Math.abs(ss.score) / 2; // half the bar per side
+    fill.style.left = ss.score >= 0 ? "50%" : (50 - pct) + "%";
+    fill.style.width = pct + "%";
+    $("#ss-down").disabled = ss.score <= -100;
+    $("#ss-up").disabled = ss.score >= 100;
+  }
+  [["#ss-up", 1], ["#ss-down", -1]].forEach(([sel, step]) => $(sel).addEventListener("click", () =>
+    act("POST", "/api/characters/" + CID + "/saints-sinners", { step }, (d) => {
+      M.saints_sinners = d.saints_sinners;
+      renderSaintsSinners();
+    })));
+
   function render() {
+    renderSaintsSinners();
     const c = M.character;
     $("#align-name").textContent = c.alignment || "Unset";
     const note = $("#align-note");

@@ -271,6 +271,7 @@ CHARACTER = {
     "law_start": Int(-1000, 1000),
     "good_start": Int(-1000, 1000),
     "auto_alignment": Bool(),
+    "morality_score": Int(-100, 100),
 }
 CHARACTER_JSON = [k for k, s in CHARACTER.items() if s[0] == "json"]
 

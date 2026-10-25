@@ -783,6 +783,35 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
   .roll-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---------- Saints & Sinners ---------- */
+.ss { padding: 14px 16px 12px; margin-bottom: 22px; border-left: 4px solid var(--line-strong); }
+.ss[data-side="saint"] { border-left-color: var(--brass); }
+.ss[data-side="sinner"] { border-left-color: var(--evil); }
+.ss-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.ss-counter { display: flex; align-items: center; gap: 12px; }
+.ss-btn { min-width: 56px; min-height: 48px; font: 700 1.25rem var(--sans); font-variant-numeric: tabular-nums; }
+.ss-down { color: var(--evil); border-color: color-mix(in srgb, var(--evil) 55%, var(--line-strong)); }
+.ss-up { color: var(--brass); border-color: color-mix(in srgb, var(--brass) 55%, var(--line-strong)); }
+.ss-btn[disabled] { opacity: .35; }
+.ss-score-box { text-align: center; min-width: 7ch; }
+.ss-score { display: block; font: 700 2.8rem/1 var(--sans); }
+.ss[data-side="saint"] .ss-score { color: var(--brass); }
+.ss[data-side="sinner"] .ss-score { color: var(--evil); }
+.ss-text { flex: 1; min-width: 220px; }
+.ss-side { font: 500 .78rem var(--caps); letter-spacing: .06em; color: var(--text-3); }
+.ss-title { font: 700 1.6rem/1.15 var(--caps); }
+.ss-desc { margin: 4px 0 0; font: 400 1.02rem/1.5 var(--serif); color: var(--text-2); }
+.ss-bar { position: relative; height: 12px; margin: 14px 0 4px; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--field); overflow: hidden; }
+.ss-fill { position: absolute; top: 0; bottom: 0; background: var(--line-strong); }
+.ss[data-side="saint"] .ss-fill { background: var(--brass); }
+.ss[data-side="sinner"] .ss-fill { background: var(--evil); }
+.ss-zero { position: absolute; top: -1px; bottom: -1px; left: 50%; width: 2px; margin-left: -1px; background: var(--text-2); }
+.ss-ends { display: flex; justify-content: space-between; font: 500 .75rem var(--caps); letter-spacing: .05em; color: var(--text-3); }
+@media (max-width: 640px) {
+  .ss-counter { width: 100%; justify-content: space-between; }
+  .ss-btn { flex: 1; }
+}
+
 /* ---------- HP corrections ---------- */
 .hp-fix { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .hp-fix .lbl { margin-right: 4px; }

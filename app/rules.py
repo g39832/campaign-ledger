@@ -262,3 +262,40 @@ def long_rest_changes(char):
     if char.get("status") in ("unconscious", "stable", "incapacitated"):
         changes["status"] = "ok"
     return changes
+
+
+# ---- Saints & Sinners -------------------------------------------------------
+# A simple -100..+100 reputation score per character, adjusted one point at a time.
+
+SAINTS_SINNERS_MIN, SAINTS_SINNERS_MAX = -100, 100
+
+SAINTS_SINNERS_LEVELS = [
+    (-100, -76, "Absolute Sinner",
+     "A merciless individual known for cruelty, destruction, and having little regard for innocent life."),
+    (-75, -51, "Notorious Villain",
+     "A feared individual whose selfish or brutal actions have earned them a dangerous reputation."),
+    (-50, -26, "Corrupted",
+     "Someone who frequently puts personal gain above the well-being of others."),
+    (-25, -1, "Morally Questionable",
+     "Someone whose choices are often selfish or questionable, but who has not fully embraced evil."),
+    (0, 0, "Unproven",
+     "Someone whose moral reputation has not yet been established."),
+    (1, 25, "Virtuous",
+     "Someone who generally acts with fairness, compassion, and integrity."),
+    (26, 50, "Hero",
+     "Someone who regularly stands up for others and takes meaningful risks to do what is right."),
+    (51, 75, "Saint",
+     "Someone known for extraordinary kindness, sacrifice, and dedication to helping others."),
+    (76, 100, "Paragon of Good",
+     "A legendary example of compassion and selflessness whose actions inspire others."),
+]
+
+
+def saints_sinners_level(score):
+    """Title and description for a score (clamped to -100..+100)."""
+    score = max(SAINTS_SINNERS_MIN, min(SAINTS_SINNERS_MAX, int(score)))
+    for lo, hi, title, description in SAINTS_SINNERS_LEVELS:
+        if lo <= score <= hi:
+            side = "saint" if score > 0 else "sinner" if score < 0 else "neutral"
+            return {"score": score, "title": title, "description": description, "side": side}
+    raise ValueError(score)

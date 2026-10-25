@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import alignment_for, morality_timeline
+from .rules import SAINTS_SINNERS_MAX, SAINTS_SINNERS_MIN, alignment_for, morality_timeline, saints_sinners_level
 
 bp = Blueprint("morality", __name__, url_prefix="/api")
 
@@ -37,6 +37,7 @@ def morality_state(char_id, conn=None):
         "law": last["law"],
         "good": last["good"],
         "computed_alignment": last["alignment"],
+        "saints_sinners": saints_sinners_level(ch["morality_score"]),
     }
 
 
@@ -190,3 +191,23 @@ def api_overview(cid):
             "computed_alignment": alignment_for(law, good, cfg), "event_count": totals[2],
         })
     return jsonify({"config": cfg, "characters": out})
+
+
+@bp.post("/characters/<int:char_id>/saints-sinners")
+def api_saints_sinners(char_id):
+    """Move the Saints & Sinners score by exactly one point (+1 or -1),
+    never past -100 or +100. A retried request (same op_id) counts once."""
+    data = request.get_json(silent=True) or {}
+    step = data.get("step")
+    if step not in (1, -1) or isinstance(step, bool):
+        raise F.ApiError("step must be 1 or -1")
+    with tx() as conn:
+        row = conn.execute("SELECT morality_score FROM characters WHERE id = ?", (char_id,)).fetchone()
+        if row is None:
+            raise F.NotFound("Character not found")
+        if claim_op(conn, data.get("op_id")):
+            new = max(SAINTS_SINNERS_MIN, min(SAINTS_SINNERS_MAX, row["morality_score"] + step))
+            if new != row["morality_score"]:
+                conn.execute("UPDATE characters SET morality_score = ?, updated_at = ? WHERE id = ?", (new, now_iso(), char_id))
+        score = conn.execute("SELECT morality_score FROM characters WHERE id = ?", (char_id,)).fetchone()["morality_score"]
+    return jsonify({"saints_sinners": saints_sinners_level(score)})
