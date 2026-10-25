@@ -9,6 +9,7 @@
   <span class="grow"></span>
   <button type="button" class="btn btn-sm" id="live-btn">{{ icon("eye-off", "sm") }} <span>Show to players</span></button>
   <a class="btn btn-sm btn-quiet" id="preview-btn" href="#" title="See exactly what players receive">Player view</a>
+  <button type="button" class="btn btn-sm btn-quiet btn-danger" id="delete-map-top" title="Delete this map">{{ icon("trash-2", "sm") }} Delete map</button>
 </div>
 <div class="map-layout">
   <div class="map-stage" id="stage">
@@ -94,6 +95,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=8"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=8"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=10"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=10"></script>
 {% endblock %}

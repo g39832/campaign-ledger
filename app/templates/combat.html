@@ -16,6 +16,7 @@
     <button class="btn" type="button" id="start">{{ icon("play", "sm") }} Start combat</button>
     <button class="btn btn-quiet" type="button" id="end">{{ icon("flag", "sm") }} End</button>
     <button class="btn" type="button" id="reopen">{{ icon("rotate-ccw", "sm") }} Reopen</button>
+    <button class="btn btn-quiet" type="button" id="open-map" title="Open this fight on a battle map (one is made for it if needed)">{{ icon("map", "sm") }} Battle map</button>
   </div>
 </div>
 
@@ -74,4 +75,4 @@
 <script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=8"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=10"></script>{% endblock %}

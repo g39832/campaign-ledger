@@ -400,32 +400,60 @@ def _has_character_token(conn, map_id, char_id):
         "WHERE t.map_id = ? AND (t.character_id = ? OR c.character_id = ?)", (map_id, char_id, char_id)).fetchone() is not None
 
 
+def place_encounter_tokens(conn, map_id):
+    """Give every combatant in the map's linked encounter a token if it doesn't
+    have one yet: the party down the left edge, enemies down the right edge,
+    for the DM to arrange. Returns how many were placed."""
+    m = map_dict(_map_row(conn, map_id))
+    if not m["encounter_id"]:
+        raise F.ApiError("Link this map to an encounter first")
+    have = {r["combatant_id"] for r in conn.execute("SELECT combatant_id FROM map_tokens WHERE map_id = ?", (map_id,))}
+    combs = conn.execute("SELECT * FROM combatants WHERE encounter_id = ? ORDER BY sort_order, id", (m["encounter_id"],)).fetchall()
+    ts, added, row = now_iso(), 0, {"left": 0, "right": 0}
+    for cb in combs:
+        if cb["id"] in have or (cb["character_id"] and _has_character_token(conn, map_id, cb["character_id"])):
+            continue
+        side = "right" if cb["kind"] == "enemy" else "left"
+        x = max(0, m["cols"] - 1) if side == "right" else 0
+        y = min(m["rows"] - 1, row[side])
+        row[side] += 1
+        conn.execute(
+            "INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,1,?,?,?)",
+            (new_uid(), map_id, cb["kind"], cb["id"], x, y, cb["hidden"], ts, ts))
+        added += 1
+    if added:
+        _bump(conn, map_id)
+    return added
+
+
 @bp.post("/maps/<int:map_id>/tokens/from-encounter")
 def api_tokens_from_encounter(map_id):
-    """Place a token for every combatant in the linked encounter that doesn't
-    have one yet, lined up along the left edge for the DM to arrange."""
     with tx() as conn:
-        m = map_dict(_map_row(conn, map_id))
-        if not m["encounter_id"]:
-            raise F.ApiError("Link this map to an encounter first")
-        have = {r["combatant_id"] for r in conn.execute("SELECT combatant_id FROM map_tokens WHERE map_id = ?", (map_id,))}
-        have_chars = {r["character_id"] for r in conn.execute("SELECT character_id FROM map_tokens WHERE map_id = ? AND character_id IS NOT NULL", (map_id,))}
-        combs = conn.execute("SELECT * FROM combatants WHERE encounter_id = ? ORDER BY sort_order, id", (m["encounter_id"],)).fetchall()
-        ts, added, i = now_iso(), 0, 0
-        for cb in combs:
-            if cb["id"] in have or (cb["character_id"] and (cb["character_id"] in have_chars or _has_character_token(conn, map_id, cb["character_id"]))):
-                continue
-            x = 0 if cb["kind"] != "enemy" else max(0, m["cols"] - 1)
-            conn.execute(
-                "INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?,1,?,?,?)",
-                (new_uid(), map_id, cb["kind"], cb["id"], x, min(m["rows"] - 1, i), cb["hidden"], ts, ts))
-            i += 1
-            added += 1
-        if not added:
+        if not place_encounter_tokens(conn, map_id):
             raise F.ApiError("Every combatant already has a token")
-        _bump(conn, map_id)
     return jsonify(dm_state(map_id))
+
+
+@bp.post("/encounters/<int:enc_id>/map")
+def api_encounter_map(enc_id):
+    """The battle map for an encounter: the newest map linked to it, or a new
+    map made for it. Either way, every combatant ends up with a token."""
+    with tx() as conn:
+        enc = conn.execute("SELECT id, campaign_id, name FROM encounters WHERE id = ?", (enc_id,)).fetchone()
+        if enc is None:
+            raise F.NotFound("Encounter not found")
+        row = conn.execute("SELECT id FROM maps WHERE encounter_id = ? ORDER BY updated_at DESC LIMIT 1", (enc_id,)).fetchone()
+        created = row is None
+        if created:
+            ts, cols, rows = now_iso(), 24, 16
+            map_id = F.insert(conn, "maps", F.MAP, {"name": enc["name"], "cols": cols, "rows": rows, "encounter_id": enc_id},
+                              {"uid": new_uid(), "campaign_id": enc["campaign_id"], "revealed": "0" * (cols * rows),
+                               "created_at": ts, "updated_at": ts})
+        else:
+            map_id = row["id"]
+        placed = place_encounter_tokens(conn, map_id)
+    return jsonify({"map_id": map_id, "created": created, "placed": placed})
 
 
 def _token_map(conn, token_id):

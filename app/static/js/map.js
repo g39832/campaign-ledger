@@ -165,7 +165,7 @@
   });
   const clr = $("#clear-image");
   if (clr) armed(clr, () => run("DELETE", "/api/maps/" + MID + "/image", {}, () => location.reload()), "Remove the image?");
-  armed($("#delete-map"), () => act("DELETE", "/api/maps/" + MID, {}, () => { location.href = "/map"; }), "Delete this map for good?");
+  ["#delete-map", "#delete-map-top"].forEach((sel) => armed($(sel), () => act("DELETE", "/api/maps/" + MID, {}, () => { location.href = "/map"; }), "Delete this map for good?"));
 
   // ---- stay in sync with players moving tokens and the combat screen -------------------------
   async function refresh(force) {
@@ -185,4 +185,8 @@
   // Dice can tumble across the map (an overlay canvas that never touches map data).
   if (window.Dice) { Dice.overlayHost = $("#stage"); $(".dd-overmap").hidden = false; }
   apply(S);
+  if (new URLSearchParams(location.search).has("new")) {
+    toast("Made a battle map for “" + (S.encounter ? S.encounter.name : S.map.name) + "”. The party is on the left edge and enemies on the right; drag them into place.", "ok", { ms: 9000 });
+    history.replaceState(null, "", location.pathname);
+  }
 })();

@@ -501,3 +501,40 @@ def test_dm_link_works_on_a_device_that_already_joined_as_a_player(app, api):
     assert tablet.get("/api/campaigns").status_code == 200
     assert tablet.get("/morality").status_code == 200
     assert tablet.get("/dm-login?key=wrong").status_code == 403
+
+
+def test_battle_map_button_makes_or_opens_the_encounters_map(api):
+    camp = api.campaign()
+    hero = api.character(camp["id"], name="Hero")
+    eid = api.encounter(camp["id"], "Mush Rush")["encounter"]["id"]
+    api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Myconid", "max_hp": 10, "count": 3}})
+    api.post(f"/api/encounters/{eid}/end")  # works for ended fights too
+    r = api.post(f"/api/encounters/{eid}/map")
+    assert r["created"] and r["placed"] == 4
+    st = api.get(f"/api/maps/{r['map_id']}")
+    assert st["map"]["name"] == "Mush Rush" and st["encounter"]["id"] == eid
+    toks = {t["display"]: (t["x"], t["y"]) for t in st["tokens"]}
+    assert toks["Hero"] == (0, 0) and toks["Myconid 1"] == (23, 0) and toks["Myconid 3"] == (23, 2)
+    # second press opens the same map and only adds newcomers
+    api.post(f"/api/encounters/{eid}/combatants", {"quick": {"name": "Shrieker", "max_hp": 13}})
+    again = api.post(f"/api/encounters/{eid}/map")
+    assert again["map_id"] == r["map_id"] and not again["created"] and again["placed"] == 1
+    assert len(api.get(f"/api/maps/{r['map_id']}")["tokens"]) == 5
+
+
+def test_deleting_a_map_leaves_the_fight_alone(api, client):
+    camp = api.campaign()
+    hero = api.character(camp["id"], name="Hero", max_hp=20)
+    eid = api.encounter(camp["id"], "Mush Rush")["encounter"]["id"]
+    api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Myconid", "max_hp": 10}})
+    mid = api.post(f"/api/encounters/{eid}/map")["map_id"]
+    api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
+    before = api.get(f"/api/encounters/{eid}")
+    assert 'data-delete-map="%d"' % mid in client.get("/map").get_data(as_text=True)
+    api.delete(f"/api/maps/{mid}")
+    assert api.get(f"/api/campaigns/{camp['id']}/maps")["maps"] == []
+    assert api.get(f"/api/campaigns/{camp['id']}/maps")["live_map_id"] is None, "players stop seeing it"
+    after = api.get(f"/api/encounters/{eid}")
+    assert [(c["name"], c["hp"]) for c in after["combatants"]] == [(c["name"], c["hp"]) for c in before["combatants"]]
+    assert api.get(f"/api/characters/{hero['id']}")["character"]["current_hp"] == 20
+    api.get(f"/api/maps/{mid}", expect=404)

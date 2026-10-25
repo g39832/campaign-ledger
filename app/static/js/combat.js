@@ -89,6 +89,9 @@
   $("#prev").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/prev", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#start").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/start", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#reopen").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/reopen"));
+  $("#open-map").addEventListener("click", () => act("POST", "/api/encounters/" + EID + "/map", {}, (d) => {
+    location.href = "/map/" + d.map_id + (d.created ? "?new=1" : "");
+  }));
   armed($("#end"), () => run("POST", "/api/encounters/" + EID + "/end"), "End combat? Click again");
   $("#undo").addEventListener("click", () => {
     act("POST", "/api/encounters/" + EID + "/undo", {}, apply, {

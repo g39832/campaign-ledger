@@ -10,7 +10,7 @@
   <label class="field" style="flex:0 0 90px"><span>Columns</span><input type="number" name="cols" min="1" max="200" value="24"></label>
   <label class="field" style="flex:0 0 90px"><span>Rows</span><input type="number" name="rows" min="1" max="200" value="16"></label>
   <label class="field" style="flex:1 1 180px"><span>Encounter (optional)</span>
-    <select name="encounter_id"><option value="">None</option>{% for e in encounters if e.status != "ended" %}<option value="{{ e.id }}">{{ e.name }}</option>{% endfor %}</select></label>
+    <select name="encounter_id"><option value="">None</option>{% for e in encounters %}<option value="{{ e.id }}">{{ e.name }}{% if e.status == "ended" %} (ended){% endif %}</option>{% endfor %}</select></label>
   <label class="field" style="flex:1 1 200px"><span>Map image (optional)</span><input type="file" name="image" accept="image/png,image/jpeg,image/webp"></label>
   <button class="btn btn-primary" type="submit">{{ icon("plus", "sm") }} Create map</button>
 </form>
@@ -27,7 +27,8 @@
       <td class="num">{{ m.cols }} × {{ m.rows }}</td>
       <td>{{ m.encounter_name or "—" }}</td>
       <td class="r num">{{ m.token_count }}</td>
-      <td class="r"><a class="btn btn-sm" href="{{ url_for('pages.map_edit', map_id=m.id) }}">Open</a></td>
+      <td class="r nowrap"><a class="btn btn-sm" href="{{ url_for('pages.map_edit', map_id=m.id) }}">Open</a>
+        <button type="button" class="btn btn-sm btn-quiet btn-danger" data-delete-map="{{ m.id }}" data-name="{{ m.name }}" title="Delete this map">{{ icon("trash-2", "sm") }} Delete</button></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -39,6 +40,13 @@
 {% endblock %}
 {% block scripts %}
 <script>
+// Deleting a map removes the map, its tokens, fog and terrain. Encounters, characters
+// and their HP are separate records and aren't touched.
+L.$$("[data-delete-map]").forEach((b) => L.armed(b, () => L.act("DELETE", "/api/maps/" + b.dataset.deleteMap, {}, () => {
+  b.closest("tr").remove();
+  L.toast("Deleted the map “" + b.dataset.name + "”. Its encounter and characters are unchanged.", "ok");
+  if (!document.querySelector("[data-delete-map]")) location.reload();
+}), "Delete “" + b.dataset.name + "”?"));
 L.$("#new-map").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
@@ -50,6 +58,7 @@ L.$("#new-map").addEventListener("submit", async (e) => {
       const fd = new FormData(); fd.append("file", f.image.files[0]);
       await L.api("POST", "/api/maps/" + d.map.id + "/image", fd);
     }
+    if (body.encounter_id) await L.api("POST", "/api/maps/" + d.map.id + "/tokens/from-encounter", {}).catch(() => {});
     location.href = "/map/" + d.map.id;
   } catch (err) { L.toast(err.message, "error"); }
 });
