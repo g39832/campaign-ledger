@@ -514,7 +514,7 @@ def test_battle_map_button_makes_or_opens_the_encounters_map(api):
     st = api.get(f"/api/maps/{r['map_id']}")
     assert st["map"]["name"] == "Mush Rush" and st["encounter"]["id"] == eid
     toks = {t["display"]: (t["x"], t["y"]) for t in st["tokens"]}
-    assert toks["Hero"] == (0, 0) and toks["Myconid 1"] == (23, 0) and toks["Myconid 3"] == (23, 2)
+    assert toks["Hero"] == (0, 0) and toks["Myconid 1"] == (23, 0) and toks["Myconid 3"] == (23, 4)
     # second press opens the same map and only adds newcomers
     api.post(f"/api/encounters/{eid}/combatants", {"quick": {"name": "Shrieker", "max_hp": 13}})
     again = api.post(f"/api/encounters/{eid}/map")
@@ -538,3 +538,25 @@ def test_deleting_a_map_leaves_the_fight_alone(api, client):
     assert [(c["name"], c["hp"]) for c in after["combatants"]] == [(c["name"], c["hp"]) for c in before["combatants"]]
     assert api.get(f"/api/characters/{hero['id']}")["character"]["current_hp"] == 20
     api.get(f"/api/maps/{mid}", expect=404)
+
+
+def test_auto_placed_tokens_leave_room_for_labels(api):
+    camp = api.campaign()
+    eid = api.encounter(camp["id"], "Spaced")["encounter"]["id"]
+    for n in ("A", "B", "C"):
+        api.character(camp["id"], name=n)
+    chars = [c["id"] for c in api.get(f"/api/campaigns/{camp['id']}/characters")["characters"]]
+    api.post(f"/api/encounters/{eid}/combatants", {"characters": chars})
+    mid = api.post(f"/api/encounters/{eid}/map")["map_id"]
+    ys = sorted(t["y"] for t in api.get(f"/api/maps/{mid}")["tokens"])
+    assert ys == [0, 2, 4]
+
+
+def test_notes_are_shown_where_you_look(api, client):
+    camp = api.campaign()
+    ch = api.character(camp["id"], name="Noted")
+    sheet = client.get(f"/characters/{ch['id']}").get_data(as_text=True)
+    assert 'id="notes-preview"' in sheet, "notes show on the main sheet tab"
+    mid = api.post(f"/api/campaigns/{camp['id']}/maps", {"name": "Cave"}, 201)["map"]["id"]
+    page = client.get(f"/map/{mid}").get_data(as_text=True)
+    assert page.index('data-m="notes"') < page.index("Map &amp; grid settings"), "map notes sit outside the settings panel"

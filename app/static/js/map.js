@@ -110,7 +110,8 @@
     $("#tokens").replaceChildren(...(S.tokens.length ? S.tokens.map((t) => h("li", { class: t.id === selectedToken ? "is-sel" : "", onclick: () => { selectedToken = t.id; view.selectedId = t.id; view.draw(); renderSelected(); renderTokens(); } },
       h("span", { class: "swatch", style: "background:" + (t.color || MapView.KIND_COLOR[t.kind]) }),
       h("span", { class: "nm" }, t.display), t.hidden || t.combatant_hidden ? h("span", { class: "faint", title: "Hidden from players" }, icon("eye-off", "sm")) : null,
-      h("span", { class: "faint", style: "font-size:.8rem" }, t.kind))) : [h("li", { class: "faint" }, "No tokens yet.")]));
+      h("span", { class: "faint", style: "font-size:.8rem" }, t.kind),
+      (t.notes || "").trim() ? h("span", { class: "c-note tok-note", title: t.notes }, icon("scroll-text", "sm"), h("span", null, t.notes.trim())) : null)) : [h("li", { class: "faint" }, "No tokens yet.")]));
   }
   $("#from-enc").addEventListener("click", () => run("POST", "/api/maps/" + MID + "/tokens/from-encounter"));
   $("#add-char").addEventListener("change", (e) => {
@@ -139,7 +140,7 @@
           h("label", { class: "field" }, h("span", null, "Colour"), h("input", { type: "color", value: t.color || MapView.KIND_COLOR[t.kind], style: "min-height:34px;padding:2px", onchange: (e) => patch("color", e.target.value) }))),
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: t.hidden, onchange: (e) => patch("hidden", e.target.checked) }), "Hidden from players"),
         t.combatant_hidden ? h("div", { class: "faint", style: "font-size:.82rem" }, "This combatant is hidden in the encounter, so players can't see it either way.") : null,
-        h("label", { class: "field" }, h("span", null, "DM notes"), h("textarea", { rows: 2, onchange: (e) => patch("notes", e.target.value) }, t.notes)),
+        h("label", { class: "field" }, h("span", null, "Token notes (only you see these)"), h("textarea", { rows: 3, class: "note-input", onchange: (e) => patch("notes", e.target.value) }, t.notes)),
         del));
   }
 

@@ -71,7 +71,7 @@
     <button type="button" class="is-on" data-tab="main" role="tab">Sheet</button>
     <button type="button" data-tab="spells" role="tab">Spells</button>
     <button type="button" data-tab="story" role="tab">Story</button>
-    <button type="button" data-tab="notes" role="tab">Notes</button>
+    <button type="button" data-tab="notes" role="tab">Notes <span class="tab-dot" id="notes-dot" hidden title="This character has notes"></span></button>
     <a href="{{ url_for('pages.morality_overview') }}">{{ icon("scale", "sm") }} Team morality</a>
   </div>
 
@@ -147,6 +147,10 @@
           {% endfor %}
         </div>
       </section>
+      <section class="section">
+        <h3 class="rule-head">Notes <button type="button" class="btn btn-sm btn-quiet" id="edit-notes" style="margin-left:auto">{{ icon("pencil", "sm") }} Edit</button></h3>
+        <div class="note-box" id="notes-preview"></div>
+      </section>
     </div>
   </section>
 
@@ -190,4 +194,4 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=10"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/sheet.js') }}?v=11"></script>{% endblock %}

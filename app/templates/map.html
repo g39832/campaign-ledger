@@ -48,6 +48,11 @@
     <div class="panel" id="selected-panel"></div>
 
     <div class="panel">
+      <h3 class="rule-head">Map notes <span class="count">only you see these</span></h3>
+      <textarea data-m="notes" rows="4" class="note-input" aria-label="Map notes" placeholder="Secrets, traps, what's behind the door…"></textarea>
+    </div>
+
+    <div class="panel">
       <h3 class="rule-head">Turn order</h3>
       <div id="order"></div>
     </div>
@@ -86,7 +91,6 @@
           {% if state.map.image %}<button type="button" class="btn btn-sm btn-quiet" id="clear-image">Remove image</button>{% endif %}
         </div>
         <p class="faint" style="font-size:.84rem;margin:0">To line the grid up with a map image, set the square size to the image's square size in pixels, then nudge the offsets.</p>
-        <label class="field"><span>DM notes (never shown to players)</span><textarea data-m="notes" rows="4"></textarea></label>
         <button type="button" class="btn btn-sm btn-quiet btn-danger" id="delete-map">{{ icon("trash-2", "sm") }} Delete map</button>
       </div>
     </details>
@@ -95,6 +99,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=10"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=10"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=11"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=11"></script>
 {% endblock %}

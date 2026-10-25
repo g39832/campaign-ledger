@@ -150,7 +150,8 @@
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
-            x.name + (x.rounds_left != null ? " " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null),
+            x.name + (x.rounds_left != null ? " " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
+          (c.notes || "").trim() ? h("div", { class: "c-note", title: c.notes }, icon("scroll-text", "sm"), h("span", null, c.notes.trim())) : null),
         h("div", { class: "c-hp" },
           h("div", { class: "hp-text" }, h("span", null, h("b", null, c.hp), " / " + c.max_hp), c.temp_hp ? h("span", { class: "temp" }, "+" + c.temp_hp + " temp") : null),
           hpbar(c)),
@@ -186,6 +187,12 @@
         h("div", { class: "faint", style: "font-size:.9rem" }, c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC"),
           c.linked ? [" · ", h("a", { href: "/characters/" + c.character_id }, "open sheet")] : null)),
       statusSel));
+
+    // Notes sit right under the name so they're seen before anything else.
+    const notes = h("textarea", { rows: 3, placeholder: "Notes for this combatant", "aria-label": "Combatant notes", "data-keep": "notes-" + cid, class: "note-input" },
+      c.notes);
+    notes.addEventListener("change", () => run("PATCH", "/api/combatants/" + cid, { changes: { notes: { from: c.notes, to: notes.value } } }));
+    sections.push(h("div", { class: "detail-sec" }, h("h3", { class: "rule-head" }, "Notes"), notes));
 
     // HP
     const editMax = h("input", { type: "number", min: 0, value: c.max_hp, "aria-label": "Max HP", style: "width:7ch" });
@@ -286,12 +293,6 @@
     // Stat block (enemies)
     if (c.kind === "enemy") sections.push(statblock(c));
 
-    // Notes
-    const notes = h("textarea", { rows: 3, placeholder: "Notes for this combatant", "aria-label": "Combatant notes", "data-keep": "notes-" + cid },
-      c.notes);
-    notes.addEventListener("change", () => run("PATCH", "/api/combatants/" + cid, { changes: { notes: { from: c.notes, to: notes.value } } }));
-    sections.push(h("div", { class: "detail-sec" }, h("h3", { class: "rule-head" }, "Notes"), notes));
-
     box.replaceChildren(...sections, h("datalist", { id: "cond-names" }, CONDITIONS.map((n) => h("option", { value: n }))));
   }
   const ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
@@ -368,7 +369,7 @@
       line("Condition immunities", s.condition_immunities), line("Senses", s.senses), line("Languages", s.languages),
       s.traits ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Traits"), h("div", { class: "pre" }, s.traits)) : null,
       s.attacks ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Actions"), h("div", { class: "pre" }, s.attacks)) : null,
-      s.notes ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Notes"), h("div", { class: "pre" }, s.notes)) : null);
+      s.notes ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Creature notes"), h("div", { class: "pre note-box" }, s.notes)) : null);
   }
 
   // ---- log ----------------------------------------------------------------------

@@ -294,6 +294,17 @@
     toast("All spell slots restored.", "ok");
   });
 
+  // Notes are written on the Notes tab but shown on the main sheet too, so they're never out of sight.
+  function renderNotes() {
+    const text = (model.notes || "").trim();
+    $("#notes-preview").textContent = text || "No notes yet.";
+    $("#notes-preview").classList.toggle("is-empty", !text);
+    $("#notes-dot").hidden = !text;
+  }
+  $("[data-f='notes']").addEventListener("input", renderNotes);
+  $("#edit-notes").addEventListener("click", () => { showTab("notes"); $("[data-f='notes']").focus(); });
+  renderNotes();
+
   // ---- re-render after remote change -----------------------------------------------
   function renderField(f) {
     const el = b.inputs.get(f);
@@ -307,6 +318,7 @@
     if (f === "spells") renderSpells();
     if (f === "spell_slots") renderSlots();
     if (f === "hit_dice" || f === "hit_dice_used") renderRest();
+    if (f === "notes") renderNotes();
   }
 
   // ---- tabs ----------------------------------------------------------------------

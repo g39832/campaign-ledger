@@ -409,14 +409,17 @@ def place_encounter_tokens(conn, map_id):
         raise F.ApiError("Link this map to an encounter first")
     have = {r["combatant_id"] for r in conn.execute("SELECT combatant_id FROM map_tokens WHERE map_id = ?", (map_id,))}
     combs = conn.execute("SELECT * FROM combatants WHERE encounter_id = ? ORDER BY sort_order, id", (m["encounter_id"],)).fetchall()
+    todo = [cb for cb in combs
+            if cb["id"] not in have and not (cb["character_id"] and _has_character_token(conn, map_id, cb["character_id"]))]
+    side_of = lambda cb: "right" if cb["kind"] == "enemy" else "left"
+    # Leave a blank row between tokens when the map is tall enough, so name labels don't overlap.
+    step = {s: 2 if 2 * sum(side_of(cb) == s for cb in todo) - 1 <= m["rows"] else 1 for s in ("left", "right")}
     ts, added, row = now_iso(), 0, {"left": 0, "right": 0}
-    for cb in combs:
-        if cb["id"] in have or (cb["character_id"] and _has_character_token(conn, map_id, cb["character_id"])):
-            continue
-        side = "right" if cb["kind"] == "enemy" else "left"
+    for cb in todo:
+        side = side_of(cb)
         x = max(0, m["cols"] - 1) if side == "right" else 0
         y = min(m["rows"] - 1, row[side])
-        row[side] += 1
+        row[side] += step[side]
         conn.execute(
             "INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
             "VALUES (?,?,?,?,?,?,1,?,?,?)",
