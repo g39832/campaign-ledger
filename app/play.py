@@ -393,20 +393,38 @@ def api_player_kick(pid):
     return jsonify({"ok": True})
 
 
-def lan_addresses():
-    ips = set()
+def _primary_ip():
+    """The address this computer uses on its home network (the one with the default route)."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("10.255.255.255", 1))
-        ips.add(s.getsockname()[0])
+        ip = s.getsockname()[0]
         s.close()
+        return ip
     except OSError:
-        pass
+        return None
+
+
+def lan_addresses():
+    """Addresses other devices can use, most useful first: the home-network
+    address, then Tailscale (only reachable from your Tailscale devices).
+    Virtual adapters (WSL, Hyper-V, Docker) are left out: nothing else can reach them."""
+    primary = _primary_ip()
+    found = set()
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if not ip.startswith("127."):
-                ips.add(ip)
+            found.add(info[4][0])
     except OSError:
         pass
-    return sorted(ips)
+    if primary:
+        found.add(primary)
+    out = []
+    if primary and not primary.startswith("127."):
+        out.append({"ip": primary, "label": "Home network (same Wi-Fi)"})
+    for ip in sorted(found):
+        if ip == primary or ip.startswith(("127.", "169.254.")):
+            continue
+        a, b = (int(x) for x in ip.split(".")[:2])
+        if a == 100 and 64 <= b <= 127:
+            out.append({"ip": ip, "label": "Tailscale (only from your Tailscale devices)"})
+    return out

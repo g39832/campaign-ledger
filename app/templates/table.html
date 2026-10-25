@@ -74,7 +74,9 @@
     $("#off-code").hidden = !info.join_code;
     $("#live-map").value = info.live_map_id || "";
     const urls = $("#urls");
-    if (urls) urls.replaceChildren(...(info.addresses.length ? info.addresses.map((ip) => h("div", null, "http://" + ip + ":" + info.port + "/join" + (info.join_code ? "?code=" + info.join_code : ""))) : [h("div", { class: "faint" }, "Couldn't detect this computer's network address.")]));
+    if (urls) urls.replaceChildren(...(info.addresses.length ? info.addresses.map((a) => h("div", { style: "margin-bottom:6px" },
+      h("div", null, "http://" + a.ip + ":" + info.port + "/join" + (info.join_code ? "?code=" + info.join_code : "")),
+      h("div", { class: "faint", style: "font:400 .85rem var(--sans)" }, a.label))) : [h("div", { class: "faint" }, "Couldn't detect this computer's network address.")]));
     $("#player-count").textContent = info.players.length;
     $("#players").replaceChildren(...(info.players.length ? info.players.map((p) => {
       const sel = h("select", { style: "width:auto", "aria-label": "Character for " + p.name, onchange: (e) => act("PATCH", "/api/players/" + p.id, { character_id: Number(e.target.value) || null }, load) },
@@ -88,8 +90,11 @@
   armed($("#off-code"), () => act("POST", "/api/campaigns/" + CID + "/join-code", { action: "off" }, load), "Stop new joins?");
   $("#live-map").addEventListener("change", (e) => act("POST", "/api/campaigns/" + CID + "/live-map", { map_id: Number(e.target.value) || null }, () => toast("Players' map updated.", "ok")));
   $("#dm-link").addEventListener("click", () => act("POST", "/api/dm-key", {}, (d) => {
-    const base = info && info.addresses[0] ? "http://" + info.addresses[0] + ":" + info.port : location.origin;
-    $("#dm-link-out").textContent = base + "/dm-login?key=" + d.key;
+    // One link per reachable address, home network first. Making a new link cancels older ones.
+    const addrs = info && info.addresses.length ? info.addresses : [{ ip: location.hostname, label: "" }];
+    $("#dm-link-out").replaceChildren(...addrs.map((a) => h("div", { style: "margin-bottom:8px" },
+      h("div", null, "http://" + a.ip + ":" + (info ? info.port : location.port) + "/dm-login?key=" + d.key),
+      a.label ? h("div", { class: "faint", style: "font:400 .85rem var(--sans)" }, a.label) : null)));
   }));
   armed($("#dm-revoke"), () => act("DELETE", "/api/dm-key", {}, () => { $("#dm-link-out").textContent = ""; toast("DM links cancelled.", "ok"); }), "Cancel all DM links?");
   load();

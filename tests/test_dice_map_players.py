@@ -475,3 +475,14 @@ def test_new_pages_render(api, battlemap, joined):
     for url in ("/map", f"/map/{battlemap['mid']}", "/table"):
         assert c.get(url).status_code == 200, url
     assert joined["pa"].c.get("/play").status_code == 200
+
+
+def test_share_addresses_put_home_network_first(monkeypatch):
+    """DM and join links must use an address the tablet can reach: the home
+    network first, Tailscale labelled, virtual adapters (WSL/Hyper-V) left out."""
+    from app import play
+    monkeypatch.setattr(play, "_primary_ip", lambda: "192.168.1.10")
+    monkeypatch.setattr(play.socket, "getaddrinfo", lambda *a, **k: [
+        (2, 1, 6, "", ("100.112.51.35", 0)), (2, 1, 6, "", ("172.17.144.1", 0)), (2, 1, 6, "", ("192.168.1.10", 0))])
+    assert [a["ip"] for a in play.lan_addresses()] == ["192.168.1.10", "100.112.51.35"]
+    assert "Tailscale" in play.lan_addresses()[1]["label"]
