@@ -6,7 +6,8 @@ import sqlite3
 import pytest
 
 from app import create_app, db as appdb
-from app.rules import SAINTS_SINNERS_LEVELS, saints_sinners_level
+from app import dice
+from app.rules import SAINTS_SINNERS_DETAILS, SAINTS_SINNERS_LEVELS, saints_sinners_level
 from tests.conftest import Api
 
 EXPECTED = {
@@ -171,3 +172,48 @@ def test_morality_page_is_just_the_tracker(api, client, camp):
     r = client.get(f"/characters/{ch['id']}/morality")
     assert r.status_code == 302 and r.headers["Location"].endswith("/morality")
     assert "Saints &amp; Sinners" in client.get("/").get_data(as_text=True)
+
+
+PROS_CONS = {  # from the DM's Saints & Sinners table
+    "Absolute Sinner": ("Feared by enemies", "Authorities hunt you"),
+    "Notorious Villain": ("Criminal factions may offer deals", "Higher scrutiny from law enforcement"),
+    "Corrupted": ("Easier access to shady contacts", "Honest NPCs become wary"),
+    "Morally Questionable": ("Flexibility to negotiate with either side", "People may hesitate to trust you"),
+    "Unproven": ("No established reputation", "No reputation-based favors"),
+    "Virtuous": ("Civilians are more welcoming", "Criminals may see you as an obstacle"),
+    "Hero": ("Better cooperation from communities", "Enemies may target you to damage your reputation"),
+    "Saint": ("Strong community support", "Greater scrutiny"),
+    "Paragon of Good": ("Legendary reputation", "Major enemies take notice"),
+}
+
+
+@pytest.mark.parametrize("title", [t for _, _, t, _ in SAINTS_SINNERS_LEVELS])
+def test_every_level_has_benefits_drawbacks_examples_and_valid_rolls(title):
+    d = SAINTS_SINNERS_DETAILS[title]
+    assert d["pros"][0] == PROS_CONS[title][0] and d["cons"][0] == PROS_CONS[title][1]
+    assert d["modifiers"] and len(d["examples"]) >= 2 and d["rolls"]
+    for r in d["rolls"]:
+        dice.parse(r["expression"])  # every roll button is a valid dice expression
+        assert r["label"]
+
+
+def test_details_follow_the_score(api, camp):
+    s = api.post(url(camp), {"value": -80})["saints_sinners"]
+    assert s["title"] == "Absolute Sinner" and s["pros"][0] == "Feared by enemies" and s["range"] == [-100, -76]
+    s = api.post(url(camp), {"value": 80})["saints_sinners"]
+    assert s["title"] == "Paragon of Good" and s["cons"][0] == "Major enemies take notice"
+
+
+def test_page_shows_effects_and_all_levels(api, client, camp):
+    html = client.get("/morality").get_data(as_text=True)
+    for piece in ('id="ss-pros"', 'id="ss-cons"', 'id="ss-mods"', 'id="ss-examples"', 'id="ss-rolls"', "All levels"):
+        assert piece in html, piece
+    for _, _, title, _ in SAINTS_SINNERS_LEVELS:
+        assert f'data-title="{title}"' in html
+
+
+def test_effect_rolls_go_through_the_dice_roller(api, camp):
+    r = SAINTS_SINNERS_DETAILS["Notorious Villain"]["rolls"][0]
+    roll = api.post("/api/rolls", {"expression": r["expression"], "label": "Notorious Villain: " + r["label"],
+                                   "campaign_id": camp["id"]}, 201)["roll"]
+    assert 1 <= roll["total"] <= 6 and roll["label"].startswith("Notorious Villain")

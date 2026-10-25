@@ -115,7 +115,9 @@ def morality_overview():
     if camp is None:
         return redirect(url_for("pages.dashboard"))
     from .morality import team_morality
-    return render_template("morality.html", **_shell("morality", camp, saints_sinners=team_morality(camp["id"])))
+    from .rules import saints_sinners_all
+    return render_template("morality.html", **_shell("morality", camp, saints_sinners=team_morality(camp["id"]),
+                                                     levels=saints_sinners_all()))
 
 
 @bp.get("/combat")

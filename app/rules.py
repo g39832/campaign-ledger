@@ -291,11 +291,151 @@ SAINTS_SINNERS_LEVELS = [
 ]
 
 
+# What each level means at the table: pros and cons (from the DM's table), suggested
+# roll modifiers (applied by the DM, not automatically), story examples, and
+# table rolls the DM can click to roll in the dice tray.
+SAINTS_SINNERS_DETAILS = {
+    "Absolute Sinner": {
+        "pros": ["Feared by enemies", "Ruthless criminals may respect you", "Intimidation is easier"],
+        "cons": ["Authorities hunt you", "Civilians distrust you", "Companions may abandon you"],
+        "modifiers": ["+5 to Intimidation checks", "−5 to Persuasion checks with ordinary people"],
+        "examples": [
+            "Wanted posters with the party's faces hang in every town square, and the guards attack on sight.",
+            "A crime lord offers the party a seat at his table instead of a fight, because crossing you is bad for business.",
+            "A frightened companion slips away in the night and leaves a note behind.",
+        ],
+        "rolls": [
+            {"label": "Enemy morale: do they flee? (10 or less: they run)", "expression": "1d20"},
+            {"label": "Bounty hunters this session? (1–3: they find you)", "expression": "1d6"},
+            {"label": "Companion loyalty after a cruel act (8 or less: they leave)", "expression": "1d20"},
+        ],
+    },
+    "Notorious Villain": {
+        "pros": ["Criminal factions may offer deals", "Threats carry weight", "Darker quest options open up"],
+        "cons": ["Higher scrutiny from law enforcement", "Merchants may refuse service", "Bounties become more likely"],
+        "modifiers": ["+3 to Intimidation checks", "−3 to Persuasion checks with honest people"],
+        "examples": [
+            "The thieves' guild sends a messenger with a job and a fat purse.",
+            "A shopkeeper slams the shutters closed the moment the party walks up.",
+            "A captain of the watch starts asking questions about the party around town.",
+        ],
+        "rolls": [
+            {"label": "Will this merchant serve you? (1–2: they refuse)", "expression": "1d6"},
+            {"label": "Criminal job offer (12 or more: a faction reaches out)", "expression": "1d20"},
+            {"label": "Is a bounty posted? (1: a hunter is on your trail)", "expression": "1d6"},
+        ],
+    },
+    "Corrupted": {
+        "pros": ["Easier access to shady contacts", "Fewer qualms about morally questionable solutions", "Ruthless allies may approve"],
+        "cons": ["Honest NPCs become wary", "Trustworthy allies may question your motives", "Some quests become harder"],
+        "modifiers": ["+2 to Intimidation and Deception checks", "−2 to Persuasion checks with honest NPCs"],
+        "examples": [
+            "You know a fence who can move the stolen goods, no questions asked.",
+            "The temple's priest asks the party to leave before the evening service.",
+            "A loyal ally pulls one of you aside and asks what's really going on.",
+        ],
+        "rolls": [
+            {"label": "Know a shady contact for this? (10 or more: yes)", "expression": "1d20"},
+            {"label": "An ally doubts you (1: they confront the party)", "expression": "1d6"},
+        ],
+    },
+    "Morally Questionable": {
+        "pros": ["Flexibility to negotiate with either side", "Fewer expectations", "Pragmatic choices remain available"],
+        "cons": ["People may hesitate to trust you", "Your reputation can shift quickly", "Neither side fully embraces you"],
+        "modifiers": ["+1 to Deception checks", "−1 to Persuasion checks when asking for trust"],
+        "examples": [
+            "Both the bandits and the town council are willing to hear the party out.",
+            "A farmer counts their coins twice after the party pays.",
+            "A rumour spreads that the party took a bribe, and it might even be true.",
+        ],
+        "rolls": [
+            {"label": "Does this NPC trust you? (10 or more: yes)", "expression": "1d20"},
+            {"label": "Rumours about the party (1: a bad one · 6: a good one)", "expression": "1d6"},
+        ],
+    },
+    "Unproven": {
+        "pros": ["No established reputation", "A clean slate with most groups", "Maximum flexibility"],
+        "cons": ["No reputation-based favors", "People judge you by your actions", "You lack established allies"],
+        "modifiers": ["No bonuses or penalties yet"],
+        "examples": [
+            "Nobody in town knows the party's names, so the first few choices will shape everything.",
+            "The innkeeper is polite but asks for payment up front.",
+        ],
+        "rolls": [
+            {"label": "First impression (11 or more: friendly · 10 or less: wary)", "expression": "1d20"},
+        ],
+    },
+    "Virtuous": {
+        "pros": ["Civilians are more welcoming", "Honest merchants may offer small favors", "Charitable groups are receptive"],
+        "cons": ["Criminals may see you as an obstacle", "People may expect you to help", "Refusing requests can disappoint NPCs"],
+        "modifiers": ["+1 to Persuasion checks with ordinary people"],
+        "examples": [
+            "The baker slips the party a fresh loaf for the road.",
+            "A pickpocket gang marks the party as do-gooders worth robbing.",
+            "A villager asks for help finding a lost child and looks crushed if you say no.",
+        ],
+        "rolls": [
+            {"label": "Small favour from a merchant (5–6: a discount or gift)", "expression": "1d6"},
+            {"label": "Do criminals target you? (1: they mark the party)", "expression": "1d6"},
+        ],
+    },
+    "Hero": {
+        "pros": ["Better cooperation from communities", "Access to heroic quests", "Possible discounts, shelter, or local support"],
+        "cons": ["Enemies may target you to damage your reputation", "People expect you to intervene", "Mistakes attract attention"],
+        "modifiers": ["+2 to Persuasion checks", "10% off at friendly shops"],
+        "examples": [
+            "The village offers the party free rooms and a hot meal after the rescue.",
+            "A rival spreads lies to turn the town against the party.",
+            "When trouble starts in the market, everyone turns to look at you.",
+        ],
+        "rolls": [
+            {"label": "Local support: free shelter or supplies (10 or more: yes)", "expression": "1d20"},
+            {"label": "A rival schemes against you (1–2: a smear campaign starts)", "expression": "1d6"},
+        ],
+    },
+    "Saint": {
+        "pros": ["Strong community support", "Influential allies may offer help", "Access to sanctuaries and special missions"],
+        "cons": ["Greater scrutiny", "Enemies may exploit your compassion", "Morally gray decisions can damage your standing"],
+        "modifiers": ["+3 to Persuasion checks", "Temples heal the party for free"],
+        "examples": [
+            "A high priest grants the party sanctuary inside the cathedral walls.",
+            "A con artist fakes a sob story, knowing the party can't refuse.",
+            "One small lie gets back to the temple, and whispers start.",
+        ],
+        "rolls": [
+            {"label": "An influential ally offers help (14 or more: yes)", "expression": "1d20"},
+            {"label": "Someone exploits your kindness (1–2: it's a trick)", "expression": "1d6"},
+        ],
+    },
+    "Paragon of Good": {
+        "pros": ["Legendary reputation", "Widespread support", "Exceptional opportunities to inspire, unite, or rally allies"],
+        "cons": ["Major enemies take notice", "Expectations become enormous", "Compromise may alienate supporters"],
+        "modifiers": ["+5 to Persuasion checks", "Once per day, rally the party: each ally gains 1d6 temporary hit points"],
+        "examples": [
+            "Bards sing of the party, and strangers offer to join the cause.",
+            "The lich-king sends assassins specifically for the party.",
+            "Agreeing to a truce with the orcs costs the party half its supporters.",
+        ],
+        "rolls": [
+            {"label": "Rally the party: temporary hit points for each ally", "expression": "1d6"},
+            {"label": "A major enemy takes notice (1–3: they send someone)", "expression": "1d6"},
+            {"label": "Inspire: bonus to an ally's next saving throw", "expression": "1d4"},
+        ],
+    },
+}
+
+
 def saints_sinners_level(score):
     """Title and description for a score (clamped to -100..+100)."""
     score = max(SAINTS_SINNERS_MIN, min(SAINTS_SINNERS_MAX, int(score)))
     for lo, hi, title, description in SAINTS_SINNERS_LEVELS:
         if lo <= score <= hi:
             side = "saint" if score > 0 else "sinner" if score < 0 else "neutral"
-            return {"score": score, "title": title, "description": description, "side": side}
+            return {"score": score, "title": title, "description": description, "side": side,
+                    "range": [lo, hi], **SAINTS_SINNERS_DETAILS[title]}
     raise ValueError(score)
+
+
+def saints_sinners_all():
+    """Every level with its details, highest first (for the 'All levels' list)."""
+    return [dict(saints_sinners_level(lo), score=None) for lo, _hi, _t, _d in reversed(SAINTS_SINNERS_LEVELS)]

@@ -53,7 +53,7 @@ Options:
 | **Characters** | Add PCs and NPCs. A character needs only a name to start. Archive characters you're not using. Only archived characters can be deleted for good. |
 | **Character sheet** | Edit everything on the sheet. Ability modifiers, saves, skills (click the dot: proficient, then expertise), passive scores, proficiency bonus, initiative and spell DC/attack are worked out for you. "Homebrew adjustments" has overrides. The sheet also covers HP, temp HP, quick damage and heal, death saves, hit dice, exhaustion, conditions, attacks, equipment and coins, spells and spell slots, story, notes and a portrait. |
 | **Combat** | Build an encounter from the party, the creature library, or a quick enemy (name, HP, AC and initiative modifier only). Enter or roll initiative. Turn order sorts itself, and the arrows let you change it by hand. Then use Next/Prev turn (keys **N** / **P**), damage, heal, temp HP, undo the last HP change, conditions with round-based durations, and a combat log. Each goblin has its own HP. Damage to a PC changes their character sheet too. |
-| **Morality (Saints & Sinners)** | One −100 to +100 score for the whole party, starting at 0. Use the **−1** / **+1** buttons or type a number and press Enter (anything past ±100 is kept at the limit). It shows the level title and description (Absolute Sinner, Notorious Villain, Corrupted, Morally Questionable, Unproven, Virtuous, Hero, Saint, Paragon of Good) and whether the party is on the saintly or sinful side. The Dashboard shows it too. |
+| **Morality (Saints & Sinners)** | One −100 to +100 score for the whole party, starting at 0. Use the **−1** / **+1** buttons or type a number and press Enter (anything past ±100 is kept at the limit). It shows the level title and description (Absolute Sinner, Notorious Villain, Corrupted, Morally Questionable, Unproven, Virtuous, Hero, Saint, Paragon of Good) and whether the party is on the saintly or sinful side. Below it: the **benefits and drawbacks** of the current level, suggested **bonuses & penalties** for rolls (applied by you, not automatically), **examples** of how it plays out, and **dice rolls** you can click (they roll in the dice tray), plus a list of all levels. The Dashboard shows the score too. |
 | **Journal** | Sessions, NPCs, locations, quests, factions, discoveries, decisions, mysteries, plot hooks, loot and notes. Entries can have a status, tags and links to characters, encounters or morality events. Search is at the top. |
 | **Creatures** | A library of stat blocks you can reuse. Enemies added to a fight take a *copy* of the stats, so editing a creature here never changes a fight already set up. |
 | **Campaigns** | Create, rename, switch between and archive campaigns. Archiving never deletes anything. Each campaign's characters, fights, notes and morality history are kept separate. |
@@ -249,7 +249,7 @@ Double-click **`run-tests.bat`**, or run:
 .venv\Scripts\python -m pytest -q
 ```
 
-The tests use a temporary database and never touch your real data. There are 141 of them. They cover:
+The tests use a temporary database and never touch your real data. There are 153 of them. They cover:
 
 * derived stats
 * morality recalculation after editing, deleting and reversing events

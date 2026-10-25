@@ -27,6 +27,47 @@
   <div class="ss-ends"><span>Sinner −100</span><span>0</span><span>Saint +100</span></div>
   <p class="faint" id="ss-hint" style="font-size:.85rem;margin:8px 0 0">Use the buttons, or type a number and press Enter.</p>
 </section>
+<section class="ss-effects" id="ss-effects" aria-labelledby="ss-effects-title">
+  <h2 class="rule-head" id="ss-effects-title"><span>What “<span id="ss-effects-name">{{ saints_sinners.title }}</span>” means for the party</span></h2>
+  <div class="ss-cols">
+    <div class="ss-col is-pro">
+      <h3 class="lbl">Benefits</h3>
+      <ul id="ss-pros"></ul>
+    </div>
+    <div class="ss-col is-con">
+      <h3 class="lbl">Drawbacks</h3>
+      <ul id="ss-cons"></ul>
+    </div>
+  </div>
+  <div class="ss-mods">
+    <h3 class="lbl">Bonuses &amp; penalties</h3>
+    <ul id="ss-mods"></ul>
+    <p class="faint">Suggestions for the DM to apply to players' rolls. They aren't added to character sheets automatically.</p>
+  </div>
+  <div class="ss-cols">
+    <div class="ss-col">
+      <h3 class="lbl">Examples at the table</h3>
+      <ul class="ss-examples" id="ss-examples"></ul>
+    </div>
+    <div class="ss-col">
+      <h3 class="lbl">Dice rolls</h3>
+      <div class="ss-rolls" id="ss-rolls"></div>
+      <p class="faint">Rolls in the dice tray, and saved to its history like any other roll.</p>
+    </div>
+  </div>
+  <details class="ss-all">
+    <summary>All levels</summary>
+    <ol class="ss-levels">
+      {% for lv in levels %}
+      <li data-title="{{ lv.title }}">
+        <span class="ss-lv-range num">{{ ("+" ~ lv.range[0]) if lv.range[0] > 0 else lv.range[0] }}{% if lv.range[0] != lv.range[1] %} to {{ ("+" ~ lv.range[1]) if lv.range[1] > 0 else lv.range[1] }}{% endif %}</span>
+        <b>{{ lv.title }}</b>
+        <span><span class="ss-lv-pro">{{ lv.pros | join("; ") }}.</span> <span class="ss-lv-con">{{ lv.cons | join("; ") }}.</span></span>
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
+</section>
 <script type="application/json" id="boot">{{ saints_sinners | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=6"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/morality.js') }}?v=7"></script>{% endblock %}

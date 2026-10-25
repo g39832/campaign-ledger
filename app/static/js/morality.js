@@ -3,7 +3,7 @@
    The server keeps it within range and is the source of truth. */
 (function () {
   "use strict";
-  const { $, boot, act, toast } = L;
+  const { $, $$, h, boot, act, toast } = L;
   const CID = Number(document.body.dataset.campaign);
   let S = boot("boot");
   const input = $("#ss-score");
@@ -20,6 +20,26 @@
     fill.style.width = pct + "%";
     $("#ss-down").disabled = S.score <= -100;
     $("#ss-up").disabled = S.score >= 100;
+    renderEffects();
+  }
+
+  // What the current level means: benefits, drawbacks, modifiers, examples, rollable dice.
+  let shownTitle = null;
+  function renderEffects() {
+    if (S.title === shownTitle) return;
+    shownTitle = S.title;
+    $("#ss-effects").dataset.side = S.side;
+    $("#ss-effects-name").textContent = S.title;
+    const list = (sel, items) => $(sel).replaceChildren(...items.map((t) => h("li", null, t)));
+    list("#ss-pros", S.pros);
+    list("#ss-cons", S.cons);
+    list("#ss-mods", S.modifiers);
+    list("#ss-examples", S.examples);
+    $("#ss-rolls").replaceChildren(...S.rolls.map((r) => h("button", {
+      type: "button", class: "btn btn-sm ss-roll", title: "Roll " + r.expression,
+      onclick: (e) => window.Dice && Dice.roll({ expression: r.expression, label: S.title + ": " + r.label, kind: "custom" }, e),
+    }, h("span", { class: "ss-roll-expr num" }, r.expression), h("span", null, r.label))));
+    $$(".ss-levels li").forEach((li) => li.classList.toggle("is-on", li.dataset.title === S.title));
   }
   function send(body) {
     act("POST", "/api/campaigns/" + CID + "/saints-sinners", body, (d) => { S = d.saints_sinners; input.value = S.score; render(); },

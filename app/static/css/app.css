@@ -814,6 +814,30 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
   .ss-btn { flex: 1; }
 }
 
+.ss-effects { margin-bottom: 22px; }
+.ss-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; margin-bottom: 14px; }
+.ss-col ul, .ss-mods ul { margin: 4px 0 0; padding-left: 1.1em; }
+.ss-col li, .ss-mods li { margin-bottom: 4px; line-height: 1.45; }
+.ss-col.is-pro { border-left: 3px solid var(--brass); padding-left: 12px; }
+.ss-col.is-con { border-left: 3px solid var(--evil); padding-left: 12px; }
+.ss-mods { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; background: var(--surface); }
+.ss-mods li { font-weight: 700; }
+.ss-mods p, .ss-col p { font-size: .85rem; margin: 6px 0 0; }
+.ss-examples li { font: 400 1rem/1.5 var(--serif); color: var(--text-2); }
+.ss-rolls { display: grid; gap: 6px; margin-top: 4px; }
+.ss-roll { justify-content: flex-start; text-align: left; white-space: normal; height: auto; min-height: 36px; gap: 10px; }
+.ss-roll-expr { flex: none; min-width: 4ch; font-weight: 700; color: var(--accent); }
+.ss-all summary { cursor: pointer; font: 700 .85rem var(--caps); letter-spacing: .05em; color: var(--text-2); }
+.ss-levels { list-style: none; margin: 8px 0 0; padding: 0; }
+.ss-levels li { display: grid; grid-template-columns: 10ch 15ch minmax(0, 1fr); gap: 4px 12px; padding: 7px 6px; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.ss-levels li.is-on { background: var(--brass-soft); }
+.ss-lv-range { color: var(--text-3); }
+.ss-lv-con { color: var(--evil); }
+@media (max-width: 760px) {
+  .ss-cols { grid-template-columns: minmax(0, 1fr); }
+  .ss-levels li { grid-template-columns: 1fr 1.4fr; }
+  .ss-levels li > span:last-child { grid-column: 1 / -1; }
+}
 .ss-mini { display: flex; gap: 14px; align-items: center; text-decoration: none; padding: 8px 10px; border-left: 3px solid var(--line-strong); }
 .ss-mini[data-side="saint"] { border-left-color: var(--brass); }
 .ss-mini[data-side="sinner"] { border-left-color: var(--evil); }
