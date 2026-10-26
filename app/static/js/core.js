@@ -148,7 +148,9 @@
       const dc = line.match(/\b(?:beat|beats)\s+(?:a\s+)?(\d+)/i), dcM = line.match(/\bDC\s*(\d+)/i);
       return { name, check: expr, beat: dc ? Number(dc[1]) : null, dc: dcM ? Number(dcM[1]) : null };
     }
-    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null };
+    // breath weapons and other areas reach several creatures
+    const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area };
   }
   const attackLines = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && !a.note);
   const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);

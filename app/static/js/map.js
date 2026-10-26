@@ -344,7 +344,7 @@
     const info = [toHit ? (a.hit || "+0") + " to hit" : "", a.dmg ? (a.heal ? "heals " : "") + a.dmg + (a.heal || toHit ? "" : " damage") : "",
       a.condition ? a.condition + (a.rounds ? " " + a.rounds + " rds" : "") : ""].filter(Boolean).join(" · ");
     const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
-    return spell
+    return spell || a.area
       ? { name: a.name, many: true, heal: a.heal, icon, info, toHit, effect, roll: dmg ? () => dmg(false) : null }
       : { name: a.name, single: true, heal: a.heal, icon, info, toHit, effect, dmg };
   }
