@@ -343,7 +343,11 @@
   function actionsFor(c) {
     const out = [], rule = toHitRule();
     if (c.linked) {
-      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit ? (a.ac
+      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit && a.extra_moves ? out.push({ name: a.name, instant: true, noUse: true, icon: "zap",
+        cooldown: a.cooldown || 0, cdName: a.name, info: "+" + a.extra_moves + " extra moves this turn",
+        run: () => act("POST", "/api/combatants/" + c.id + "/surge", { index: i }, () => { enc = null; say(c.id, c.name + " uses " + a.name + ": " + a.extra_moves + " extra moves this turn.", "hit"); refresh(true); },
+          { onError: (e) => toast(e.message, "error") }) })
+        : !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
         ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0 }), null))
         : null) : a.cast ? out.push(Object.assign(spellAction(c, L.spellView(a.cast), { spell: a.cast }), { single: true, icon: "swords" }))
@@ -505,7 +509,7 @@
 
   async function arm(c, a) {
     lastResult = null;
-    if (a.instant) { useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
+    if (a.instant) { if (!a.noUse) useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
     if (a.cast && !a.aimArea) {
       const s = a.cast.spell;
       aim = { by: c.id, act: a, done: new Set(), cast: true, slot: s.level || null, free: false };
@@ -659,7 +663,8 @@
         h("span", { class: "grow" }), h("span", { class: "fight-ac", title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : "Armor class" }, h("b", null, c.ac), " AC")),
       h("div", { class: "fight-hp" }, h("span", { class: "hpbar", "data-level": pct <= 25 ? "low" : pct <= 50 ? "mid" : "high" }, h("span", { class: "hpbar-fill", style: "width:" + pct + "%" })),
         h("span", { class: "num" }, c.hp + " / " + c.max_hp + " HP" + (c.temp_hp ? " +" + c.temp_hp + " temp" : ""))),
-      (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")))) : null,
+      (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")
+        + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left" : "")))) : null,
       castBox, aiming, res,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),

@@ -90,7 +90,7 @@ def _combatant_dict(r):
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
                            "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
-                           "condition": str(a.get("condition") or "").strip()[:60],
+                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a),
                            "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
@@ -644,6 +644,76 @@ def api_remove(cid):
         ctx.conn.execute("DELETE FROM combatants WHERE id = ?", (cid,))
         ctx.log("roster", f"Removed {c['name']} from the encounter")
     return mutate(eid, fn, _body().get("op_id"))
+
+
+SURGE = "Action Surge"
+
+
+def extra_moves(row):
+    """How many extra moves a sheet row gives when it's used (Action Surge: 2). 0 = it's not that kind of row."""
+    try:
+        return max(0, min(10, int(row.get("extra_moves") or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def surge(ctx, cid, index, by_player=False):
+    """Use a row like Action Surge: extra moves for the rest of this turn, then the
+    row's cooldown starts. Kept as an effect that counts down as moves are made and
+    goes away at the end of their turn."""
+    c = ctx.combatant(cid)
+    if not c["linked"]:
+        raise F.ApiError("Extra moves come from a character sheet")
+    rows = json.loads(ctx.conn.execute("SELECT attacks FROM characters WHERE id = ?", (c["character_id"],)).fetchone()["attacks"] or "[]")
+    try:
+        row = rows[int(index)]
+    except (TypeError, ValueError, IndexError):
+        raise F.ApiError("That move isn't on the sheet any more")
+    n = extra_moves(row)
+    name = (row.get("name") or SURGE).strip() or SURGE
+    if not n:
+        raise F.ApiError(f"{name} doesn't give extra moves — set Extra moves on the sheet")
+    if ctx.enc["status"] != "active":
+        raise F.ApiError(f"{name} is for a running fight")
+    if by_player and ctx.enc["current_id"] != cid:
+        raise F.ApiError(f"You can use {name} on your own turn", status=403)
+    left = cooldown_left(c["conditions"], name, ctx.enc["id"])
+    if left:
+        raise F.ApiError(f"{name} is recharging — ready after {max(1, left - 1)} more of {c['name']}'s turns")
+    if any(x.get("extra_moves") is not None and not x.get("expired") for x in c["conditions"]):
+        raise F.ApiError(f"{c['name']} already has extra moves this turn")
+    cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": f"{n} extra move{'s' if n != 1 else ''} this turn",
+            "rounds_left": 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
+            "expired": False, "applied_round": ctx.enc["round"], "extra_moves": n, "extra_total": n}
+    ctx.set_vitals(c, conditions=c["conditions"] + [cond])
+    ctx.log("condition", f"{c['name']} uses {name}: {n} extra move{'s' if n != 1 else ''} this turn")
+    turns = parse_cooldown(row)
+    if turns:
+        start_cooldown(ctx, cid, name, turns)
+
+
+def used_a_move(ctx, cid, what):
+    """A move was made: if they have extra moves from Action Surge, one is spent."""
+    try:
+        c = ctx.combatant(cid)
+    except F.NotFound:
+        return
+    conds = c["conditions"]
+    x = next((k for k in conds if k.get("extra_moves") is not None and not k.get("expired")), None)
+    if x is None or x["extra_moves"] <= 0:
+        return
+    x["extra_moves"] -= 1
+    x["note"] = f"{x['extra_moves']} extra move{'s' if x['extra_moves'] != 1 else ''} left this turn" if x["extra_moves"] else "extra moves used up"
+    ctx.set_vitals(c, conditions=conds)
+    ctx.log("condition", f"{c['name']} uses an extra move ({what}) — {x['extra_moves']} left")
+
+
+@bp.post("/combatants/<int:cid>/surge")
+def api_surge(cid):
+    """The DM uses a character's Action Surge (or any row with extra moves). {index}"""
+    eid = _enc_of_combatant(cid)
+    data = _body()
+    return mutate(eid, lambda ctx: surge(ctx, cid, data.get("index")), data.get("op_id"))
 
 
 def start_cooldown(ctx, cid, name, turns):

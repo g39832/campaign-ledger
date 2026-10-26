@@ -247,7 +247,8 @@
     { key: "area", label: "Area (optional)", placeholder: "e.g. 10 ft cone, range 20" },
     { key: "cooldown", label: "Cooldown (turns)", type: "number", placeholder: "0" },
     { key: "condition", label: "On a hit, they're", placeholder: "e.g. Grappled" },
-  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "" }, {
+    { key: "extra_moves", label: "Extra moves", type: "number", placeholder: "0" },
+  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "", extra_moves: null }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
     rowActions: (i, row) => L.isHealing(row)

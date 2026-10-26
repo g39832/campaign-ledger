@@ -555,6 +555,8 @@ def cast(ctx, caster_id, data, viewer=None):
         results.append(res)
     if sp["terrain"]:
         lines.insert(0, change_ground(ctx, sp, data))
+    from .combat import used_a_move
+    used_a_move(ctx, caster["id"], sp["name"])
     if sp["cooldown"]:
         start_cooldown(ctx, caster["id"], sp["name"], sp["cooldown"])
     slot_word = f" with a level {slot} slot" if spent else at

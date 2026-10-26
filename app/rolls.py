@@ -154,6 +154,35 @@ def with_effects(conn, ids, check_type, expr, label, mode):
     return expr, label, mode
 
 
+def _is_a_move(conn, check, ids):
+    """Rolling to hit is making a move (and so is the damage of a move with no to-hit roll).
+    Only counts in a running fight, on the roller's own turn."""
+    from .rest import active_combatant
+    t = check.get("type")
+    if t not in ("attack", "spell_attack", "damage"):
+        return False
+    if not ids.get("combatant_id") and ids.get("character_id"):
+        cb = active_combatant(conn, ids["character_id"])
+        if cb is None:
+            return False
+        ids["combatant_id"], ids["encounter_id"] = cb["id"], cb["encounter_id"]
+    if not ids.get("combatant_id"):
+        return False
+    enc = conn.execute("SELECT e.status, e.current_id, e.id FROM encounters e JOIN combatants c ON c.encounter_id = e.id WHERE c.id = ?",
+                       (ids["combatant_id"],)).fetchone()
+    if enc is None or enc["status"] != "active" or enc["current_id"] != ids["combatant_id"]:
+        return False
+    ids["encounter_id"] = enc["id"]
+    if t == "damage" and ids.get("character_id"):
+        row = conn.execute("SELECT attacks FROM characters WHERE id = ?", (ids["character_id"],)).fetchone()
+        try:
+            atk = json.loads(row["attacks"] or "[]")[int(check.get("key"))]
+        except (TypeError, ValueError, IndexError):
+            return False
+        return not str(atk.get("bonus") or "").strip()
+    return t != "damage"
+
+
 def _player_turn_rules(conn, viewer, check):
     """In a running fight a player attacks only on their own turn, and a move that's
     recharging can't be used. Returns (combatant id, move, turns) when this roll uses
@@ -301,6 +330,11 @@ def api_roll():
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         if apply_init:
             _apply_initiative(conn, ids, result["total"], result)
+        if check and _is_a_move(conn, check, ids):
+            from .combat import Ctx, used_a_move
+            ctx = Ctx(conn, ids["encounter_id"])
+            used_a_move(ctx, ids["combatant_id"], label)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
     return jsonify({"roll": roll_dict(row, viewer)}), 201
 

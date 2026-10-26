@@ -15,6 +15,8 @@ from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
 
+from .combat import extra_moves  # noqa: E402
+
 SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
 
 
@@ -153,11 +155,13 @@ def _own_character(conn, char_id):
             "status", "death_successes", "death_failures", "exhaustion", "portrait", "abilities", "save_profs",
             "skill_profs", "spell_slots", "spellcasting_ability", "inspiration", "hit_dice", "hit_dice_used")
     out = {k: c[k] for k in keep}
-    out["conditions"] = [x["name"] + (f" {int(x['ac']):+d} AC" if x.get("ac") and not x.get("expired") else "") for x in c["conditions"]]
+    out["conditions"] = [x["name"] + (f" {int(x['ac']):+d} AC" if x.get("ac") and not x.get("expired") else "")
+                         + (f" · {x['extra_moves']} extra move{'s' if x['extra_moves'] != 1 else ''} left" if x.get("extra_moves") is not None else "")
+                         for x in c["conditions"]]
     out["ac_bonus"] = ac_bonus(c["conditions"])
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
-                       "heal": is_healing(a), "cooldown": parse_cooldown(a)}
+                       "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a)}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
     fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -397,6 +401,23 @@ def is_disengaged(conn, char_id):
     has locked token movement) without provoking opportunity attacks."""
     row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone() if char_id else None
     return bool(row) and any(x.get("name") == DISENGAGED and not x.get("expired") for x in json.loads(row["conditions"] or "[]"))
+
+
+@bp.post("/api/play/me/surge")
+def api_me_surge():
+    """Action Surge (or any sheet row with extra moves), on the player's own turn. {index}"""
+    from .combat import Ctx, surge
+    from .rest import active_combatant
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("Action Surge is for fights, and there's no fight running")
+        ctx = Ctx(conn, cb["encounter_id"])
+        surge(ctx, cb["id"], data.get("index"), by_player=True)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+    return jsonify({"character": _own_character(get_db(), char_id)})
 
 
 @bp.post("/api/play/me/disengage")
