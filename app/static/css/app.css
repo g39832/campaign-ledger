@@ -1209,3 +1209,26 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .spell-top .icon-btn.spell-fold { margin-left: -4px; }
 .spell-brief { display: block; width: 100%; margin: 2px 0 0; padding: 2px 0 2px 30px; border: 0; background: none; color: var(--text-3); font: inherit; font-size: .85rem; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .spell-brief:hover { color: var(--text); }
+
+/* sheet sections fold: click the heading */
+[data-fold] { cursor: pointer; user-select: none; }
+[data-fold] .fold-arrow { display: inline-flex; margin-right: 4px; transition: transform .15s; color: var(--text-3); }
+[data-fold].is-folded .fold-arrow { transform: rotate(-90deg); }
+[data-fold]:hover .fold-arrow, [data-fold]:focus-visible .fold-arrow { color: var(--text); }
+[data-fold]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fold-hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+/* folded attack rows: one line */
+.list-editor.foldable tr.is-folded td { vertical-align: middle; }
+.fold-cell { padding-top: 6px; padding-bottom: 6px; }
+.fold-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fold-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fold-text .faint { font-size: .85rem; overflow-wrap: anywhere; }
+.fold-text:hover .faint { color: var(--text-2, var(--text)); }
+.acts-cell .row-fold { margin-right: 4px; }
+.list-editor tr.is-folded td.fold-cell, .list-editor tr.is-folded td.acts-cell { grid-column: 1 / -1; }
+/* a folded attack: its line on top, the roll buttons in one row underneath */
+#attacks .list-editor tr.is-folded { grid-template-columns: minmax(0, 1fr) 30px; grid-template-areas: "fold del" "acts acts"; align-items: center; }
+#attacks tr.is-folded td.fold-cell { grid-area: fold; }
+#attacks tr.is-folded td.acts-cell { grid-area: acts; }
+#attacks tr.is-folded td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; align-items: center; }

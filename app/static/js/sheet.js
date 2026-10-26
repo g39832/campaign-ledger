@@ -203,6 +203,12 @@
   // ---- list editors -------------------------------------------------------------
   function listEditor(container, field, cols, blank, opts) {
     opts = opts || {};
+    // opts.fold: rows fold to one line (name and a summary); open one to edit it. Open rows are remembered on this device.
+    const foldKey = opts.fold ? "sheet-" + field + "-open-" + char.id : null;
+    let openRows = new Set();
+    if (foldKey) { try { openRows = new Set(JSON.parse(localStorage.getItem(foldKey) || "[]")); } catch (e) { /* private window */ } }
+    const saveRows = () => { if (foldKey) try { localStorage.setItem(foldKey, JSON.stringify([...openRows])); } catch (e) { /* ignore */ } };
+    const flipRow = (i) => { openRows.has(i) ? openRows.delete(i) : openRows.add(i); saveRows(); render(); };
     function update(i, key, val) {
       const list = clone(model[field]) || [];
       list[i][key] = val;
@@ -211,8 +217,26 @@
     }
     function render() {
       const list = model[field] || [];
-      const rows = list.map((row, i) => h("tr", null,
-        opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, opts.rowActions(i, row)) : null,
+      const foldBtn = (i, open) => opts.fold ? h("button", { type: "button", class: "icon-btn sm row-fold", "aria-expanded": String(open),
+        "aria-label": (open ? "Fold up " : "Open ") + ((list[i] || {}).name || "row"), title: open ? "Fold it up" : "Open it to edit", onclick: () => flipRow(i) },
+        icon(open ? "chevron-down" : "chevron-right", "sm")) : null;
+      const del = (i) => h("td", { class: "del" }, h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove row", title: "Remove",
+        onclick: () => {
+          const l = clone(model[field]); l.splice(i, 1); b.set(field, l, true);
+          openRows = new Set([...openRows].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); saveRows();
+          render(); if (opts.after) opts.after();
+        } }, icon("trash-2", "sm")));
+      const anyOpen = !opts.fold || list.some((_, i) => openRows.has(i));
+      const rows = list.map((row, i) => opts.fold && !openRows.has(i)
+        ? h("tr", { class: "is-folded" },
+          opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, opts.rowActions(i, row)) : null,
+          h("td", { class: "fold-cell", colspan: cols.length },
+            h("div", { class: "fold-line" }, foldBtn(i, false),
+              h("button", { type: "button", class: "fold-text", onclick: () => flipRow(i), title: "Open it to edit" },
+                h("b", null, (row.name || "").trim() || "Unnamed"), h("span", { class: "faint" }, opts.fold.summary(row))))),
+          del(i))
+        : h("tr", { class: opts.fold ? "is-open" : null },
+        opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, foldBtn(i, true), opts.rowActions(i, row)) : null,
         cols.map((c) => h("td", { style: c.width ? "width:" + c.width : null, "data-label": c.label, class: "f-" + c.key },
           c.type === "check"
             ? h("input", { type: "checkbox", checked: !!row[c.key], "aria-label": c.label, onchange: (e) => update(i, c.key, e.target.checked) })
@@ -221,14 +245,18 @@
                 oninput: (e) => update(i, c.key, e.target.value === "" ? null : Number(e.target.value)) })
               : L.wrapText({ value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
                 oninput: (e) => update(i, c.key, e.target.value) }))),
-        h("td", { class: "del" }, h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove row", title: "Remove",
-          onclick: () => { const l = clone(model[field]); l.splice(i, 1); b.set(field, l, true); render(); if (opts.after) opts.after(); } }, icon("trash-2", "sm")))));
+        del(i)));
+      const allOpen = list.length && list.every((_, i) => openRows.has(i));
       container.replaceChildren(
-        list.length ? h("table", { class: "list-editor" },
-          h("thead", null, h("tr", null, opts.rowActions ? h("th", null, "Roll") : null, cols.map((c) => h("th", null, c.label)), h("th"))),
+        list.length ? h("table", { class: "list-editor" + (opts.fold ? " foldable" : "") },
+          anyOpen ? h("thead", null, h("tr", null, opts.rowActions ? h("th", null, "Roll") : null, cols.map((c) => h("th", null, c.label)), h("th"))) : null,
           h("tbody", null, rows)) : h("p", { class: "faint", style: "margin:4px 0" }, opts.empty || "Nothing yet."),
+        opts.fold && list.length > 1 ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => {
+          openRows = allOpen ? new Set() : new Set(list.map((_, i) => i)); saveRows(); render();
+        } }, icon(allOpen ? "chevron-right" : "chevron-down", "sm"), allOpen ? " Fold all" : " Open all") : null,
         h("button", { type: "button", class: "btn btn-sm btn-quiet add-row", onclick: () => {
           b.set(field, (clone(model[field]) || []).concat([Object.assign({}, blank)]), true);
+          if (opts.fold) { openRows.add((model[field] || []).length - 1); saveRows(); }
           if (opts.sort) model[field] = opts.sort(model[field]);
           render();
           const inputs = $$("tbody tr:last-child textarea, tbody tr:last-child input[type=text]", container);
@@ -251,8 +279,13 @@
     { key: "dmg_mult", label: "Damage ×", type: "number", placeholder: "1" },
   ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "", extra_moves: null, dmg_mult: null }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
+    fold: { summary: attackSummary },
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
-    rowActions: (i, row) => L.isHealing(row)
+    // A move with nothing to roll (Reckless, Action Surge) is used in a fight, so it has no roll buttons.
+    rowActions: (i, row) => !String(row.damage || "").trim() && !String(row.bonus || "").trim()
+      ? h("span", { class: "roll-row" },
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "It's really a spell: move it to Spells (everything on the row comes along)", onclick: () => moveToSpells(i) }, icon("wand-sparkles", "sm"), " To spells"))
+      : L.isHealing(row)
       ? h("span", { class: "roll-row" },
         h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "damage:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"),
         h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "It's really a spell: move it to Spells (everything on the row comes along)", onclick: () => moveToSpells(i) }, icon("wand-sparkles", "sm"), " To spells"))
@@ -262,6 +295,20 @@
         h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "damage:" + i, "data-crit": "1", title: "Critical hit: double the damage dice" }, "Crit"),
         h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "It's really a spell: move it to Spells (everything on the row comes along)", onclick: () => moveToSpells(i) }, icon("wand-sparkles", "sm"), " To spells")),
   });
+
+  // One line for a folded attack: what it rolls and what's special about it.
+  function attackSummary(r) {
+    const n = (v) => Number(v) || 0;
+    const noDice = !String(r.damage || "").trim();
+    return [String(r.bonus || "").trim() ? "Atk " + String(r.bonus).trim() : "",
+      String(r.damage || "").trim(),
+      r.condition ? "on a hit: " + r.condition : "",
+      n(r.extra_moves) ? "+" + n(r.extra_moves) + " extra moves" : "",
+      n(r.dmg_mult) > 1 ? (noDice ? "your damage ×" + n(r.dmg_mult) + " this turn" : "×" + n(r.dmg_mult) + " damage on a hit") : "",
+      n(r.cooldown) ? n(r.cooldown) + "-turn cooldown" : "",
+      String(r.area || "").trim(),
+      String(r.notes || "").trim().slice(0, 70)].filter(Boolean).join(" · ");
+  }
 
   function eqWeight() {
     const w = (model.equipment || []).reduce((s, r) => s + (Number(r.weight) || 0) * (Number(r.qty) || 1), 0);
@@ -273,6 +320,53 @@
     { key: "weight", label: "Lb", type: "number", width: "64px" },
     { key: "notes", label: "Notes" },
   ], { qty: 1, name: "", weight: null, notes: "" }, { addLabel: "Add item", empty: "Pack is empty.", after: eqWeight });
+
+  /* ---- folding sheet sections ----------------------------------------------------------
+     There's a lot on a sheet, so each section folds: click its heading. The long ones
+     you look at less in play start folded. What you fold is remembered on this device
+     (for every sheet). A folded heading says what's inside. */
+  const FOLD_KEY = "sheet-folds";
+  const FOLD_DEFAULT = { saves: false, skills: true, attacks: false, spells: false, features: true, proficiencies: true, equipment: true, notes: true };
+  let folds = {};
+  try { folds = JSON.parse(localStorage.getItem(FOLD_KEY) || "{}") || {}; } catch (e) { /* private window */ }
+  const isFolded = (k) => (k in folds ? folds[k] : !!FOLD_DEFAULT[k]);
+  function foldHints() {
+    const set = (k, text) => { const el = $("#" + k + "-hint"); if (el) el.textContent = text; };
+    const profs = Object.values(model.skill_profs || {}).filter((v) => Number(v) > 0).length;
+    set("skills", isFolded("skills") ? (profs ? profs + " proficient" : "") : "");
+    const n = (list) => (list || []).filter((r) => r && (r.name || "").trim()).length;
+    set("attacks", isFolded("attacks") ? n(model.attacks) + " attack" + (n(model.attacks) === 1 ? "" : "s") : "");
+    set("spells", isFolded("spells") ? n(model.spells) + " spell" + (n(model.spells) === 1 ? "" : "s") : "");
+    set("equipment", isFolded("equipment") ? n(model.equipment) + " item" + (n(model.equipment) === 1 ? "" : "s") : "");
+    const lines = (t) => String(t || "").split(/\n+/).filter((x) => x.trim()).length;
+    set("features", isFolded("features") && lines(model.features) ? lines(model.features) + " line" + (lines(model.features) === 1 ? "" : "s") : "");
+    set("proficiencies", isFolded("proficiencies") && (model.proficiencies || "").trim() ? String(model.proficiencies).trim().slice(0, 60) : "");
+    set("notes", isFolded("notes") && (model.notes || "").trim() ? "has notes" : "");
+  }
+  function applyFolds() {
+    $$("[data-fold]").forEach((head) => {
+      const k = head.dataset.fold, folded = isFolded(k);
+      head.classList.toggle("is-folded", folded);
+      head.setAttribute("aria-expanded", String(!folded));
+      $$('[data-fold-body="' + k + '"]').forEach((b2) => { b2.hidden = folded; });
+    });
+    foldHints();
+  }
+  $$("[data-fold]").forEach((head) => {
+    head.tabIndex = 0;
+    head.setAttribute("role", "button");
+    head.title = "Click to fold or open";
+    head.prepend(h("span", { class: "fold-arrow", "aria-hidden": "true" }, icon("chevron-down", "sm")));
+    const flip = (e) => {
+      if (e.target.closest("button, a, input, select, textarea")) return; // Notes' Edit button
+      folds[head.dataset.fold] = !isFolded(head.dataset.fold);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(folds)); } catch (err) { /* ignore */ }
+      applyFolds();
+    };
+    head.addEventListener("click", flip);
+    head.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(e); } });
+  });
+  applyFolds();
 
   // ---- spells: notes, or damage, healing, a buff or a debuff, with everything it leaves behind ----
   const SPELL_DOES = [["", "Just notes"], ["damage", "Damage"], ["heal", "Healing"], ["buff", "Buff (helps)"], ["debuff", "Debuff (hinders)"]];
@@ -535,6 +629,7 @@
     if (f === "attacks") renderAttacks();
     if (f === "equipment") renderEquipment();
     if (f === "spells") renderSpells();
+    foldHints();
     if (f === "spell_slots") renderSlots();
     if (f === "hit_dice" || f === "hit_dice_used") renderRest();
     if (f === "notes") renderNotes();

@@ -84,14 +84,14 @@
           {% endfor %}
         </div>
         <div>
-          <h3 class="rule-head" style="font-size:.85rem">Saving throws</h3>
-          <ul class="checklist" id="saves">
+          <h3 class="rule-head" style="font-size:.85rem" data-fold="saves">Saving throws</h3>
+          <ul class="checklist" id="saves" data-fold-body="saves">
             {% for a in ABILITIES %}
             <li><button type="button" class="prof" data-save="{{ a }}" aria-label="{{ ABILITY_NAMES[a] }} save proficiency"></button><button type="button" class="v roll-link" id="save-{{ a }}" data-roll="save:{{ a }}" title="Roll a {{ ABILITY_NAMES[a] }} save">+0</button><span>{{ ABILITY_NAMES[a] }}</span><span></span></li>
             {% endfor %}
           </ul>
-          <h3 class="rule-head" style="font-size:.85rem;margin-top:14px">Skills</h3>
-          <ul class="checklist" id="skills">
+          <h3 class="rule-head" style="font-size:.85rem;margin-top:14px" data-fold="skills">Skills <span class="count fold-hint" id="skills-hint"></span></h3>
+          <ul class="checklist" id="skills" data-fold-body="skills">
             {% for key, label, ab in SKILLS %}
             <li><button type="button" class="prof" data-skill="{{ key }}" aria-label="{{ label }} proficiency (click to cycle: none, proficient, expertise)"></button><button type="button" class="v roll-link" id="skill-{{ key }}" data-roll="skill:{{ key }}" title="Roll {{ label }}">+0</button><span>{{ label }}</span><span class="ab">{{ ab }}</span></li>
             {% endfor %}
@@ -123,9 +123,10 @@
 
     <div class="col-2">
       <section class="section" id="attacks-spells">
-        <h3 class="rule-head">Attacks &amp; spells</h3>
-        <div id="attacks"></div>
-        <h4 class="sub-head">Spells</h4>
+        <h3 class="rule-head" data-fold="attacks">Attacks <span class="count fold-hint" id="attacks-hint"></span></h3>
+        <div id="attacks" data-fold-body="attacks"></div>
+        <h3 class="rule-head" style="margin-top:18px" data-fold="spells">Spells <span class="count fold-hint" id="spells-hint"></span></h3>
+        <div data-fold-body="spells">
         <div class="spellcasting">
           <label class="field"><span>Spellcasting ability</span>
             <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
@@ -145,30 +146,33 @@
           <p class="faint sb-credit" id="sb-credit"></p>
         </div>
         <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Baned"><option value="Outlined"><option value="Concentrating"><option value="Aided"><option value="Shield of Faith"><option value="Slowed"></datalist>
+        </div>
       </section>
       <section class="section">
-        <h3 class="rule-head">Features &amp; traits</h3>
-        <textarea data-f="features" rows="10" class="prose" placeholder="Class features, racial traits, feats…"></textarea>
+        <h3 class="rule-head" data-fold="features">Features &amp; traits <span class="count fold-hint" id="features-hint"></span></h3>
+        <div data-fold-body="features"><textarea data-f="features" rows="10" class="prose" placeholder="Class features, racial traits, feats…"></textarea></div>
       </section>
       <section class="section">
-        <h3 class="rule-head">Proficiencies &amp; languages</h3>
-        <textarea data-f="proficiencies" rows="4" placeholder="Armor, weapons, tools, languages"></textarea>
+        <h3 class="rule-head" data-fold="proficiencies">Proficiencies &amp; languages <span class="count fold-hint" id="proficiencies-hint"></span></h3>
+        <div data-fold-body="proficiencies"><textarea data-f="proficiencies" rows="4" placeholder="Armor, weapons, tools, languages"></textarea></div>
       </section>
     </div>
 
     <div class="col-3">
       <section class="section">
-        <h3 class="rule-head">Equipment <span class="count" id="eq-weight"></span></h3>
+        <h3 class="rule-head" data-fold="equipment">Equipment <span class="count fold-hint" id="equipment-hint"></span> <span class="count" id="eq-weight"></span></h3>
+        <div data-fold-body="equipment">
         <div id="equipment"></div>
         <div class="coins">
           {% for c in ["cp", "sp", "ep", "gp", "pp"] %}
           <label class="coin"><input type="number" min="0" data-coin="{{ c }}" aria-label="{{ c }}"><span class="lbl">{{ c }}</span></label>
           {% endfor %}
         </div>
+        </div>
       </section>
       <section class="section">
-        <h3 class="rule-head">Notes <button type="button" class="btn btn-sm btn-quiet" id="edit-notes" style="margin-left:auto">{{ icon("pencil", "sm") }} Edit</button></h3>
-        <div class="note-box" id="notes-preview"></div>
+        <h3 class="rule-head" data-fold="notes">Notes <span class="count fold-hint" id="notes-hint"></span> <button type="button" class="btn btn-sm btn-quiet" id="edit-notes" style="margin-left:auto">{{ icon("pencil", "sm") }} Edit</button></h3>
+        <div class="note-box" id="notes-preview" data-fold-body="notes"></div>
       </section>
     </div>
   </section>
@@ -201,4 +205,4 @@
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=57"></script>{% endblock %}
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=60"></script>{% endblock %}
