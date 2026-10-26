@@ -139,7 +139,7 @@
   }
   async function castNow() {
     const k = casting;
-    if (!k || k.busy || !k.chosen.size) return;
+    if (!k || k.busy || (!k.chosen.size && !k.spell.summon)) return;
     k.busy = true; render();
     try {
       const d = await api("POST", "/api/play/cast", { spell: k.index, targets: [...k.chosen], slot: k.slot, op_id: L.uid() });
@@ -157,7 +157,7 @@
       name: p.id === (mine && mine.id) ? p.name + " (you)" : p.name, info: p.current_hp + "/" + p.max_hp + " HP" }));
     const slots = mine && Object.fromEntries(Object.entries(mine.spell_slots || {}).filter(([, v]) => v && v.max > 0));
     return h("div", { id: "cast-box" }, L.castPanel({ spell: k.spell, people, chosen: k.chosen, busy: k.busy, result: k.result,
-      slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false,
+      slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false, casterName: mine && mine.name,
       onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { casting = null; render(); } }),
       S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
   }

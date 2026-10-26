@@ -477,10 +477,6 @@ def api_me_cast():
     ident, char_id = _own("cast_spells")
     data = request.get_json(silent=True) or {}
     targets = data.get("targets")
-    if not isinstance(targets, list) or not targets or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
-        raise F.ApiError("Pick who the spell is for")
-    targets = list(dict.fromkeys(targets))
-    op_id = str(data.get("op_id") or "")[:80] or None
     conn = get_db()
     me = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
     try:
@@ -488,6 +484,12 @@ def api_me_cast():
         spell = spell_info((me.get("spells") or [])[index])
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That spell isn't on your sheet any more")
+    if spell["summon"] and not targets:
+        return _summon_from_phone(ident, char_id, index, data)
+    if not isinstance(targets, list) or not targets or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        raise F.ApiError("Pick who the spell is for")
+    targets = list(dict.fromkeys(targets))
+    op_id = str(data.get("op_id") or "")[:80] or None
     if not spell_helps(spell):
         raise F.ApiError(f"{spell['name']} doesn't heal or boost anyone. Ask the DM to apply it.")
     marks = ",".join("?" * len(targets))
@@ -527,6 +529,33 @@ def api_me_cast():
     if heal:
         out["roll"] = heal
     return jsonify(out)
+
+
+def _summon_from_phone(ident, char_id, index, data):
+    """A player casts their own summoning spell (Yamato's clone) on their turn in a fight."""
+    from .combat import Ctx
+    from .db import claim_op
+    from .rest import active_combatant
+    from .rolls import roll_dict
+    from .spells import cast as engine_cast
+    with tx() as conn:
+        if not claim_op(conn, str(data.get("op_id") or "")[:80] or None):
+            return jsonify({"character": _own_character(conn, char_id), "repeat": True})
+        mine = active_combatant(conn, char_id)
+        if mine is None:
+            raise F.ApiError("You can only summon in a fight")
+        ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
+        if ctx.enc["current_id"] != mine["id"]:
+            raise F.ApiError("You can cast it on your own turn", status=403)
+        result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [], "slot": data.get("slot")}, ident)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    conn = get_db()
+    result["rolls"] = [roll_dict(r, ident) for r in conn.execute(
+        f"SELECT * FROM rolls WHERE id IN ({','.join('?' * len(result['rolls'])) or 'NULL'}) ORDER BY id", result["rolls"]).fetchall()]
+    return jsonify({"character": _own_character(conn, char_id), "spell": result["spell"], "cast": result, "targets": [], "added": [], "skipped": []})
 
 
 def _cast_outside_a_fight(conn, ident, me, sp, targets, names, slot):

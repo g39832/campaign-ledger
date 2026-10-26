@@ -213,6 +213,10 @@
       const list = clone(model[field]) || [];
       list[i][key] = val;
       b.set(field, list);
+      // the roll buttons depend on what's typed (damage, to-hit): keep them in step without redrawing the row
+      const tr = opts.rowActions && container.querySelectorAll("tbody > tr")[i];
+      const td = tr && tr.querySelector("td.acts-cell");
+      if (td) td.replaceChildren(opts.rowActions(i, list[i]));
       if (opts.after) opts.after();
     }
     function render() {

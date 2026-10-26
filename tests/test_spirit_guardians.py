@@ -22,6 +22,7 @@ def test_wisdom_save_or_3d8_even_with_the_house_rule(table, loaded):
     assert res["Goblin 1"]["how"] == "failed" and res["Goblin 1"]["amount"] == 12 and who(st, "Goblin 1")["hp"] == 28
     assert res["Goblin 2"]["how"] == "saved" and res["Goblin 2"]["amount"] is None and who(st, "Goblin 2")["hp"] == 40
     assert eff(who(st, "Bram"), "Concentrating")["spell"] == "Spirit Guardians"
+    assert eff(who(st, "Goblin 2"), "Spirit guardians"), "saving the first time doesn't get it out of the area"
     on = eff(who(st, "Goblin 1"), "Spirit guardians")["ongoing"]
     assert on == {"dice": "3d8", "kind": "damage", "type": "radiant", "save": "wis", "dc": 14, "half": False}
     # its turn: saves this time -> no damage
@@ -35,7 +36,7 @@ def test_wisdom_save_or_3d8_even_with_the_house_rule(table, loaded):
     msg = [e["message"] for e in st["log"] if e["message"].startswith("Spirit Guardians: Goblin 1")]
     assert msg == ["Spirit Guardians: Goblin 1 saves at the start of their turn (19 vs DC 14) — no damage"], msg
     # next time it fails: 3d8
-    loaded.next(3, 3, 3, 1)
+    loaded.next(1, 1, 1, 20, 3, 3, 3, 1)  # Goblin 2 (still in it after saving) goes first: saves; then Goblin 1 fails
     for _ in range(len(st["combatants"])):
         st = api.post(f"/api/encounters/{t['eid']}/next")
         if st["encounter"]["current_id"] == t["by"]["Goblin 1"]["id"]:

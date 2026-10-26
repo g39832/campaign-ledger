@@ -137,3 +137,16 @@ def test_only_the_last_hit_and_players_can_parry_their_own(api, battlemap, monke
     loaded.next(19, 2)
     r = pa.post("/api/play/me/parry")
     assert r["parry"]["won"] and r["parry"]["taken"] == 3 and r["character"]["current_hp"] == 20 - 5 - 3
+
+
+def test_player_summons_their_clone_on_their_turn(api, battlemap):
+    eid, by = setup(api, battlemap)
+    pa = battlemap["pa"]
+    api.post(f"/api/encounters/{eid}/start")
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
+    pa.post("/api/play/cast", {"spell": 0, "targets": []}, 403)  # not her turn
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
+    r = pa.post("/api/play/cast", {"spell": 0, "targets": []})
+    assert "Yamato clone appears" in r["cast"]["summary"]
+    st = api.get(f"/api/encounters/{eid}")
+    assert order(st).index("Yamato clone") == order(st).index("Aria") + 1

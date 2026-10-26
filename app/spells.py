@@ -604,7 +604,10 @@ def cast(ctx, caster_id, data, viewer=None):
         if temp is not None and landed:
             apply_hp(ctx, t["id"], {"op": "temp", "amount": max(0, temp["total"])}, by)
             parts.append(f"{max(0, temp['total'])} temp HP")
-        if spell_lasts(sp) and landed:
+        # an area that keeps hurting (Spirit Guardians, Moonbeam: a save every turn) stays on
+        # everyone caught in it, even those who made the first save
+        zone = bool(sp["ongoing"] and sp["ongoing_save"])
+        if spell_lasts(sp) and (landed or zone):
             cond = effect_for(ctx, sp, caster, cast_id, nums, slot)
             got = put_effect(ctx, t, cond)
             res["effect"], res["effect_how"] = cond["name"], got
