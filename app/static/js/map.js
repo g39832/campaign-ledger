@@ -358,7 +358,13 @@
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
-      (c.spells || []).forEach((s) => out.push(spellAction(c, L.spellView(s), { spell: s.index })));
+      (c.spells || []).forEach((s) => out.push(s.aura
+        ? { name: s.name, instant: true, noUse: true, icon: s.aura_on ? "check" : "zap", heal: !!s.aura_on,
+          info: (s.aura_on ? "ON · click to switch off · " : "click to switch on · ") + L.spellWhat(L.spellView(s)),
+          run: () => act("POST", "/api/characters/" + c.character_id + "/aura", { index: s.index, on: !s.aura_on }, (d) => {
+            enc = null; if (d && d.aura) say(c.id, d.aura.name + (d.aura.on ? " is on: " + (d.aura.who.join(", ") || "everyone in range already had it") : " is off") + ".", "heal"); refresh(true);
+          }, { onError: (e) => toast(e.message, "error") }) }
+        : spellAction(c, L.spellView(s), { spell: s.index })));
     } else {
       const sb = c.statblock || {};
       L.attackLines(sb.attacks).forEach((a) => out.push(monsterAction(c, a, false, rule)));

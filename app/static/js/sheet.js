@@ -395,8 +395,16 @@
   const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openSpells])); } catch (e) { /* ignore */ } };
   const setOpen = (i, on) => { on ? openSpells.add(i) : openSpells.delete(i); saveOpen(); };
   const openNew = () => setOpen((model.spells || []).length - 1, true);
+  const auraOn = (s) => (model.conditions || []).some((x) => x && x.aura === char.id + ":" + (String(s.name || "").trim() || "Spell"));
+  /* A box's change event fires as you click into the next box; redrawing right then
+     would swap that box out from under the click and lose what you type next. So wait
+     a moment, redraw, and put the cursor back in the box you moved to. */
+  let redrawTimer = null;
+  function redrawSoon() { clearTimeout(redrawTimer); redrawTimer = setTimeout(renderSpells, 0); }
   function renderSpells() {
     const box = $("#spells");
+    const was = document.activeElement && box.contains(document.activeElement) && document.activeElement.dataset.keep
+      ? { key: document.activeElement.dataset.keep, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd } : null;
     const list = model.spells || [];
     const set = (i, key, val, redraw) => {
       const l = clone(model.spells) || [];
@@ -407,12 +415,12 @@
     const sp = derived().spell;
     // Short fields (dice, condition with its suggestion list) stay inputs; names and notes wrap.
     const text = (i, key, attrs) => (attrs && attrs.list) || attrs && attrs.short
-      ? h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs, { short: null }))
-      : L.wrapText(Object.assign({ value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs));
+      ? h("input", Object.assign({ type: "text", value: list[i][key] ?? "", "data-keep": "sp-" + i + "-" + key, oninput: (e) => set(i, key, e.target.value) }, attrs, { short: null }))
+      : L.wrapText(Object.assign({ value: list[i][key] ?? "", "data-keep": "sp-" + i + "-" + key, oninput: (e) => set(i, key, e.target.value) }, attrs));
     const pick = (i, key, options, attrs, value) => h("select", Object.assign({ onchange: (e) => set(i, key, e.target.value, true) }, attrs),
       options.map(([v, l]) => h("option", { value: v, selected: (value ?? (list[i][key] || "")) === v }, l)));
-    const num = (i, key, attrs) => h("input", Object.assign({ type: "number", value: list[i][key] ?? "",
-      oninput: (e) => set(i, key, e.target.value === "" ? null : Number(e.target.value)), onchange: () => renderSpells() }, attrs));
+    const num = (i, key, attrs) => h("input", Object.assign({ type: "number", value: list[i][key] ?? "", "data-keep": "sp-" + i + "-" + key,
+      oninput: (e) => set(i, key, e.target.value === "" ? null : Number(e.target.value)), onchange: () => redrawSoon() }, attrs));
     const chk = (i, key, label, on, title) => h("label", { class: "check", style: "font-size:.88rem", title: title || null },
       h("input", { type: "checkbox", checked: on, onchange: (e) => set(i, key, e.target.checked, true) }), label);
     const field = (label, el, cls) => h("label", { class: "field" + (cls ? " " + cls : "") }, h("span", null, label), el);
@@ -442,7 +450,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -464,6 +472,8 @@
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
           field("Summons (a creature from the library)", text(i, "summon", { short: true, placeholder: "e.g. Yamato clone", title: "It joins the fight on your side, next to you, and acts right after you" })),
           chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
+          chk(i, "aura", "Switched on and off (a magic item's aura): lasts until switched off", !!s.aura, "Reaches allies within its Area (default 60 ft)"),
+          s.aura ? field("Speed ×", num(i, "speed_mult", { min: 1, max: 10, placeholder: "1", title: "2 = double speed" })) : null,
           field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })),
           field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
       const open = openSpells.has(i);
@@ -474,18 +484,19 @@
           h("button", { type: "button", class: "icon-btn sm spell-fold", "aria-expanded": String(open), "aria-label": (open ? "Fold up " : "Open ") + (s.name || "spell"),
             title: open ? "Fold it up" : "Open it to edit", onclick: toggle }, icon(open ? "chevron-down" : "chevron-right", "sm")),
           text(i, "name", { placeholder: "Spell name", "aria-label": "Spell name", class: "spell-name" }),
-          h("div", { class: "spell-rolls roll-row" }, rolls, save, open ? summary : null, v.concentration ? h("span", { class: "tag" }, "Concentration") : null),
+          h("div", { class: "spell-rolls roll-row" }, rolls, save, open ? summary : null, v.concentration ? h("span", { class: "tag" }, "Concentration") : null,
+            s.aura ? L.auraButton(Object.assign({}, s, { index: i, aura_on: auraOn(s) }), "/api/characters/" + char.id + "/aura", (d) => { if (d && d.character) { b.refresh(d.character); renderConds(); renderSpells(); } }) : null),
           back, del),
         open ? null : h("button", { type: "button", class: "spell-brief", onclick: toggle, title: "Open it to edit" }, brief || "Click to open"),
         open ? h("div", { class: "spell-fields" },
           field("Does", pick(i, "effect", SPELL_DOES, null, does)),
           field("Level", pick(i, "level", [["0", "Cantrip"]].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), "Level " + n])), null, String(Number(s.level) || 0))),
           does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
-            text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => renderSpells() })) : null,
+            text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => redrawSoon() })) : null,
           does === "damage" ? field("Damage type", pick(i, "damage_type", DAMAGE_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]))) : null,
           harmful ? field("Lands by", pick(i, "hit", SPELL_HIT)) : null,
           does && does !== "heal" ? field(does === "damage" ? "Also leaves (optional)" : "Condition / effect",
-            text(i, "condition", { placeholder: does === "buff" ? "Blessed" : does === "debuff" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => renderSpells() })) : null,
+            text(i, "condition", { placeholder: does === "buff" ? "Blessed" : does === "debuff" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => redrawSoon() })) : null,
           does && does !== "heal" || s.ongoing ? field("Rounds", num(i, "rounds", { min: 1, max: 100000, placeholder: "—", title: "How many rounds it lasts (1 minute = 10, 1 hour = 600)" })) : null,
           does ? chk(i, "concentration", "Concentration", !!v.concentration, "Casting another concentration spell ends it, and taking damage can break it") : null,
           more,
@@ -511,6 +522,10 @@
         } }, icon("book-open", "sm"), " Add from spell list")));
     if (!$("#spell-book").hidden) renderSpellBook();
     L.restoreOpen(box);
+    if (was) {
+      const el = box.querySelector('[data-keep="' + was.key + '"]');
+      if (el) { el.focus(); try { if (was.start != null) el.setSelectionRange(was.start, was.end); } catch (e) { /* number boxes */ } }
+    }
   }
 
   /* An attack row that's really a spell (Mend 1d8 heal, Shield of faith +2 AC, Entangle: makes

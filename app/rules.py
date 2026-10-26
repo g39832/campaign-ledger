@@ -542,6 +542,9 @@ def spell_info(spell):
         "dmg_mult": _num(spell.get("dmg_mult"), 1, 10, 1),
         # a real saving throw even with the "everything rolls to hit" house rule on
         "force_save": bool(spell.get("force_save")),
+        # switched on and off (a magic item's aura): lasts until switched off, reaches allies in its area
+        "aura": bool(spell.get("aura")),
+        "speed_mult": _num(spell.get("speed_mult"), 1, 10, 1),
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

@@ -136,8 +136,11 @@ def _add_spells(conn, c):
     ch = F.decode_row(row, F.CHARACTER)
     spell = derived(ch)["spell"]
     c["spellcasting"] = {"dc": spell["dc"], "attack": spell["attack"]} if spell else None
+    from .aura import is_on
     c["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
                    if spell_does_something(spell_info(s))]
+    for s in c["spells"]:
+        s["aura_on"] = s["aura"] and is_on(ch, s["name"])
     c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0}
     c["parry"] = parry_state(conn, c, ch)
 

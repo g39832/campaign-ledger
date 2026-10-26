@@ -161,7 +161,7 @@
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
-            x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.dmg_mult > 1 && !x.expired ? " · damage ×" + x.dmg_mult : "") + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left"
+            x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.dmg_mult > 1 && !x.expired ? " · damage ×" + x.dmg_mult : "") + (x.speed_mult > 1 ? " · speed ×" + x.speed_mult : "") + (x.aura && x.max_hp ? " · +" + x.max_hp + " max HP" : "") + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left"
               : x.rounds_left != null ? " · " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
           (c.notes || "").trim() ? h("div", { class: "c-note", title: c.notes }, icon("scroll-text", "sm"), h("span", null, c.notes.trim())) : null),
         h("div", { class: "c-hp" },
@@ -575,6 +575,7 @@
             s.concentration ? h("span", { class: "tag", title: "Concentration" }, "Conc.") : null),
           h("div", { class: "faint sr-what" }, [L.spellWhat(s), L.spellLands(s, sc || (s.dc ? { dc: s.dc } : null), rule), s.area ? s.area.size + " ft " + ({ circle: "radius", square: "cube" }[s.area.kind] || s.area.kind) : ""].filter(Boolean).join(" · "))),
         left ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
+          : s.aura && c.linked ? L.auraButton(s, "/api/characters/" + c.character_id + "/aura", () => refresh(true))
           : s.terrain ? h("button", { type: "button", class: "btn btn-sm", title: "It changes the ground: aim it on the battle map", onclick: () => { try { localStorage.setItem("combat-sel-" + EID, c.id); } catch (e) { /* ignore */ } makeMap(); } },
             icon("map", "sm"), " Aim on map")
           : h("button", { type: "button", class: "btn btn-sm " + (s.kind === "heal" || helps ? "btn-heal" : "btn-dmg"), title: "Pick who it reaches, then Cast",

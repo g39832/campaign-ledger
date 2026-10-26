@@ -1245,3 +1245,6 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #attacks tr.is-folded td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .c-parry-row { margin: 3px 0 2px; }
 .c-parry-row .c-parry { margin-left: 0; }
+
+/* an aura switch (a magic item): clearly on or off */
+.aura-btn.is-on { font-weight: 700; }

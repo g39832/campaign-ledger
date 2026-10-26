@@ -118,6 +118,8 @@
   function spellWhat(s, amount) {
     const k = spellKind(s), bits = [];
     if (Number(s.dmg_mult) > 1) bits.push((s.dmg_mult == 2 ? "double" : "×" + s.dmg_mult) + " damage on a hit");
+    if (Number(s.speed_mult) > 1) bits.push((s.speed_mult == 2 ? "double" : "×" + s.speed_mult) + " speed");
+    if (s.aura) bits.push("for allies within " + ((s.area && s.area.size) || 60) + " ft, until switched off");
     if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
@@ -139,7 +141,7 @@
   }
   // How it lands: "spell attack +7", "Dex save DC 15", or nothing for spells that just work.
   function spellLands(s, sc, rule) {
-    if (spellHelps(s) || s.terrain || s.summon) return "";
+    if (spellHelps(s) || s.terrain || s.summon || s.aura) return "";
     const atk = sc && sc.attack != null ? " " + signed(sc.attack) : s.attack_bonus != null ? " " + signed(Number(s.attack_bonus)) : "";
     if (s.hit === "attack" || (rule && s.hit && !s.force_save)) return (s.move ? "attack" : "spell attack") + atk + (s.hit !== "attack" ? " (house rule)" : "");
     if (s.hit) return ABIL_SHORT[s.hit] + " save" + (s.dc ? " DC " + s.dc : sc && sc.dc ? " DC " + sc.dc : "") + (spellKind(s) === "damage" ? (s.save_half === false || (s.save_half == null && !s.level) ? "" : ", half on a save") : "");
@@ -246,6 +248,17 @@
         : h("p", { style: "margin:4px 0" }, (r.summary || "").split(": ").slice(1).join(": ") || (r.concentration ? "Concentrating on it." : "Done.")),
       onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
   }
+  /* An aura (Moni's magic item): one button that says whether it's on, and flips it. */
+  function auraButton(s, url, done) {
+    return h("button", { type: "button", class: "btn btn-sm aura-btn" + (s.aura_on ? " is-on btn-heal" : ""), "aria-pressed": String(!!s.aura_on),
+      title: s.aura_on ? "On for allies in range. Click to switch it off." : "Click to switch it on for allies in range",
+      onclick: () => act("POST", url, { index: s.index, on: !s.aura_on }, (d) => {
+        const a = d && d.aura;
+        if (a) toast(a.name + (a.on ? " is on" + (a.who.length ? ": " + a.who.join(", ") : " (everyone in range already had it)") : " is off" + (a.who.length ? " for " + a.who.join(", ") : "")) + ".", "ok");
+        if (done) done(d);
+      }) }, icon(s.aura_on ? "check" : "zap", "sm"), s.aura_on ? " On · switch off" : " Switch on");
+  }
+
   /* Parry: roll off against the DM for the last hit on them. done(response) after. */
   function parry(cid, done) {
     act("POST", "/api/combatants/" + cid + "/parry", {}, (d) => {
@@ -755,5 +768,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, parry, offerParry, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

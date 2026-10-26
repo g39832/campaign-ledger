@@ -158,6 +158,8 @@ def _own_character(conn, char_id):
     out["conditions"] = [x["name"] + (f" {int(x['ac']):+d} AC" if x.get("ac") and not x.get("expired") else "")
                          + (f" · {x['extra_moves']} extra move{'s' if x['extra_moves'] != 1 else ''} left" if x.get("extra_moves") is not None else "")
                          + (f" · damage ×{x['dmg_mult']}" if x.get("dmg_mult") and not x.get("expired") else "")
+                         + (f" · speed ×{x['speed_mult']}" if x.get("speed_mult") else "")
+                         + (f" · +{x['max_hp']} max HP" if x.get("max_hp") else "")
                          for x in c["conditions"]]
     out["ac_bonus"] = ac_bonus(c["conditions"])
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
@@ -178,7 +180,9 @@ def _own_character(conn, char_id):
         out["parry"] = parry_state(conn, me, c)
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
                      if spell_does_something(spell_info(s))]
+    from .aura import is_on
     for s in out["spells"]:
+        s["aura_on"] = s["aura"] and is_on(c, s["name"])
         s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and s["cooldown"] else 0
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
@@ -411,6 +415,20 @@ def is_disengaged(conn, char_id):
     has locked token movement) without provoking opportunity attacks."""
     row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone() if char_id else None
     return bool(row) and any(x.get("name") == DISENGAGED and not x.get("expired") for x in json.loads(row["conditions"] or "[]"))
+
+
+@bp.post("/api/play/me/aura")
+def api_me_aura():
+    """The player switches their own aura (a magic item) on or off. {index, on}"""
+    from .aura import toggle
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        out = toggle(conn, char_id, data.get("index"), bool(data.get("on")))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    return jsonify({"character": _own_character(get_db(), char_id), "aura": out})
 
 
 @bp.post("/api/play/me/parry")
