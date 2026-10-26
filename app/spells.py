@@ -271,7 +271,7 @@ def effect_for(ctx, sp, caster, cast_id, nums, slot):
         on = {"dice": resolve(sp["ongoing"], nums["mod"], sp["name"]), "kind": sp["ongoing_kind"],
               "type": sp["ongoing_type"] or sp["damage_type"]}
         if sp["ongoing_save"] and sp["hit"] in ABILITIES and nums["dc"]:
-            on.update(save=sp["hit"], dc=nums["dc"], half=True)
+            on.update(save=sp["hit"], dc=nums["dc"], half=sp["save_half"])
         cond["ongoing"] = on
     if sp["repeat_save"] and sp["hit"] in ABILITIES and nums["dc"]:
         cond["save"] = {"ability": sp["hit"], "dc": nums["dc"]}
@@ -451,8 +451,8 @@ def on_turn(ctx, cid, phase):
                 if on.get("save"):
                     made, _t, text = roll_save(roller, c, on["save"], on["dc"], src)
                     if made:
-                        amount //= 2
-                        why = f" (saved, {text}: half)"
+                        amount = amount // 2 if on.get("half", True) else 0
+                        why = f" (saved, {text}: {'half' if on.get('half', True) else 'no damage'})"
                     else:
                         why = f" (failed the save, {text})"
                 if not c["linked"]:
@@ -462,6 +462,9 @@ def on_turn(ctx, cid, phase):
                         why += f" — {word} {on['type']}"
             roller.keep(r, f"{src} — start of {c['name']}'s turn", "heal" if on["kind"] != "damage" else "damage", c,
                         f"{amount} {'healing' if on['kind'] == 'heal' else 'temp HP' if on['kind'] == 'temp' else (on.get('type') or '') + ' damage'}".replace("  ", " "))
+            if on["kind"] == "damage" and amount == 0 and "saved" in why:
+                ctx.log("spell", f"{src}: {c['name']} saves at the start of their turn{why.replace('(saved, ', '(').replace(': no damage', '')} — no damage")
+                continue
             ctx.log("spell", f"{src}: {c['name']} " + {"damage": f"takes {amount}{' ' + on['type'] if on.get('type') else ''} damage",
                                                          "heal": f"regains {amount} HP", "temp": f"gets {amount} temp HP"}[on["kind"]]
                     + why + " at the start of their turn")
@@ -515,7 +518,8 @@ def cast(ctx, caster_id, data, viewer=None):
     nums.update(extra)
     helps = spell_helps(sp)
     rule = ctx.settings.get("roll_to_hit", True)
-    lands = "auto" if helps else "attack" if sp["hit"] == "attack" or (rule and sp["hit"] in ABILITIES) else "save" if sp["hit"] else "auto"
+    lands = ("auto" if helps else "attack" if sp["hit"] == "attack" or (rule and sp["hit"] in ABILITIES and not sp["force_save"])
+             else "save" if sp["hit"] else "auto")
     if lands == "save" and not nums["dc"]:
         raise F.ApiError(f"Set {caster['name']}'s spellcasting ability on the Spells tab so the save DC is known")
     attack_bonus = nums["attack"] if nums["attack"] is not None else 0

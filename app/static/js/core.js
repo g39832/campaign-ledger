@@ -141,7 +141,7 @@
   function spellLands(s, sc, rule) {
     if (spellHelps(s) || s.terrain || s.summon) return "";
     const atk = sc && sc.attack != null ? " " + signed(sc.attack) : s.attack_bonus != null ? " " + signed(Number(s.attack_bonus)) : "";
-    if (s.hit === "attack" || (rule && s.hit)) return (s.move ? "attack" : "spell attack") + atk + (s.hit !== "attack" ? " (house rule)" : "");
+    if (s.hit === "attack" || (rule && s.hit && !s.force_save)) return (s.move ? "attack" : "spell attack") + atk + (s.hit !== "attack" ? " (house rule)" : "");
     if (s.hit) return ABIL_SHORT[s.hit] + " save" + (s.dc ? " DC " + s.dc : sc && sc.dc ? " DC " + sc.dc : "") + (spellKind(s) === "damage" ? (s.save_half === false || (s.save_half == null && !s.level) ? "" : ", half on a save") : "");
     return spellKind(s) === "damage" ? "always hits" : "no save";
   }

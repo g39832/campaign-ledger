@@ -540,6 +540,8 @@ def spell_info(spell):
         "parry": bool(spell.get("parry")),
         # Reckless attack: on a hit the damage is multiplied (2 = double)
         "dmg_mult": _num(spell.get("dmg_mult"), 1, 10, 1),
+        # a real saving throw even with the "everything rolls to hit" house rule on
+        "force_save": bool(spell.get("force_save")),
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

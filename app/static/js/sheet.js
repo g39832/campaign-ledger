@@ -438,7 +438,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -454,6 +454,7 @@
           s.ongoing && (s.ongoing_kind || "damage") === "damage" && s.hit && s.hit !== "attack" ? chk(i, "ongoing_save", "They save each turn for half", !!s.ongoing_save) : null,
           harmful && s.hit && s.hit !== "attack" && lasting ? chk(i, "repeat_save", "Save at the end of each turn to end it", !!s.repeat_save, "Hold Person: a Wisdom save at the end of each of its turns") : null,
           does === "damage" && s.hit && s.hit !== "attack" ? chk(i, "save_half", "Half damage on a save", v.save_half != null ? !!v.save_half : Number(s.level) > 0) : null,
+          harmful && s.hit && s.hit !== "attack" ? chk(i, "force_save", "Always a real saving throw (even with the roll-to-hit rule)", !!s.force_save) : null,
           does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
           field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),

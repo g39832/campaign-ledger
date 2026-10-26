@@ -473,8 +473,13 @@
     view.draw();
   }
   // who's caught in the aimed area (not the attacker)
-  const caught = (c) => !view.aim ? [] : [...view.aim.hits].map((id) => S.tokens.find((t) => t.id === id))
-    .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean);
+  const caught = (c) => {
+    if (!view.aim) return [];
+    const a = aim && aim.act, foesOnly = a && a.cast && !L.spellHelps(a.cast.spell);
+    return [...view.aim.hits].map((id) => S.tokens.find((t) => t.id === id))
+      .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean)
+      .filter((x) => !foesOnly || (x.kind === "enemy") !== (c.kind === "enemy"));
+  };
   async function confirmAim() {
     const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
     const ground = a.cast && a.cast.spell.terrain;
