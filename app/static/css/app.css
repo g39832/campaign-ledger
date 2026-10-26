@@ -1126,3 +1126,32 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .hp-fix { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .hp-fix .lbl { margin-right: 4px; }
 .hp-fix .btn { min-width: 38px; min-height: 28px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+
+/* ---------- sheet: attacks as roomy two-line rows at any width ----------
+   Name, to-hit and damage on top; notes and area underneath; roll buttons on the left.
+   Six columns in one table row squeezed names down to a letter per line. */
+#attacks .list-editor, #attacks .list-editor tbody { display: block; width: 100%; }
+#attacks .list-editor thead { display: none; }
+#attacks .list-editor tr { display: grid; position: static; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line);
+  grid-template-columns: auto minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) 30px;
+  grid-template-areas: "acts name bonus damage del" "acts notes notes area area"; align-items: start; }
+#attacks .list-editor td { display: block; width: auto !important; min-width: 0; border: 0; padding: 0; order: 0; }
+#attacks td.acts-cell { grid-area: acts; align-self: center; margin: 0; }
+#attacks td.acts-cell .roll-row { flex-direction: column; align-items: stretch; gap: 4px; }
+#attacks td.f-name { grid-area: name; }
+#attacks td.f-name textarea { font-weight: 700; }
+#attacks td.f-bonus { grid-area: bonus; }
+#attacks td.f-damage { grid-area: damage; }
+#attacks td.f-notes { grid-area: notes; }
+#attacks td.f-area { grid-area: area; }
+#attacks td.del { grid-area: del; position: static; align-self: center; width: auto; }
+#attacks td[data-label]::before { content: attr(data-label); display: block; font: 500 .66rem var(--caps); letter-spacing: .07em; color: var(--text-3); padding: 0 8px; }
+#attacks td.acts-cell::before { display: none !important; }
+/* examples ("+5", "1d8+3 slashing") show only in the box being typed in, so empty boxes don't look filled in */
+#attacks textarea::placeholder { font-style: italic; color: var(--text-3); opacity: .7; }
+#attacks textarea:not(:focus)::placeholder { color: transparent; }
+@container (max-width: 460px) {
+  #attacks .list-editor tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px;
+    grid-template-areas: "name name del" "bonus damage damage" "notes notes notes" "area area area" "acts acts acts"; }
+  #attacks td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; }
+}
