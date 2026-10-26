@@ -152,9 +152,11 @@
         h("div", { class: "c-init" }, initIn, h("span", { class: "m" }, signed(c.init_mod))),
         token(c),
         h("div", { class: "c-main" },
-          h("div", { class: "c-name" }, h("span", null, c.name), isCur ? h("span", { class: "acting" }, "acting") : null,
-            c.parry && c.parry.pending ? h("button", { type: "button", class: "btn btn-sm btn-primary c-parry", title: "Roll off d20 vs the DM; win and the last hit does half",
-              onclick: () => L.parry(c.id, (d) => { if (d && d.encounter) apply(d); }) }, icon("shield", "sm"), " " + c.parry.name + "?") : null),
+          h("div", { class: "c-name" }, h("span", null, c.name), isCur ? h("span", { class: "acting" }, "acting") : null),
+          // its own line, away from the name, so clicking the name to select them can't roll the parry
+          c.parry && c.parry.pending ? h("div", { class: "c-parry-row" }, h("button", { type: "button", class: "btn btn-sm btn-primary c-parry",
+            title: "Roll off d20 vs the DM; win and the last hit does half",
+            onclick: () => L.parry(c.id, (d) => { if (d && d.encounter) apply(d); }) }, icon("shield", "sm"), " " + c.parry.name + "? (hit for " + c.parry.pending.amount + ")")) : null,
           c.follows && byId(c.follows) ? h("div", { class: "c-sub" }, "acts right after " + byId(c.follows).name) : null,
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
@@ -410,7 +412,7 @@
       ? { name: a.name, note: a.ac || a.extra_moves ? "" : a.notes, cooldown: a.cooldown || 0,
         // Action Surge: extra moves for the rest of this turn
         surge: a.extra_moves || a.stance > 1 ? () => run("POST", "/api/combatants/" + c.id + "/surge", { index: i }) : null, surgeN: a.extra_moves || 0, stance: a.stance || 1,
-        effect: a.ac ? { name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, rounds: null, hit: "", cooldown: a.cooldown || 0 } : null }
+        effect: a.ac ? { name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, rounds: null, hit: "", cooldown: a.cooldown || 0, move: true } : null }
       : ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: a.has_hit,
       // leaves a condition on a hit (Grapple): one button rolls the hit, the damage and puts it on
       effect: a.cast || null, effectFirst: !!a.cast,

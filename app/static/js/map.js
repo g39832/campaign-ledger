@@ -350,7 +350,7 @@
           { onError: (e) => toast(e.message, "error") }) })
         : !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
-        ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0 }), null))
+        ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0, move: true }), null))
         : null) : a.cast ? out.push(Object.assign(spellAction(c, L.spellView(a.cast), { spell: a.cast }), { single: true, icon: "swords" }))
         : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
         cooldown: a.cooldown || 0, cdName: a.name,

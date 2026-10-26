@@ -75,3 +75,25 @@ def test_a_row_without_extra_moves_cant_surge(api, battlemap):
     eid, by = setup(api, battlemap)
     err = api.post(f"/api/combatants/{by['Aria']['id']}/surge", {"index": 0}, 400)
     assert "Extra moves" in err["error"]
+
+
+def test_extra_moves_count_only_in_their_own_fight(api, battlemap):
+    eid, by = setup(api, battlemap)
+    api.post(f"/api/combatants/{by['Aria']['id']}/surge", {"index": 1})
+    # a second fight with the same hero: moves there don't touch the first fight's extra moves
+    camp = battlemap["camp"]
+    e2 = api.encounter(camp["id"], "Elsewhere")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{e2}/combatants", {"characters": [battlemap["a"]["id"]], "quick": {"name": "Rat", "max_hp": 5}})
+    a2 = next(c for c in st["combatants"] if c["name"] == "Aria")
+    api.post(f"/api/encounters/{e2}/start")
+    api.post(f"/api/encounters/{e2}/set-turn", {"combatant_id": a2["id"]})
+    api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "combatant_id": a2["id"]}}, 201)
+    assert surge_of(api.get(f"/api/encounters/{eid}"))["extra_moves"] == 2
+
+
+def test_ending_the_fight_clears_extra_moves(api, battlemap):
+    eid, by = setup(api, battlemap)
+    api.post(f"/api/combatants/{by['Aria']['id']}/surge", {"index": 1})
+    st = api.post(f"/api/encounters/{eid}/end")
+    a = next(c for c in st["combatants"] if c["name"] == "Aria")
+    assert not any(x.get("extra_moves") is not None or x.get("cooldown") for x in a["conditions"])

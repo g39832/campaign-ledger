@@ -374,9 +374,11 @@ def api_end(eid):
         if ctx.enc["status"] == "ended":
             raise F.ApiError("This encounter has already ended")
         ctx.save_enc(status="ended", ended_at=now_iso())
-        # moves recharging in this fight are ready for the next one
+        # moves recharging in this fight are ready for the next one, and this-turn-only
+        # effects (Action Surge's extra moves, Reckless) end with it
+        turn_only = lambda x: x.get("cooldown") or x.get("extra_moves") is not None or x.get("dmg_mult")
         for c in ctx.combatants():
-            keep = [x for x in c["conditions"] if not (x.get("cooldown") and x.get("encounter_id") == ctx.enc["id"])]
+            keep = [x for x in c["conditions"] if not (turn_only(x) and x.get("encounter_id") == ctx.enc["id"])]
             if len(keep) != len(c["conditions"]):
                 ctx.set_vitals(c, conditions=keep)
         ctx.log("system", f"Encounter ended after {ctx.enc['round']} round{'s' if ctx.enc['round'] != 1 else ''}")
@@ -725,7 +727,8 @@ def used_a_move(ctx, cid, what):
     except F.NotFound:
         return
     conds = c["conditions"]
-    x = next((k for k in conds if k.get("extra_moves") is not None and not k.get("expired")), None)
+    x = next((k for k in conds if k.get("extra_moves") is not None and not k.get("expired")
+              and k.get("encounter_id") in (None, ctx.enc["id"])), None)  # extra moves count only in the fight they're from
     if x is None or x["extra_moves"] <= 0:
         return
     x["extra_moves"] -= 1
@@ -789,10 +792,10 @@ def parry(ctx, cid, viewer=None):
             break
         ctx.log("hp", f"{st['name']} roll-off tied at {mine['total']} — rolling again")
     won = mine["total"] > dms["total"]
-    save_roll(ctx.conn, viewer, ctx.enc["campaign_id"], mine, label=f"{st['name']} roll-off — {c['name']}", kind="custom", subject=c["name"],
+    save_roll(ctx.conn, viewer, ctx.enc["campaign_id"], mine, label=f"{st['name']} roll-off", kind="custom", subject=c["name"],
               ids=ids, outcome="Wins the roll-off" if won else "Loses the roll-off")
     save_roll(ctx.conn, {"role": "dm", "name": "DM"} if viewer.get("role") != "dm" else viewer, ctx.enc["campaign_id"], dms,
-              label=f"{st['name']} roll-off — DM", kind="custom", subject="DM", ids={"encounter_id": ctx.enc["id"]},
+              label=f"{st['name']} roll-off", kind="custom", subject="DM", ids={"encounter_id": ctx.enc["id"]},
               outcome="DM loses" if won else "DM wins")
     ctx.conn.execute("UPDATE hp_changes SET label = label || ' (parried)' WHERE id = ?", (hit["id"],))
     taken = amount

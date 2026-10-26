@@ -86,8 +86,8 @@ def test_parry_won_takes_half_rounded_down(api, battlemap, monkeypatch):
     assert a["parry"]["ready"] is False, "then Parry recharges"
     assert any("Aria parries: takes 4 instead of 9" in e["message"] for e in r["log"])
     # the roll-off is in the dice history, and Undo HP takes back the parry first
-    labels = [x["label"] for x in api.get(f"/api/rolls?encounter_id={eid}")["rolls"]]
-    assert "Parry roll-off — Aria" in labels and "Parry roll-off — DM" in labels
+    offs = {(x["subject"], x["label"]) for x in api.get(f"/api/rolls?encounter_id={eid}")["rolls"]}
+    assert ("Aria", "Parry roll-off") in offs and ("DM", "Parry roll-off") in offs
     st = api.post(f"/api/encounters/{eid}/undo")
     assert next(c for c in st["combatants"] if c["name"] == "Aria")["hp"] == 11
     api.post(f"/api/combatants/{aria['id']}/parry", expect=400)  # recharging

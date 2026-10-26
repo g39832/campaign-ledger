@@ -178,6 +178,8 @@ def _own_character(conn, char_id):
         out["parry"] = parry_state(conn, me, c)
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
                      if spell_does_something(spell_info(s))]
+    for s in out["spells"]:
+        s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and s["cooldown"] else 0
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -231,7 +233,8 @@ def api_state():
     camp = conn.execute("SELECT id, name, live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()
     live = conn.execute("SELECT * FROM maps WHERE id = ? AND campaign_id = ?", (camp["live_map_id"], camp["id"])).fetchone() \
         if camp["live_map_id"] else None
-    party = [dict(r) | {"conditions": [c["name"] for c in json.loads(r["conditions"])]} for r in conn.execute(
+    # recharging timers are only for the player themself, not the whole party list
+    party = [dict(r) | {"conditions": [c["name"] for c in json.loads(r["conditions"]) if not c.get("cooldown")]} for r in conn.execute(
         "SELECT id, name, class_name, level, current_hp, max_hp, temp_hp, status, conditions, portrait FROM characters "
         "WHERE campaign_id = ? AND archived = 0 AND kind = 'pc' ORDER BY name COLLATE NOCASE", (camp["id"],))]
     return jsonify({

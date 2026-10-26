@@ -119,7 +119,7 @@
 
   // ---- casting a healing or buff spell on someone in the party ------------------------------
   // Tap the spell, tap who it's for (here or their token on the map), then Cast. The server rolls it.
-  const castable = (s) => L.spellHelps(s);
+  const castable = (s) => L.spellHelps(s) && !s.terrain; // map-changing spells are aimed by the DM
   function startCast(s) {
     const mine = S.character, chosen = new Set();
     if (s.targets === 1 && /\bself\b/i.test(s.notes || "") && mine) chosen.add(mine.id);
@@ -257,7 +257,9 @@
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
           s.kind === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
           s.hit && s.hit !== "attack" && !c.roll_to_hit ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
-          castable(s) && c.can.cast_spells !== false
+          s.terrain ? h("span", { class: "tag", title: "Ask the DM: it's aimed on the battle map" }, icon("map", "sm"), " the DM aims it on the map")
+          : s.recharging ? h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, s.recharging - (c.my_turn ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })())
+          : castable(s) && c.can.cast_spells !== false
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
             : s.kind === "debuff" ? h("span", { class: "tag", title: "The DM casts this one" }, L.spellWhat(s) || "debuff") : null))] : null,
