@@ -150,3 +150,23 @@ def test_player_summons_their_clone_on_their_turn(api, battlemap):
     assert "Yamato clone appears" in r["cast"]["summary"]
     st = api.get(f"/api/encounters/{eid}")
     assert order(st).index("Yamato clone") == order(st).index("Aria") + 1
+
+
+def test_players_never_see_monster_ac(api, battlemap):
+    """Players see their own AC, but no one else's: not in the party list, the turn
+    order, the map, or the dice history when the DM attacks."""
+    import json as _json
+    eid, by = setup(api, battlemap)
+    api.patch(f"/api/combatants/{by['Bandit 1']['id']}", {"changes": {"ac": {"from": by["Bandit 1"]["ac"], "to": 17}}})
+    api.post(f"/api/campaigns/{battlemap['camp']['id']}/live-map", {"map_id": battlemap["mid"]})
+    api.post(f"/api/encounters/{eid}/start")
+    spec = {"name": "Fire Bolt", "effect": "damage", "dice": "1d10", "hit": "attack", "attack_bonus": 5}
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": spec, "targets": [by["Bandit 1"]["id"]]})
+    pa = battlemap["pa"]
+    st = pa.get("/api/play/state")
+    assert "ac" in st["character"], "their own AC is still there"
+    assert all("ac" not in p for p in st["party"])
+    others = _json.dumps({k: v for k, v in st.items() if k != "character"})
+    assert '"ac"' not in others and "AC 17" not in others
+    rolls = pa.get("/api/rolls")["rolls"]
+    assert rolls and not any("17" in (r["outcome"] or "") or "AC" in (r["outcome"] or "") or "AC" in r["label"] for r in rolls)

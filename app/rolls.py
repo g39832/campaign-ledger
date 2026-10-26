@@ -8,6 +8,7 @@ Visibility: public (everyone at the table), dm (the roller and the DM),
 private (only the roller).
 """
 import json
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -25,10 +26,16 @@ VISIBILITY = ("public", "dm", "private")
 MODES = ("normal", "advantage", "disadvantage")
 
 
+AC_NOTE = re.compile(r"\s*\(AC \d+\)|\s*vs AC \d+")
+
+
 def roll_dict(row, viewer=None):
     d = dict(row)
     d["result"] = json.loads(d["result"])
     d.pop("op_id", None)
+    if viewer and viewer.get("role") == "player":  # players never see a target's AC (older rolls still say "Hit (AC 12)")
+        d["outcome"] = AC_NOTE.sub("", d.get("outcome") or "")
+        d["label"] = AC_NOTE.sub("", d.get("label") or "")
     if viewer:
         d["mine"] = (viewer["role"] == "dm" and d["roller_kind"] == "dm") or (
             viewer["role"] == "player" and d["player_id"] == viewer.get("id"))

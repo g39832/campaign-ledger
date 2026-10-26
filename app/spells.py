@@ -565,7 +565,7 @@ def cast(ctx, caster_id, data, viewer=None):
             how = f"{r['total']} vs AC {t['ac']}" + (", natural 20" if crit else ", natural 1" if nat == 1 else "") \
                 + "".join(f", {n}" for _m, n in mods) + (f", {r['mode']}: {', '.join(why)}" if r["mode"] != "normal" else "")
             roller.keep(r, f"{sp['name']} attack on {t['name']}", "attack", caster,
-                        "Critical hit!" if crit else ("Hit" if landed else "Miss") + f" (AC {t['ac']})")
+                        "Critical hit!" if crit else "Hit" if landed else "Miss")  # no AC here: players see the dice history
             res.update(how="crit" if crit else "hit" if landed else "miss", roll=r["total"], vs=t["ac"])
         elif lands == "save":
             made, total, how = roll_save(roller, t, sp["hit"], nums["dc"], sp["name"])

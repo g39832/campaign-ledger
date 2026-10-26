@@ -232,7 +232,7 @@ def api_state():
     live = conn.execute("SELECT * FROM maps WHERE id = ? AND campaign_id = ?", (camp["live_map_id"], camp["id"])).fetchone() \
         if camp["live_map_id"] else None
     party = [dict(r) | {"conditions": [c["name"] for c in json.loads(r["conditions"])]} for r in conn.execute(
-        "SELECT id, name, class_name, level, current_hp, max_hp, temp_hp, ac, status, conditions, portrait FROM characters "
+        "SELECT id, name, class_name, level, current_hp, max_hp, temp_hp, status, conditions, portrait FROM characters "
         "WHERE campaign_id = ? AND archived = 0 AND kind = 'pc' ORDER BY name COLLATE NOCASE", (camp["id"],))]
     return jsonify({
         "me": {"name": ident["name"], "character_id": ident["character_id"]},
