@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, roll_d20, is_healing, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, knocked_prone, roll_d20, is_healing, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -770,6 +770,11 @@ def apply_hp(ctx, cid, data, by=None):
         ctx.log("hp", label + note + " (no change)")
         return v
     ctx.set_vitals(c, **v)
+    if c["linked"] and before["hp"] > 0 and v["hp"] == 0:
+        prone = knocked_prone(c["conditions"])
+        if prone is not None:
+            ctx.set_vitals(c, conditions=prone)
+            note += " and is knocked prone"
     hp_line = f" — {v['hp']}/{v['max_hp']} HP" + (f" +{v['temp_hp']} temp" if v["temp_hp"] else "")
     ctx.log("hp", label + note + hp_line)
     ctx.conn.execute(

@@ -106,6 +106,9 @@ def _validate_settings(s):
     if m.get("law_threshold", 1) > scale or m.get("good_threshold", 1) > scale:
         raise F.ApiError("Alignment thresholds must be within the scale")
     c = s.get("combat", {})
+    b = c.get("ally_death_save_bonus", 2)
+    if not isinstance(b, int) or isinstance(b, bool) or not 0 <= b <= 10:
+        raise F.ApiError("The ally death save bonus must be a whole number from 0 to 10")
     if c.get("tie_break", "modifier") not in ("modifier", "pc_first", "enemy_first", "manual"):
         raise F.ApiError("Unknown tie-break rule")
     if not isinstance(c.get("skip_statuses", []), list):

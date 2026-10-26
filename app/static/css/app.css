@@ -776,6 +776,11 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .token-settings > summary { cursor: pointer; padding: 4px 0; }
 .token-settings[open] > summary { margin-bottom: 4px; }
 
+/* ---------- death saves ---------- */
+.death-box { border: 2px solid var(--danger); border-radius: var(--radius); padding: 10px 12px; background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.death-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 6px; font-size: 1.02rem; }
+.death-head .ico { color: var(--danger); }
+
 /* ---------- casting: tap the spell, then tap who ---------- */
 .cast-picker { border: 2px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; background: var(--surface, var(--bg)); margin: 6px 0 10px; }
 .cast-picker.is-heal, .cast-picker.is-help { border-color: var(--hp-high); }

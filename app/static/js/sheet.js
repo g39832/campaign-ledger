@@ -477,7 +477,15 @@
     e.preventDefault();
     const [type, key] = el.dataset.roll.split(":");
     b.later.flush();
-    Dice.roll({ check: { type, key, character_id: char.id }, crit: el.dataset.crit === "1" }, e);
+    if (type === "death") { // rolled and marked by the server (allies beside them add a bonus)
+      act("POST", "/api/characters/" + char.id + "/death-save", {}, (d) => { Dice.show(d.roll); b.refresh(d.character); renderPips(); derive(); });
+      return;
+    }
+    Dice.roll({ check: { type, key, character_id: char.id }, crit: el.dataset.crit === "1" }, e, { wait: type === "attack" }).then((r) => {
+      // homebrew: a natural 20 to hit rolls the damage with double dice
+      if (type === "attack" && r && r.result && r.result.natural === 20 && (model.attacks || [])[key] && (model.attacks[key].damage || "").trim())
+        Dice.roll({ check: { type: "damage", key, character_id: char.id }, crit: true });
+    });
   });
 
   // ---- keep in sync with combat and other tabs -----------------------------------------

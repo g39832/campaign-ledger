@@ -175,9 +175,15 @@
       const diff = total(c) - total(p);
       if (diff < 0) {
         FX.float(row, "−" + Math.abs(diff), "dmg"); FX.flash(row, "hit"); sound = sound || "hit";
-        if (c.hp === 0 && p.hp > 0) { FX.float(row, OUT.has(c.status) || c.kind === "enemy" ? "Defeated!" : "Down!", "down"); FX.flash(row, "down"); sound = "down"; }
+        if (c.hp === 0 && p.hp > 0) {
+          FX.float(row, OUT.has(c.status) || c.kind === "enemy" ? "Defeated!" : "Down!", "down"); FX.flash(row, "down"); sound = "down";
+          if (c.kind === "enemy") { FX.banner("Defeated!", c.name + " falls", "down"); FX.burst(row, "fumble", 40); }
+          else FX.banner(c.name + " is down!", "Knocked prone · roll death saves", "down");
+        }
       } else if (c.hp > p.hp) { FX.float(row, "+" + (c.hp - p.hp), "heal"); FX.flash(row, "heal"); FX.burst(row, "heal", 18); sound = sound || "heal"; }
       if (c.ac > p.ac) { FX.float(row, "+" + (c.ac - p.ac) + " AC", "ac"); sound = sound || "ac"; }
+      if (c.linked && c.status !== p.status && c.status === "dead") { FX.banner(c.name + " has died", "Three failed death saves", "down"); sound = "down"; }
+      if (c.linked && c.status !== p.status && c.status === "stable") { FX.banner(c.name + " is stable", "Three successful death saves", "heal"); sound = "heal"; }
     }
     const e0 = before.encounter, e1 = now.encounter;
     if (e1.status === "active" && e0.status !== "active") { FX.banner("Roll for initiative!", e1.name, "crit"); sound = "start"; }
@@ -264,8 +270,16 @@
         type: "button", class: "pip" + (i < c[field] ? " on" : ""), "aria-label": field.replace("_", " ") + " " + (i + 1),
         onclick: () => run("PATCH", "/api/combatants/" + cid, { changes: { [field]: { from: c[field], to: c[field] === i + 1 ? i : i + 1 } } }),
       })));
-      sections.push(h("div", { class: "detail-sec" }, h("div", { class: "row", style: "align-items:center" },
-        h("span", { class: "lbl" }, "Death saves"), h("span", { class: "faint" }, "Successes"), pips("death_successes", ""), h("span", { class: "faint" }, "Failures"), pips("death_failures", "fail"))));
+      const canRoll = c.hp === 0 && !["dead", "stable"].includes(c.status);
+      sections.push(h("div", { class: "detail-sec" + (canRoll ? " death-box" : "") },
+        canRoll ? h("div", { class: "death-head" }, icon("skull", "sm"), h("b", null, c.name + " is down"), h("span", { class: "faint" }, "knocked prone · death saves")) : null,
+        h("div", { class: "row", style: "align-items:center" },
+          h("span", { class: "lbl" }, "Death saves"), h("span", { class: "faint" }, "Successes"), pips("death_successes", ""), h("span", { class: "faint" }, "Failures"), pips("death_failures", "fail"),
+          c.status === "stable" ? h("span", { class: "tag is-good" }, "Stable") : c.status === "dead" ? h("span", { class: "tag is-bad" }, "Dead") : null),
+        canRoll ? h("button", { type: "button", class: "btn btn-primary", style: "margin-top:8px",
+          title: "10 or more is a success. A hero standing next to them on the map adds a bonus.",
+          onclick: () => run("POST", "/api/combatants/" + cid + "/death-save", {}, (d) => { if (window.Dice) Dice.show(d.roll); }) },
+          icon("dice-5", "sm"), " Roll death save") : null));
     }
 
     // Conditions
@@ -376,7 +390,7 @@
   // House rule (Settings → Combat): every attack and harmful spell rolls d20 + bonus against AC.
   const toHitRule = () => S.settings.roll_to_hit !== false;
   function attacksFor(c) {
-    const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
+    const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e, { wait: true });
     const rule = toHitRule();
     if (c.linked) return (c.attacks || []).map((a, i) => !a.has_dmg && !a.has_hit
       // no dice: "+2 ac to target" goes on through the cast picker; anything else is just shown
@@ -481,7 +495,10 @@
     };
     const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
-      a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then(after("hit")) }, a.hitLabel) : null,
+      a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then((r) => {
+        after("hit")(r);
+        if (r && r.result && r.result.natural === 20 && a.dmg && !a.heal) a.dmg(null, true).then(after("dmg"));
+      }) }, a.hitLabel) : null,
       a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
       a.effect ? h("button", { type: "button", class: "btn btn-sm", title: "Then tap who it's on" + (toHitRule() ? "; each one rolls to hit" : ""), onclick: () => cast(a.effect) },
         icon("zap", "sm"), " Cast · " + L.spellWhat(a.effect)) : null,
@@ -504,7 +521,10 @@
         return h("div", { class: "roll-row", style: "align-items:center" },
           h("b", { style: "min-width:7ch" }, s.name),
           s.effect === "damage" && (s.hit === "attack" || rule) ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) =>
-            Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e).then(after("hit")) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
+            Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e, { wait: true }).then((r) => {
+              after("hit")(r);
+              if (r && r.result && r.result.natural === 20 && s.dice) rollSpell(null, true).then(after("dmg"));
+            }) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
           s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => rollSpell(e, false).then(after("dmg")) }, "Dmg " + s.dice) : null,
           s.effect === "damage" && s.dice && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => rollSpell(e, true).then(after("dmg")) }, "Crit") : null,
           s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", title: "Roll the healing, then tap who gets it",

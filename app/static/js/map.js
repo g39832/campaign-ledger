@@ -45,7 +45,20 @@
     return act(method, url, body, (d) => { if (d && d.map) apply(d); if (after) after(d); },
       { onError: (err) => { toast(err.message, "error"); refresh(true); } });
   }
+  // a monster's death and a hero being knocked down get their own moment
+  function moments(before, now) {
+    if (!window.FX || !before) return;
+    const was = new Map(before.tokens.map((t) => [t.id, t]));
+    for (const t of now.tokens) {
+      const p = was.get(t.id);
+      if (!p || p.hp == null || t.hp == null || !(p.hp > 0 && t.hp === 0)) continue;
+      if (t.kind === "enemy") { FX.banner("Defeated!", t.display + " falls", "down"); FX.burst($("#stage"), "fumble", 40); }
+      else FX.banner(t.display + " is down!", "Knocked prone · roll death saves", "down");
+      FX.sound("down");
+    }
+  }
   function apply(state) {
+    moments(S, state);
     S = state;
     revs = { rev: S.map.rev, encounter_rev: S.encounter ? S.encounter.rev : null };
     view.setData(S.map, S.tokens);
@@ -285,7 +298,8 @@
     api("GET", "/api/encounters/" + EID()).then((d) => { enc = d; }).catch(() => { enc = null; })
       .finally(() => { encLoading = false; renderSelected(); });
   }
-  const roll = (req) => Dice.roll(Object.assign({ encounter_id: EID() }, req));
+  // wait: each roll lands before the next starts, so the d20 is seen before the damage
+  const roll = (req) => Dice.roll(Object.assign({ encounter_id: EID() }, req), null, { wait: true });
   // House rule (Settings → Combat): every attack and harmful spell rolls d20 + bonus against AC.
   const toHitRule = () => !enc || !enc.settings || enc.settings.roll_to_hit !== false;
   /* Everything this combatant can do, as buttons.
@@ -312,7 +326,7 @@
         if (s.effect === "damage" && s.hit === "attack" && s.dice)
           out.push({ name: s.name, single: true, icon: "wand-sparkles", info: atkInfo + " · " + s.dice, toHit: spellAtk, dmg: rollSpell });
         else if (s.effect === "damage" && s.dice)
-          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false),
+          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false), crit: () => rollSpell(true),
             info: (rule ? atkInfo + " · " : s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice,
             toHit: rule ? spellAtk : null, save: !rule && !!s.hit });
         else if (s.effect === "heal" && s.dice)
@@ -348,7 +362,7 @@
       a.condition ? a.condition + (a.rounds ? " " + a.rounds + " rds" : "") : ""].filter(Boolean).join(" · ");
     const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
     return spell || a.area
-      ? { name: a.name, many: true, heal: a.heal, icon, info, toHit, effect, roll: dmg ? () => dmg(false) : null }
+      ? { name: a.name, many: true, heal: a.heal, icon, info, toHit, effect, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null }
       : { name: a.name, single: true, heal: a.heal, icon, info, toHit, effect, dmg };
   }
   function say(by, text, kind, undo) {
@@ -413,12 +427,22 @@
     if (cur.done.has(target.id)) return;
     cur.done.add(target.id);
     renderSelected();
-    let how = "";
+    let how = "", crit = false;
     if (a.toHit) {
       const r = await rollToHit(a, target);
       if (!r) { cur.done.delete(target.id); renderSelected(); return; }
       if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
       how = " (" + r.text + ")";
+      crit = r.crit;
+    }
+    if (crit && a.crit && cur.amount != null) { // natural 20: this one takes double dice
+      const d = await a.crit();
+      if (d) {
+        const n = Math.max(0, d.total);
+        if (a.effect) putEffect(c, target, a.effect);
+        hpTo(target, "damage", n, c, () => say(c.id, "Critical hit! " + a.name + ": " + n + " damage to " + target.name + how + ".", "crit", true));
+        return;
+      }
     }
     if (a.effect && cur.amount == null) {
       putEffect(c, target, a.effect, () => say(c.id, a.name + ": " + (a.effect.condition || a.effect.name) + " on " + target.name + how + ".", a.toHit ? "hit" : "heal"));
@@ -460,7 +484,17 @@
       hpAmt = "";
       act("POST", "/api/combatants/" + c.id + "/hp", { op, amount: n }, () => refresh(true), { onError: (e) => toast(e.message, "error") });
     };
+    const down = c.linked && c.hp === 0 && !["dead", "stable"].includes(c.status);
+    const pipRow = (n, cls) => h("span", { class: "pips " + cls }, [0, 1, 2].map((i) => h("span", { class: "pip" + (i < n ? " on" : "") })));
+    const deathBox = c.linked && (c.hp === 0 || c.death_successes || c.death_failures) ? h("div", { class: "death-box" },
+      h("div", { class: "death-head" }, icon("skull", "sm"), h("b", null, down ? c.name + " is down" : c.status === "dead" ? c.name + " has died" : c.status === "stable" ? c.name + " is stable" : "Death saves")),
+      h("div", { class: "row", style: "align-items:center;gap:8px" }, h("span", { class: "faint" }, "Saves"), pipRow(c.death_successes, ""), h("span", { class: "faint" }, "Fails"), pipRow(c.death_failures, "fail")),
+      down ? h("button", { type: "button", class: "btn btn-primary", style: "margin-top:8px", onclick: () => act("POST", "/api/combatants/" + c.id + "/death-save", {},
+        (d) => { if (window.Dice) Dice.show(d.roll); enc = null; refresh(true); }, { onError: (e) => toast(e.message, "error") }) },
+        icon("dice-5", "sm"), " Roll death save") : null,
+      down ? h("p", { class: "faint", style: "margin:6px 0 0;font-size:.85rem" }, "10 or more is a success. A hero standing right next to " + c.name + " adds +" + ((enc.settings || {}).ally_death_save_bonus ?? 2) + ".") : null) : null;
     return h("div", { class: "fight" },
+      deathBox,
       h("div", { class: "fight-head" },
         h("b", { class: "fight-name" }, c.name), isTurn ? h("span", { class: "tag is-good" }, "Their turn") : null,
         h("span", { class: "grow" }), h("span", { class: "fight-ac", title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : "Armor class" }, h("b", null, c.ac), " AC")),

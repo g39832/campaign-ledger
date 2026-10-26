@@ -192,6 +192,7 @@
       opts = opts || {};
       this.resize();
       cancelAnimationFrame(this.raf);
+      if (this._resolve) { const prev = this._resolve; this._resolve = null; prev(null); }
       const n = specs.length;
       const R = Math.max(14, Math.min(opts.size || 40, (this.w / Math.max(2.5, n + 0.6)) * 0.42, this.h * 0.24));
       const cols = Math.max(1, Math.min(n, Math.floor((this.w - R) / (R * 2.5)) || 1));
@@ -414,7 +415,8 @@
 
     /* Roll on the server. req: {expression | check, label, kind, crit, encounter_id, apply_initiative}.
        Shift-click = advantage, Ctrl/Alt-click = disadvantage for that one roll. */
-    roll(req, ev) {
+    roll(req, ev, opts) {
+      opts = opts || {};
       let mode = this.mode;
       if (ev && ev.shiftKey) mode = "advantage";
       if (ev && (ev.ctrlKey || ev.altKey || ev.metaKey)) mode = "disadvantage";
@@ -427,13 +429,19 @@
           done: (d) => {
             this.addHistory([d.roll]);
             if (this.mode !== "normal" && !(ev && (ev.shiftKey || ev.ctrlKey || ev.altKey))) this.setMode("normal");
-            this.animate(d.roll);
-            resolve(d.roll);
+            const run = this.animate(d.roll);
+            if (!opts.wait) { resolve(d.roll); return; }
+            let done = false;
+            const go = () => { if (!done) { done = true; resolve(d.roll); } };
+            run.then(go);
+            setTimeout(go, (DURATION[prefs.speed] || 0) + 1200); // never leave an attack hanging
           },
           fail: (err) => { toast(err.message, "error"); resolve(null); },
         });
       });
     },
+    // a roll the server made (death saves, hit dice): add it to the history and roll it on screen
+    show(roll) { if (!roll) return; this.addHistory([roll]); this.animate(roll); if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true); },
     mapOverlayActive() { return !!(this.overlayHost && prefs.overMap); },
     animate(roll, opts) {
       opts = opts || {};
@@ -458,8 +466,13 @@
         const nat = roll.result && roll.result.natural;
         if (window.FX && !opts.quiet && (nat === 20 || nat === 1)) {
           const who = roll.subject ? roll.subject + " · " : "";
-          if (nat === 20) { FX.banner("Natural 20!", who + (roll.label || "Critical"), "crit"); FX.burst(null, "crit"); FX.sound("crit"); }
+          if (nat === 20 && roll.kind === "attack") { FX.banner("CRITICAL HIT!", who + "Natural 20 · double damage dice!", "crit"); FX.burst(null, "crit", 90); FX.sound("crit"); }
+          else if (nat === 20) { FX.banner("Natural 20!", who + (roll.label || "Critical"), "crit"); FX.burst(null, "crit"); FX.sound("crit"); }
           else { FX.banner("Natural 1…", who + (roll.label || "Fumble"), "fumble"); FX.burst(null, "fumble", 30); FX.sound("fumble"); }
+        }
+        if (window.FX && !opts.quiet && roll.kind === "damage" && /critical/i.test(roll.label || "")) {
+          FX.banner(roll.total + " damage!", (roll.subject ? roll.subject + " · " : "") + "Critical hit — double dice", "crit");
+          FX.burst(null, "crit", 60); FX.sound("crit");
         }
         this.dock.dataset.settled = JSON.stringify(settled);
         if (speed === "dramatic") setTimeout(() => { if (!this.playing) drama.hidden = true; }, 1400);

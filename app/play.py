@@ -156,7 +156,9 @@ def _own_character(conn, char_id):
                                    "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign
     from .rules import parse_hit_dice
-    out["can"] = get_campaign(c["campaign_id"])["settings"]["players"]
+    settings = get_campaign(c["campaign_id"])["settings"]
+    out["can"] = settings["players"]
+    out["roll_to_hit"] = settings["combat"]["roll_to_hit"]
     out["hit_dice_total"] = sum(n for n, _ in parse_hit_dice(c["hit_dice"]))
     out["hit_dice_sizes"] = sorted({s for _, s in parse_hit_dice(c["hit_dice"])}, reverse=True)
     return out
@@ -339,6 +341,18 @@ def api_me_death():
         from .characters import _touch_encounters
         _touch_encounters(conn, char_id)
     return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/death-save")
+def api_me_death_save():
+    from .rest import death_save
+    from .rolls import roll_dict
+    ident, char_id = _own("edit_hp")
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        roll_id = death_save(conn, ident, char_id, data.get("op_id"))
+    row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
+    return jsonify({"roll": roll_dict(row, ident), "character": _own_character(get_db(), char_id)})
 
 
 @bp.post("/api/play/me/hit-die")

@@ -59,7 +59,8 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "tie_break": "modifier",     # modifier | pc_first | enemy_first | manual
         "auto_sort": True,
         "skip_statuses": ["dead", "defeated", "fled"],
-        "roll_to_hit": True,  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
+        "roll_to_hit": True,
+        "ally_death_save_bonus": 2,  # house rule: a downed hero with an ally standing next to them adds this to death saves  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
     },
     "players": {
         "edit_hp": True,      # players may apply damage/healing/temp HP to their own character
@@ -490,6 +491,17 @@ def spell_helps(sp):
     if key in HELP_EXCEPTIONS:
         return HELP_EXCEPTIONS[key]
     return sp["effect"] == "heal" or sp["ac"] > 0 or (sp["effect"] == "effect" and not sp["hit"])
+
+
+def knocked_prone(conditions):
+    """A hero who drops to 0 HP is knocked prone. Returns the new list, or None if
+    they're already prone."""
+    conditions = list(conditions or [])
+    if any(isinstance(x, dict) and x.get("name", "").lower() == "prone" and not x.get("expired") for x in conditions):
+        return None
+    import uuid
+    return conditions + [{"id": uuid.uuid4().hex[:12], "name": "Prone", "note": "Knocked down at 0 HP",
+                          "rounds_left": None, "expired": False}]
 
 
 def spell_expression(dice_text, spell_mod):

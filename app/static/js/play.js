@@ -56,7 +56,11 @@
   $("#zoom-fit").addEventListener("click", () => view.fit());
   if (window.Dice) Dice.overlayHost = $("#stage");
 
-  const roll = (check, e) => Dice.roll({ check: Object.assign({ character_id: S.character.id }, check) }, e);
+  const roll = (check, e, crit) => Dice.roll({ check: Object.assign({ character_id: S.character.id }, check), crit: !!crit }, e, { wait: true });
+  // Homebrew crit: a natural 20 to hit rolls the damage with double dice, right after the d20 lands.
+  const attackThen = (check, dmgCheck) => (e) => roll(check, e).then((r) => {
+    if (r && r.result && r.result.natural === 20 && dmgCheck) roll(dmgCheck, null, true);
+  });
   let amtValue = "";
   async function me(path, body) {
     try {
@@ -199,7 +203,8 @@
         extras(c),
         h("div", { class: "row", style: "margin-bottom:10px" },
           h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "initiative" }, ev) }, icon("dice-5", "sm"), " Initiative " + signed(d.initiative)),
-          c.current_hp === 0 ? h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: (ev) => roll({ type: "death" }, ev) }, "Death save") : null,
+          c.current_hp === 0 && !["dead", "stable"].includes(c.status) ? h("button", { type: "button", class: "btn btn-sm btn-primary",
+            title: "10 or more is a success. A friend standing right next to you on the map gives you a bonus.", onclick: () => me("death-save", {}) }, icon("dice-5", "sm"), " Roll death save") : null,
           c.in_fight ? h("button", { type: "button", class: "btn btn-sm" + (c.disengaged ? " is-armed" : ""), disabled: c.disengaged,
             title: "Move away this turn without opportunity attacks", onclick: disengage }, icon("compass", "sm"), c.disengaged ? " Disengaged — move away" : " Disengage") : null,
           d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Spell attack " + signed(d.spell.attack)) : null),
@@ -207,15 +212,16 @@
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"), ...c.attacks.map((a) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, a.name || "Attack"),
-          a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "attack", key: a.index }, ev) }, "Hit " + a.bonus) : null,
+          a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: attackThen({ type: "attack", key: a.index }, a.damage && !a.heal ? { type: "damage", key: a.index } : null) }, "Hit " + a.bonus) : null,
           a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) }, a.heal ? "Heal" : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
           casting ? castBox() : null,
           ...c.spells.map((s) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, s.name),
-          s.effect === "damage" && s.hit === "attack" && d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Attack " + signed(d.spell.attack)) : null,
+          s.effect === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
+            onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
           s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
-          s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
+          s.hit && s.hit !== "attack" && !c.roll_to_hit ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
           castable(s) && c.can.cast_spells !== false
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.spell.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.effect === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + L.spellWhat(s))
@@ -264,7 +270,7 @@
       FX.float(box, (diff > 0 ? "+" : "−") + Math.abs(diff), diff > 0 ? "heal" : "dmg");
       FX.flash(box, diff > 0 ? "heal" : "hit");
       FX.sound(diff > 0 ? "heal" : "hit");
-      if (b.current_hp === 0 && a.current_hp > 0) { FX.banner("You're down!", "Make death saves on your turn", "down"); FX.sound("down"); }
+      if (b.current_hp === 0 && a.current_hp > 0) { FX.banner("You're down!", "Knocked prone · roll death saves on your turn", "down"); FX.sound("down"); }
     }
     if (a && b && (b.ac || 0) > (a.ac || 0)) { FX.float($("#me"), "+" + (b.ac - a.ac) + " AC", "ac"); FX.sound("ac"); }
     const ea = before.encounter, eb = now.encounter;
