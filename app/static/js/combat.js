@@ -44,7 +44,7 @@
     if (selected && !byId(selected)) selected = null;
     if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
     renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
-    if (before !== state) celebrate(before, state);
+    if (before !== state) { celebrate(before, state); L.offerParry(state, before && before.combatants, (cid) => L.parry(cid, (d) => { if (d && d.encounter) apply(d); })); }
     if (keep) {
       const el = document.querySelector('[data-keep="' + keep.key + '"]');
       if (el) { el.focus(); try { el.setSelectionRange(keep.start, keep.end); } catch (e) { /* number inputs */ } }
@@ -152,7 +152,10 @@
         h("div", { class: "c-init" }, initIn, h("span", { class: "m" }, signed(c.init_mod))),
         token(c),
         h("div", { class: "c-main" },
-          h("div", { class: "c-name" }, h("span", null, c.name), isCur ? h("span", { class: "acting" }, "acting") : null),
+          h("div", { class: "c-name" }, h("span", null, c.name), isCur ? h("span", { class: "acting" }, "acting") : null,
+            c.parry && c.parry.pending ? h("button", { type: "button", class: "btn btn-sm btn-primary c-parry", title: "Roll off d20 vs the DM; win and the last hit does half",
+              onclick: () => L.parry(c.id, (d) => { if (d && d.encounter) apply(d); }) }, icon("shield", "sm"), " " + c.parry.name + "?") : null),
+          c.follows && byId(c.follows) ? h("div", { class: "c-sub" }, "acts right after " + byId(c.follows).name) : null,
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
@@ -245,6 +248,10 @@
         h("span", { class: "grow" }), h("span", { class: c.ac_bonus ? "ac-up" : "faint", style: "font-size:.85rem" },
           "AC " + c.ac + (c.ac_bonus ? " (" + c.ac_base + " " + signed(c.ac_bonus) + ")" : ""))),
       hpbar(c),
+      c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
+        h("span", { class: "grow" }, h("b", null, c.name + " was hit for " + c.parry.pending.amount + "."), " " + c.parry.name + ": roll off d20 vs you — if " + c.name + " wins, they take " + Math.floor(c.parry.pending.amount / 2) + " instead."),
+        h("button", { type: "button", class: "btn btn-primary", onclick: () => L.parry(c.id, (d) => { if (d && d.encounter) apply(d); }) }, c.parry.name + " (roll-off)"))
+      : c.parry && !c.parry.ready ? h("div", { class: "faint", style: "font-size:.85rem;margin-top:6px" }, c.parry.name + " is recharging.") : null,
       h("div", { class: "hp-ctl", style: "margin-top:12px" }, amt,
         h("button", { type: "button", class: "btn btn-dmg", onclick: () => hp("damage") }, icon("swords", "sm"), " Damage"),
         h("button", { type: "button", class: "btn btn-heal", onclick: () => hp("heal") }, icon("heart", "sm"), " Heal"),
@@ -350,7 +357,7 @@
     sections.push(rollSection(c));
 
     // Stat block (enemies)
-    if (c.kind === "enemy") sections.push(statblock(c));
+    if (!c.linked) sections.push(statblock(c));
 
     box.replaceChildren(...sections, h("datalist", { id: "cond-names" }, CONDITIONS.map((n) => h("option", { value: n }))));
     L.restoreOpen(box);
@@ -411,7 +418,7 @@
         : rule && !a.heal ? (e) => roll({ expression: "1d20", label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: a.has_hit ? "Hit" : "Hit +0",
       dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: a.heal ? "Heal" : "Dmg" }));
-    if (c.kind !== "enemy") return [];
+
     // spells are listed under Spells (L.monsterSpells); this is the Attacks box
     return attackLines(c.statblock.attacks).map((a) => ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: !!a.hit,
       hit: !a.check && !a.heal && (a.dmg || !a.condition) && (a.hit || rule) ? (e) => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
@@ -449,7 +456,7 @@
     };
     return h("div", { class: "detail-sec hit-box" + (healing ? " is-heal" : "") },
       h("h3", { class: "rule-head" }, s.move ? "Use " + s.name : "Cast a spell", h("span", { class: "count" }, c.name + (s.move ? " attacks" : " casts"))),
-      L.castPanel({ spell: s, people, chosen: k.chosen, slots: c.linked && Object.keys(c.spell_slots || {}).length ? c.spell_slots : null,
+      L.castPanel({ spell: s, people, chosen: k.chosen, casterName: c.name, slots: c.linked && Object.keys(c.spell_slots || {}).length ? c.spell_slots : null,
         slot: k.slot, free: k.free, allowFree: true, busy: k.busy, result: k.result, lands: L.spellLands(s, c.spellcasting, toHitRule()),
         onToggle: (p) => { k.chosen.has(p.id) ? k.chosen.delete(p.id) : k.chosen.add(p.id); renderDetail(); },
         onSlot: (n) => { k.slot = n; }, onFree: (v) => { k.free = v; renderDetail(); },

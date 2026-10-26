@@ -533,6 +533,11 @@ def spell_info(spell):
         "terrain": spell.get("terrain") if spell.get("terrain") in SPELL_TERRAIN else "",
         # a grapple: the target makes this save at the end of each of its turns to break free
         "escape": spell.get("escape") if spell.get("escape") in ABILITIES else "",
+        # brings a creature from the library into the fight on the caster's side, acting right after them
+        "summon": str(spell.get("summon") or "").strip()[:200],
+        "summon_count": _num(spell.get("summon_count"), 1, 10, 1),
+        # a reaction: when they're hit, a d20 roll-off against the DM; win and the hit does half
+        "parry": bool(spell.get("parry")),
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

@@ -327,6 +327,53 @@ def spell_over(ctx, cast_id):
             ctx.log("spell", f"{mark.get('spell') or 'The spell'} has ended — {o['name']} is no longer concentrating")
 
 
+def summon(ctx, caster, sp):
+    """Bring a creature from the library into the fight on the caster's side (a clone,
+    a familiar). It acts right after the caster, and its token goes next to theirs on
+    any battle map of this fight. While one is still standing, another can't be made
+    (up to the spell's count). Returns a line for the log."""
+    from .combat import _instance_names, _next_sort, _resort
+    from .maps import BLOCKING, _bump, _open_spots, map_dict
+    cr = ctx.conn.execute("SELECT * FROM creatures WHERE lower(name) = lower(?) AND (campaign_id IS NULL OR campaign_id = ?) "
+                          "ORDER BY campaign_id IS NULL, id LIMIT 1", (sp["summon"], ctx.enc["campaign_id"])).fetchone()
+    if cr is None:
+        raise F.ApiError(f"There's no “{sp['summon']}” in the creature library — make it on the Creatures page first")
+    standing = [c for c in ctx.combatants() if c.get("follows") == caster["id"] and c["statblock"].get("base_name") == cr["name"]
+                and c["status"] not in ("dead", "defeated", "fled")]
+    if len(standing) >= sp["summon_count"]:
+        raise F.ApiError(f"{', '.join(c['name'] for c in standing)} {'is' if len(standing) == 1 else 'are'} still standing")
+    block = F.decode_row(cr, F.CREATURE)
+    statblock = {k: block[k] for k in F.CREATURE if k != "name"}
+    statblock.update(base_name=cr["name"], follows=caster["id"], summoned_by=caster["name"])
+    names = _instance_names(ctx, cr["name"], sp["summon_count"] - len(standing))
+    new_ids = []
+    for n in names:
+        cur = ctx.conn.execute(
+            """INSERT INTO combatants (uid, encounter_id, creature_id, kind, name, init_mod, init_roll, sort_order, max_hp,
+               current_hp, ac, statblock, created_at) VALUES (?, ?, ?, 'npc', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uuid.uuid4().hex, ctx.enc["id"], cr["id"], n, cr["initiative_mod"], caster["init_roll"], _next_sort(ctx),
+             cr["max_hp"], cr["max_hp"], cr["ac"], json.dumps(statblock), now_iso()))
+        new_ids.append(cur.lastrowid)
+    _resort(ctx)
+    # tokens next to the caster on every map of this fight
+    for m in ctx.conn.execute("SELECT * FROM maps WHERE encounter_id = ?", (ctx.enc["id"],)).fetchall():
+        md = map_dict(m)
+        me = ctx.conn.execute("SELECT t.x, t.y FROM map_tokens t LEFT JOIN combatants c ON c.id = t.combatant_id "
+                              "WHERE t.map_id = ? AND (t.combatant_id = ? OR (c.character_id IS NOT NULL AND c.character_id = ?) "
+                              "OR (t.character_id IS NOT NULL AND t.character_id = ?)) LIMIT 1",
+                              (m["id"], caster["id"], caster.get("character_id"), caster.get("character_id"))).fetchone()
+        if me is None:
+            continue
+        taken = {(int(round(r["x"])), int(round(r["y"]))) for r in ctx.conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (m["id"],))}
+        taken.add((int(round(me["x"])), int(round(me["y"]))))
+        spots = _open_spots(md, taken, me["x"], me["y"], len(new_ids))
+        for cid, (x, y) in zip(new_ids, spots):
+            ctx.conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
+                             "VALUES (?,?,'npc',?,?,?,1,0,?,?)", (uuid.uuid4().hex, m["id"], cid, x, y, now_iso(), now_iso()))
+        _bump(ctx.conn, m["id"])
+    return f"{', '.join(names)} {'appears' if len(names) == 1 else 'appear'} and will act right after {caster['name']}"
+
+
 def change_ground(ctx, sp, data):
     """Mend Earth and the like: raise solid rock over the squares it covers (not under
     anyone standing there), or mend broken ground back to plain earth. Returns a line for the log."""
@@ -446,7 +493,10 @@ def cast(ctx, caster_id, data, viewer=None):
     targets = list(dict.fromkeys(targets))
     if not sp["kind"]:
         raise F.ApiError(f"{sp['name']} is only notes — set what it does (damage, healing, buff or debuff) on the Spells tab")
-    if sp["terrain"]:
+    if sp["summon"]:
+        if not (sp["dice"] or spell_lasts(sp) or sp["temp_hp"]):
+            targets = []  # it only brings the creature in
+    elif sp["terrain"]:
         if not data.get("map_id") or not isinstance(data.get("cells"), list):
             raise F.ApiError(f"Aim {sp['name']} on the battle map to choose where it goes")
         if not (sp["dice"] or spell_lasts(sp) or sp["temp_hp"]):
@@ -555,6 +605,8 @@ def cast(ctx, caster_id, data, viewer=None):
         results.append(res)
     if sp["terrain"]:
         lines.insert(0, change_ground(ctx, sp, data))
+    if sp["summon"]:
+        lines.insert(0, summon(ctx, caster, sp))
     from .combat import used_a_move
     used_a_move(ctx, caster["id"], sp["name"])
     if sp["cooldown"]:

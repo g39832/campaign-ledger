@@ -381,7 +381,9 @@
     aim = null; view.aim = null; setTool("select"); renderSelected(); view.draw();
     L.castSpell(EID(), Object.assign({ caster_id: c.id, targets: ids, slot: slot || null, free: !!free }, ground, a.cast.body), (d) => {
       if (!d || !d.cast) { renderSelected(); return; }
+      const was = enc && enc.combatants;
       enc = d;
+      L.offerParry(d, was, (cid) => L.parry(cid, () => { enc = null; refresh(true); }));
       const r = d.cast, hows = r.targets.map((t) => t.how);
       const kind = r.kind === "heal" || L.spellHelps(r) ? "heal" : hows.includes("crit") ? "crit" : hows.length && hows.every((x) => x === "miss" || x === "saved") ? "miss" : "hit";
       say(c.id, r.summary, kind, r.targets.some((t) => t.amount != null));
@@ -427,7 +429,10 @@
   }
   const undoHp = () => act("POST", "/api/encounters/" + EID() + "/undo", {}, () => { lastResult = null; refresh(true); });
   const hpTo = (target, op, amount, by, after) => act("POST", "/api/encounters/" + EID() + "/damage",
-    { targets: [target.id], amount, op, attacker_id: by.id }, () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
+    { targets: [target.id], amount, op, attacker_id: by.id }, (d) => {
+      L.offerParry(d, enc && enc.combatants, (cid) => L.parry(cid, () => { enc = null; refresh(true); }));
+      refresh(true); if (after) after();
+    }, { onError: (e) => toast(e.message, "error") });
   const putEffect = (c, target, s, after) => act("POST", "/api/encounters/" + EID() + "/conditions",
     { targets: [target.id], name: s.condition || s.name, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition && s.condition !== s.name ? s.name : "" },
     () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
@@ -514,6 +519,7 @@
       const s = a.cast.spell;
       aim = { by: c.id, act: a, done: new Set(), cast: true, slot: s.level || null, free: false };
       if (L.spellHelps(s) && a.single && /\bself\b/i.test(s.notes || "")) { castNow(c, a, [c.id]); return; } // Shield: on yourself, straight away
+      if (s.summon && !s.dice) { castNow(c, a, []); return; } // a clone: nobody to pick, it appears next to the caster
       setTool("select");
       $("#hint").textContent = a.name + ": tap " + (a.single ? "who it's on" : "each one it reaches, then Cast") + " on the map. Esc cancels.";
       renderSelected();
@@ -658,6 +664,9 @@
       down ? h("p", { class: "faint", style: "margin:6px 0 0;font-size:.85rem" }, "10 or more is a success. A hero standing right next to " + c.name + " adds +" + ((enc.settings || {}).ally_death_save_bonus ?? 2) + ".") : null) : null;
     return h("div", { class: "fight" },
       deathBox,
+      c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
+        h("span", { class: "grow" }, h("b", null, "Hit for " + c.parry.pending.amount + "."), " Roll off d20 vs you; win = " + Math.floor(c.parry.pending.amount / 2) + " instead."),
+        h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () => L.parry(c.id, () => { enc = null; refresh(true); }) }, c.parry.name + "?")) : null,
       h("div", { class: "fight-head" },
         h("b", { class: "fight-name" }, c.name), isTurn ? h("span", { class: "tag is-good" }, "Their turn") : null,
         h("span", { class: "grow" }), h("span", { class: "fight-ac", title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : "Armor class" }, h("b", null, c.ac), " AC")),

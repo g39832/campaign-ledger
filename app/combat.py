@@ -79,6 +79,7 @@ def _combatant_dict(r):
         "linked": linked, "init_roll": r["init_roll"], "init_mod": r["init_mod"], "sort_order": r["sort_order"],
         "notes": r["notes"], "statblock": json.loads(r["statblock"] or "{}"), "hidden": bool(r["hidden"]),
     }
+    d["follows"] = d["statblock"].get("follows")
     if linked:
         d.update(name=r["ch_name"], hp=r["ch_hp"], max_hp=r["ch_max"], temp_hp=r["ch_temp"], ac=r["ch_ac"],
                  status=r["ch_status"], conditions=json.loads(r["ch_conditions"]),
@@ -122,6 +123,7 @@ def _add_spells(conn, c):
     c["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
                    if spell_does_something(spell_info(s))]
     c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0}
+    c["parry"] = parry_state(conn, c, ch)
 
 
 def encounter_state(enc_id, conn=None, log_limit=400):
@@ -708,6 +710,101 @@ def used_a_move(ctx, cid, what):
     ctx.log("condition", f"{c['name']} uses an extra move ({what}) — {x['extra_moves']} left")
 
 
+def parry_row(ch):
+    """The row on a character's sheet marked as a parry (spells or attacks), with where it is."""
+    from .rules import spell_info
+    for kind in ("spells", "attacks"):
+        for i, r in enumerate(ch.get(kind) or []):
+            if isinstance(r, dict) and r.get("parry"):
+                return {"name": (r.get("name") or "Parry").strip() or "Parry", "cooldown": spell_info(r)["cooldown"] if kind == "spells" else parse_cooldown(r)}
+    return None
+
+
+def parry_state(conn, c, ch):
+    """{name, ready, pending: {change, amount}} for a character who can parry, else None."""
+    row = parry_row(ch)
+    if row is None:
+        return None
+    enc_id = conn.execute("SELECT encounter_id FROM combatants WHERE id = ?", (c["id"],)).fetchone()["encounter_id"]
+    left = cooldown_left(c["conditions"], row["name"], enc_id)
+    out = {"name": row["name"], "ready": not left, "pending": None}
+    hit = conn.execute("SELECT * FROM hp_changes WHERE encounter_id = ? AND combatant_id = ? AND undone = 0 ORDER BY id DESC LIMIT 1",
+                       (enc_id, c["id"])).fetchone()
+    if hit and not left and not hit["label"].endswith("(parried)"):
+        before, after = json.loads(hit["before"]), json.loads(hit["after"])
+        m = re.search(r"takes (\d+) damage", hit["label"])
+        now = {k: c[k] for k in VITAL_KEYS}
+        if m and before["hp"] + before["temp_hp"] > after["hp"] + after["temp_hp"] and now == after:
+            out["pending"] = {"change": hit["id"], "amount": int(m.group(1))}
+    return out
+
+
+def parry(ctx, cid, viewer=None):
+    """Roll off: a d20 for them, a d20 for the DM, ties roll again. If they win, the last
+    hit does half its damage (rounded down) instead. Either way the parry recharges."""
+    from . import dice
+    from .rolls import save_roll
+    c = ctx.combatant(cid)
+    if not c["linked"]:
+        raise F.ApiError("Parrying is on a character's sheet")
+    ch = F.decode_row(ctx.conn.execute("SELECT * FROM characters WHERE id = ?", (c["character_id"],)).fetchone(), F.CHARACTER)
+    st = parry_state(ctx.conn, c, ch)
+    if st is None:
+        raise F.ApiError(f"{c['name']} has no parry — tick Parry on a move on their sheet")
+    if not st["ready"]:
+        raise F.ApiError(f"{st['name']} is recharging")
+    if not st["pending"]:
+        raise F.ApiError(f"There's no hit on {c['name']} to parry right now")
+    hit = ctx.conn.execute("SELECT * FROM hp_changes WHERE id = ?", (st["pending"]["change"],)).fetchone()
+    amount = st["pending"]["amount"]
+    viewer = viewer or ctx.viewer or {"role": "dm", "name": "DM"}
+    ids = {"encounter_id": ctx.enc["id"], "combatant_id": cid, "character_id": c["character_id"]}
+    for _ in range(20):
+        mine, dms = dice.roll("1d20"), dice.roll("1d20")
+        if mine["total"] != dms["total"]:
+            break
+        ctx.log("hp", f"{st['name']} roll-off tied at {mine['total']} — rolling again")
+    won = mine["total"] > dms["total"]
+    save_roll(ctx.conn, viewer, ctx.enc["campaign_id"], mine, label=f"{st['name']} roll-off — {c['name']}", kind="custom", subject=c["name"],
+              ids=ids, outcome="Wins the roll-off" if won else "Loses the roll-off")
+    save_roll(ctx.conn, {"role": "dm", "name": "DM"} if viewer.get("role") != "dm" else viewer, ctx.enc["campaign_id"], dms,
+              label=f"{st['name']} roll-off — DM", kind="custom", subject="DM", ids={"encounter_id": ctx.enc["id"]},
+              outcome="DM loses" if won else "DM wins")
+    ctx.conn.execute("UPDATE hp_changes SET label = label || ' (parried)' WHERE id = ?", (hit["id"],))
+    taken = amount
+    if won:
+        before, after = json.loads(hit["before"]), json.loads(hit["after"])
+        taken = amount // 2
+        v, _label, _note = compute_hp(before, "damage", {"amount": taken}, name=c["name"], linked=True, max_hp=before["max_hp"],
+                                      temp_stacking=ctx.settings["temp_hp_stacking"])
+        if after["hp"] == 0 and v["hp"] > 0:
+            v["status"] = before["status"]
+            c2 = ctx.combatant(cid)
+            ctx.set_vitals(c2, conditions=[x for x in c2["conditions"] if not (x.get("name") == "Prone" and x.get("note") == "Knocked down at 0 HP")])
+        ctx.set_vitals(ctx.combatant(cid), **v)
+        label = f"{c['name']} parries: takes {taken} instead of {amount}"
+        ctx.conn.execute("INSERT INTO hp_changes (encounter_id, combatant_id, character_id, label, before, after, created_at) VALUES (?,?,?,?,?,?,?)",
+                         (ctx.enc["id"], cid, c["character_id"], label, json.dumps(after), json.dumps(v), now_iso()))
+        ctx.log("hp", f"{label} ({st['name']} roll-off: {c['name']} {mine['total']} vs DM {dms['total']}) — {v['hp']}/{v['max_hp']} HP")
+    else:
+        ctx.log("hp", f"{c['name']}'s {st['name']} fails (roll-off: {c['name']} {mine['total']} vs DM {dms['total']}) — takes the full {amount}")
+    if st.get("name") and parry_row(ch)["cooldown"]:
+        start_cooldown(ctx, cid, st["name"], parry_row(ch)["cooldown"])
+    return {"won": won, "me": mine["total"], "dm": dms["total"], "amount": amount, "taken": taken, "name": st["name"]}
+
+
+@bp.post("/combatants/<int:cid>/parry")
+def api_parry(cid):
+    """The DM rolls a character's parry against the last hit on them."""
+    eid = _enc_of_combatant(cid)
+    data = _body()
+    out = {}
+    def fn(ctx):
+        out.update(parry(ctx, cid))
+    resp = mutate(eid, fn, data.get("op_id"))
+    return jsonify(resp.get_json() | {"parry": out or None})
+
+
 @bp.post("/combatants/<int:cid>/surge")
 def api_surge(cid):
     """The DM uses a character's Action Surge (or any row with extra moves). {index}"""
@@ -824,8 +921,27 @@ def _resort(ctx):
     order = ctx.combatants()
     tb = ctx.settings["tie_break"]
     order.sort(key=lambda c: initiative_sort_key(c, tb))
+    order = follow_leaders(order)
     for i, c in enumerate(order):
         ctx.conn.execute("UPDATE combatants SET sort_order = ? WHERE id = ?", (i, c["id"]))
+
+
+def follow_leaders(order):
+    """A summoned clone acts right after whoever summoned it, whatever its initiative."""
+    ids = {c["id"] for c in order}
+    followers = [c for c in order if c.get("follows") in ids]
+    if not followers:
+        return order
+    rest = [c for c in order if c not in followers]
+    out = []
+    def place(c):
+        out.append(c)
+        for f in followers:
+            if f["follows"] == c["id"]:
+                place(f)
+    for c in rest:
+        place(c)
+    return out + [f for f in followers if f not in out]
 
 
 @bp.post("/encounters/<int:eid>/roll")

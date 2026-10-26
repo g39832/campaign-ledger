@@ -169,6 +169,11 @@ def _own_character(conn, char_id):
     for a in out["attacks"]:
         a["recharging"] = cooldown_left(c["conditions"], (a["name"] or "Attack").strip() or "Attack", fight["eid"]) if fight else 0
     out["my_turn"] = None if fight is None else fight["current_id"] == fight["cb_id"]
+    out["parry"] = None
+    if fight is not None:
+        from .combat import Ctx, parry_state
+        me = Ctx(conn, fight["eid"]).combatant(fight["cb_id"])
+        out["parry"] = parry_state(conn, me, c)
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
                      if spell_does_something(spell_info(s))]
     out["derived"] = d
@@ -401,6 +406,22 @@ def is_disengaged(conn, char_id):
     has locked token movement) without provoking opportunity attacks."""
     row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone() if char_id else None
     return bool(row) and any(x.get("name") == DISENGAGED and not x.get("expired") for x in json.loads(row["conditions"] or "[]"))
+
+
+@bp.post("/api/play/me/parry")
+def api_me_parry():
+    """The player parries the hit they just took (a reaction: any time, not just their turn)."""
+    from .combat import Ctx, parry
+    from .rest import active_combatant
+    ident, char_id = _own(None)
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("Parrying is for fights, and there's no fight running")
+        ctx = Ctx(conn, cb["encounter_id"], viewer=ident)
+        out = parry(ctx, cb["id"], ident)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+    return jsonify({"character": _own_character(get_db(), char_id), "parry": out})
 
 
 @bp.post("/api/play/me/surge")

@@ -324,7 +324,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -343,6 +343,8 @@
           does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
           field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
+          field("Summons (a creature from the library)", text(i, "summon", { short: true, placeholder: "e.g. Yamato clone", title: "It joins the fight on your side, next to you, and acts right after you" })),
+          chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
           field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })),
           field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") },

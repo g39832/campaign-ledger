@@ -1197,3 +1197,8 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
     grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "acts acts acts acts"; }
   #attacks td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; }
 }
+
+/* parry: a hit just landed on someone who can roll it off */
+.parry-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; padding: 8px 10px; border: 2px solid var(--brass); border-radius: var(--radius); background: var(--brass-soft); }
+.parry-box .grow { min-width: 160px; overflow-wrap: anywhere; }
+.c-parry { margin-left: 6px; min-height: 26px; padding: 2px 8px; }

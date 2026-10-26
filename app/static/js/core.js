@@ -117,6 +117,8 @@
   // What a spell does to whoever it lands on, in a few words.
   function spellWhat(s, amount) {
     const k = spellKind(s), bits = [];
+    if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
+    if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
     if (s.terrain === "mend") bits.push("mends rock, rubble and pits back to plain ground");
     if (k === "damage" && s.dice) bits.push((amount != null ? amount : s.dice) + (s.damage_type ? " " + s.damage_type : "") + " damage");
@@ -136,7 +138,7 @@
   }
   // How it lands: "spell attack +7", "Dex save DC 15", or nothing for spells that just work.
   function spellLands(s, sc, rule) {
-    if (spellHelps(s) || s.terrain) return "";
+    if (spellHelps(s) || s.terrain || s.summon) return "";
     const atk = sc && sc.attack != null ? " " + signed(sc.attack) : s.attack_bonus != null ? " " + signed(Number(s.attack_bonus)) : "";
     if (s.hit === "attack" || (rule && s.hit)) return (s.move ? "attack" : "spell attack") + atk + (s.hit !== "attack" ? " (house rule)" : "");
     if (s.hit) return ABIL_SHORT[s.hit] + " save" + (s.dc ? " DC " + s.dc : sc && sc.dc ? " DC " + sc.dc : "") + (spellKind(s) === "damage" ? (s.save_half === false || (s.save_half == null && !s.level) ? "" : ", half on a save") : "");
@@ -223,24 +225,48 @@
         h("span", { class: "cast-what" }, [spellWhat(s), o.lands].filter(Boolean).join(" · "))),
       s.notes ? h("p", { class: "faint cast-notes" }, s.notes) : null,
       res ? castResult(res, o.onUndo) : null,
-      res ? null : h("p", { class: "cast-ask" }, n ? "Casting on " + n + (max ? " of up to " + max : "") + ". Tap anyone else it reaches, then Cast." : max === 1 ? "Who is it on? Tap them." : "Who does it reach? Tap each one" + (max ? " (up to " + max + ")" : "") + "."),
-      res ? null : groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
+      res || !s.summon ? null : h("p", { class: "cast-ask" }, s.summon + " appears next to " + (o.casterName || "the caster") + " and acts right after them. Press Cast."),
+      res || s.summon ? null : h("p", { class: "cast-ask" }, n ? "Casting on " + n + (max ? " of up to " + max : "") + ". Tap anyone else it reaches, then Cast." : max === 1 ? "Who is it on? Tap them." : "Who does it reach? Tap each one" + (max ? " (up to " + max + ")" : "") + "."),
+      res || s.summon ? null : groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
         groups.filter(([, l]) => l.length).length > 1 ? h("div", { class: "lbl" }, label) : null,
         h("div", { class: "cast-chips" }, list.map(chip)))),
-      res || o.people.length ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
+      res || o.people.length || s.summon ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
       res ? null : slotPick,
       h("div", { class: "row", style: "margin-top:10px;gap:8px" },
-        res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration), onclick: o.onCast },
-          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : " Cast" + (n ? " on " + n : "")),
+        res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration && !s.summon), onclick: o.onCast },
+          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : " Cast" + (n && !s.summon ? " on " + n : "")),
         h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
   }
   const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
   function castResult(r, onUndo) {
     return h("div", { class: "cast-result", role: "status" },
       h("div", { class: "cast-res-head" }, h("b", null, r.caster + (r.move ? " used " : " cast ") + r.spell), r.spent ? h("span", { class: "tag" }, "level " + r.slot + " slot used") : null),
-      r.targets.length ? h("ul", { class: "cast-res-list" }, r.targets.map((t) => h("li", { class: HOW_CLASS[t.how] || "" }, t.text))) : h("p", { class: "faint", style: "margin:4px 0" }, "Concentrating on it."),
+      r.targets.length ? h("ul", { class: "cast-res-list" }, r.targets.map((t) => h("li", { class: HOW_CLASS[t.how] || "" }, t.text)))
+        : h("p", { style: "margin:4px 0" }, (r.summary || "").split(": ").slice(1).join(": ") || (r.concentration ? "Concentrating on it." : "Done.")),
       onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
   }
+  /* Parry: roll off against the DM for the last hit on them. done(response) after. */
+  function parry(cid, done) {
+    act("POST", "/api/combatants/" + cid + "/parry", {}, (d) => {
+      const p = d && d.parry;
+      if (p) {
+        toast(p.won ? "Parried! " + p.me + " vs DM " + p.dm + " — takes " + p.taken + " instead of " + p.amount + "." : "Parry failed: " + p.me + " vs DM " + p.dm + " — the full " + p.amount + " stands.", p.won ? "ok" : "error", { ms: 7000 });
+        if (window.FX) { FX.banner(p.won ? "Parried!" : "Parry failed", p.me + " vs " + p.dm, p.won ? "heal" : "dmg"); FX.sound(p.won ? "ac" : "hit"); }
+        if (window.Dice && Dice.poll) Dice.poll();
+      }
+      if (done) done(d);
+    }, { onError: (err) => { toast(err.message, "error"); if (done) done(null); } });
+  }
+  // after a hit lands: offer the parry to anyone who just took it and can
+  function offerParry(state, before, run) {
+    if (!state || !state.combatants) return;
+    for (const c of state.combatants) {
+      const p = c.parry && c.parry.pending, was = before && before.find((x) => x.id === c.id);
+      if (!p || !was || (was.parry && was.parry.pending && was.parry.pending.change === p.change)) continue;
+      toast(c.name + " takes " + p.amount + " — " + c.parry.name + "?", "ok", { ms: 12000, action: { label: c.parry.name + " (roll-off)", run: () => run(c.id) } });
+    }
+  }
+
   /* Send a cast to the server: { caster_id, spell | book, targets, slot, free }. done(response)
      after it lands (null if it didn't). Out of slots: the toast offers to cast it without one. */
   function castSpell(eid, body, done) {
@@ -728,5 +754,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, parry, offerParry, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

@@ -209,6 +209,14 @@
           c.temp_hp ? h("span", { class: "temp", style: "color:var(--temp);font-weight:700" }, "+" + c.temp_hp + " temp") : null,
           h("span", { class: "grow" }), h("span", { title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : null }, h("b", null, c.ac), " AC", c.ac_bonus ? h("small", { class: "ac-bonus" }, " " + signed(c.ac_bonus)) : null)),
         c.conditions.length ? h("div", { class: "c-conds", style: "margin-bottom:8px" }, c.conditions.map((x) => h("span", { class: "tag" }, x))) : null,
+        c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
+          h("span", { class: "grow" }, h("b", null, "You were hit for " + c.parry.pending.amount + "!"), " " + c.parry.name + ": roll off against the DM. Win and you take " + Math.floor(c.parry.pending.amount / 2) + " instead."),
+          h("button", { type: "button", class: "btn btn-primary", onclick: () => me("parry", {}).then((r) => {
+            const p = r && r.parry; if (!p) return;
+            toast(p.won ? "Parried! " + p.me + " vs " + p.dm + " — you take " + p.taken + " instead of " + p.amount + "." : "The DM wins " + p.dm + " vs " + p.me + " — you take the full " + p.amount + ".", p.won ? "ok" : "error", { ms: 7000 });
+            if (window.FX) { FX.banner(p.won ? "Parried!" : "Parry failed", p.me + " vs " + p.dm, p.won ? "heal" : "dmg"); FX.sound(p.won ? "ac" : "hit"); }
+            if (window.Dice && Dice.poll) Dice.poll();
+          }) }, c.parry.name + "!")) : null,
         c.can.edit_hp ? hpControls(c) : null,
         extras(c),
         h("div", { class: "row", style: "margin-bottom:10px" },
