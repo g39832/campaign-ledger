@@ -318,13 +318,23 @@
     // An area attack being aimed: the dotted range ring around the attacker, then the area itself.
     drawAim(cp, ox, oy) {
       const a = this.aim, ctx = this.ctx, per = this.map.scale_value || 5;
-      if (a.range > 0) {
+      if (a.range > 0 && a.shape.kind !== "cone" && a.shape.kind !== "line") {
         ctx.save();
         ctx.strokeStyle = "rgba(255,211,107,.85)"; ctx.fillStyle = "rgba(255,211,107,.07)"; ctx.lineWidth = cp * 0.05; ctx.setLineDash([cp * 0.2, cp * 0.14]);
         ctx.beginPath(); ctx.arc(ox + a.from[0] * cp, oy + a.from[1] * cp, (a.range / per + a.fromR) * cp, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.restore();
       }
       this.drawShape(Object.assign({ color: "#ffb347" }, a.shape), cp, ox, oy, true);
+    }
+    // Cones and lines come out of the caster: the start stays on the edge of their token and
+    // only the direction follows the pointer.
+    pointAim(cx, cy) {
+      const a = this.aim, s = a.shape, dx = cx - a.from[0], dy = cy - a.from[1];
+      if (Math.hypot(dx, dy) < 0.3) return;
+      const deg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI / 5) * 5, rad = deg * Math.PI / 180;
+      s.dir = deg;
+      s.x = a.from[0] + Math.cos(rad) * a.fromR;
+      s.y = a.from[1] + Math.sin(rad) * a.fromR;
     }
     // keep the area's origin within range of the attacker (measured from the edge of their token)
     clampAim(x, y) {
@@ -535,10 +545,8 @@
           this.ping(...p);
         } else if (tool === "aim" && this.aim) {
           const [cx, cy] = this.toCell(...p), s = this.aim.shape, per = this.map.scale_value || 5;
-          const near = Math.hypot(cx - s.x, cy - s.y) < 0.7;
-          if (!near || s.kind === "circle" || s.kind === "square") {
-            const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, per)); s.x = x; s.y = y;
-          }
+          if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy); // it stays on the caster and turns to face the click
+          else { const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, per)); s.x = x; s.y = y; }
           this.drag = { aim: true };
           this.draw();
         } else if (tool === "area") {
@@ -583,9 +591,8 @@
           d.at = [nx, ny];
         } else if (d.aim && this.aim) {
           const [cx, cy] = this.toCell(...p), s = this.aim.shape;
-          if (s.kind === "cone" || s.kind === "line") {
-            if (Math.hypot(cx - s.x, cy - s.y) > 0.3) s.dir = Math.round(Math.atan2(cy - s.y, cx - s.x) * 180 / Math.PI / 5) * 5;
-          } else {
+          if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy);
+          else {
             const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, this.map.scale_value || 5)); s.x = x; s.y = y;
           }
           this.aim.hits = new Set(tokensInShape(s, this.map, this.tokens).map((t) => t.id));

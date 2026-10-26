@@ -448,7 +448,7 @@
     const to = near ? [near.x + near.size / 2, near.y + near.size / 2] : [from[0] + 1, from[1]];
     const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
     const shape = { kind: ar.kind, size: ar.size, width: 5, dir: Math.round(ang * 180 / Math.PI / 5) * 5, label: a.name };
-    if (ar.kind === "cone" || ar.kind === "line") { shape.x = from[0] + Math.cos(ang) * fromR; shape.y = from[1] + Math.sin(ang) * fromR; }
+    if (ar.kind === "cone" || ar.kind === "line") { const r = shape.dir * Math.PI / 180; shape.x = from[0] + Math.cos(r) * fromR; shape.y = from[1] + Math.sin(r) * fromR; }
     else { shape.x = to[0]; shape.y = to[1]; }
     aim = { by: c.id, act: a, area: true, amount: null, done: new Set(), half: false };
     view.aim = { shape, from, fromR, range: ar.range || 0, hits: new Set() };
@@ -608,7 +608,8 @@
       onCast: () => castNow(c, a, [...aim.done]), onCancel: stopAim }) : null;
     const aiming = castBox ? null : a && aim.area ? h("div", { class: "fight-aim" },
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name), h("span", { class: "tag" }, areaText(a.aimArea))),
-      h("p", { class: "fa-ask" }, "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
+      h("p", { class: "fa-ask" }, a.aimArea.kind === "cone" || a.aimArea.kind === "line" ? "Click or drag where it should point. It comes out of " + c.name + "."
+        : "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
       h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
       a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, [L.spellWhat(a.cast.spell), L.spellLands(a.cast.spell, c.spellcasting, toHitRule())].filter(Boolean).join(" · ")) : null,
       a.cast ? slotPicker(c, a.cast.spell) : null,
