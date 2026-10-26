@@ -124,6 +124,11 @@ SPELLS = [
       concentration=True, targets=1),
     S("Resistance", 0, "buff", "1 action · touch · concentration · add 1d4 to one saving throw", condition="Resistance", rounds=10,
       concentration=True, targets=1),
+    # ---- changing the battlefield (homebrew, from Moni Easter's sheet): aim it on the battle map
+    S("Mend Earth: Raise Rocks", 0, "buff", "1 action · 20 ft square, range 30 · solid rock rises from the ground and blocks movement (not where anyone stands)",
+      terrain="rock", area="20 ft square, range 30"),
+    S("Mend Earth: Mend", 0, "buff", "1 action · 20 ft square, range 30 · rock, rubble, pits and broken ground go back to plain earth",
+      terrain="mend", area="20 ft square, range 30"),
     # ---- debuffs
     S("Bane", 1, "debuff", "1 action · 30 ft · up to three creatures · concentration · subtract 1d4 from attacks and saves",
       hit="cha", condition="Baned", roll_mod="-1d4", rounds=10, concentration=True, targets=3),

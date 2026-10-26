@@ -22,9 +22,30 @@ bp = Blueprint("maps", __name__, url_prefix="/api")
 
 IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 TERRAIN = ("floor", "wall", "water", "difficult", "pit", "door", "foliage",
-           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table")
+           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table", "rock")
 # Squares a token can't stand in when the app places tokens for you.
-BLOCKING = {"wall", "pit", "water", "lava", "tree", "table"}
+BLOCKING = {"wall", "pit", "water", "lava", "tree", "table", "rock"}
+# Solid squares nobody can walk into or through (a player's move is refused).
+SOLID = {"wall", "rock"}
+# Ground a spell like Mend Earth puts right again.
+MENDABLE = {"rock", "rubble", "difficult", "pit"}
+
+
+def blocked_path(m, size, x0, y0, x1, y1):
+    """The first solid square a token of this size would cross going from (x0, y0) to
+    (x1, y1) in a straight line, or None. Checked every half square along the way."""
+    terrain = m["terrain"]
+    if not any(v in SOLID for v in terrain.values()):
+        return None
+    steps = max(1, int(max(abs(x1 - x0), abs(y1 - y0)) * 2))
+    for i in range(1, steps + 1):
+        x, y = x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps
+        for dx in range(size):
+            for dy in range(size):
+                k = f"{int(round(x)) + dx},{int(round(y)) + dy}"
+                if terrain.get(k) in SOLID:
+                    return k
+    return None
 SHAPE_KINDS = ("circle", "cone", "line", "square")
 
 

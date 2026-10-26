@@ -31,6 +31,29 @@ def _ac_in(row):
     m = AC_NOTE.search(" ".join(str(row.get(k) or "") for k in ("name", "notes", "bonus")))
     return max(-10, min(30, int(m.group(1).replace(" ", "")))) if m else 0
 VITAL_KEYS = ("hp", "max_hp", "temp_hp", "status", "death_successes", "death_failures")
+ESCAPE_FROM = {"grappled": "str", "restrained": "str"}
+
+
+def attack_cast(a, d):
+    """A sheet attack that leaves a condition on a hit (Grapple: damage and Grappled) is
+    used like a spell, so the hit, the damage and the condition all happen at once.
+    The escape DC for a grapple is 8 + proficiency + Strength or Dexterity."""
+    from . import dice
+    from .rules import DAMAGE_TYPES
+    cond = str(a.get("condition") or "").strip()[:60]
+    if not cond:
+        return None
+    text = str(a.get("damage") or "")
+    expr = dice.damage_expression(text) or ""
+    bonus = dice.attack_bonus(str(a.get("bonus") or ""))
+    escape = ESCAPE_FROM.get(cond.lower(), "")
+    out = {"name": (a.get("name") or "Attack").strip() or "Attack", "effect": "damage" if expr else "debuff", "dice": expr,
+           "damage_type": next((t for t in DAMAGE_TYPES if re.search(rf"\b{t}\b", text, re.I)), ""), "hit": "attack",
+           "attack_bonus": bonus or 0, "condition": cond, "level": 0, "notes": str(a.get("notes") or "")[:300],
+           "cooldown": parse_cooldown(a), "escape": escape, "move": True}
+    if escape:
+        out["dc"] = 8 + d["prof"] + max(d["mods"]["str"], d["mods"]["dex"])
+    return out
 rng = random.SystemRandom()
 
 
@@ -42,7 +65,7 @@ def _combatant_rows(conn, enc_id):
                   ch.ac AS ch_ac, ch.status AS ch_status, ch.conditions AS ch_conditions,
                   ch.death_successes AS ch_ds, ch.death_failures AS ch_df, ch.portrait AS ch_portrait,
                   ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
-                  ch.attacks AS ch_attacks
+                  ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
@@ -66,7 +89,9 @@ def _combatant_dict(r):
                  attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
-                           "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a)}
+                           "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
+                           "condition": str(a.get("condition") or "").strip()[:60],
+                           "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],

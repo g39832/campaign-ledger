@@ -117,6 +117,8 @@
   // What a spell does to whoever it lands on, in a few words.
   function spellWhat(s, amount) {
     const k = spellKind(s), bits = [];
+    if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
+    if (s.terrain === "mend") bits.push("mends rock, rubble and pits back to plain ground");
     if (k === "damage" && s.dice) bits.push((amount != null ? amount : s.dice) + (s.damage_type ? " " + s.damage_type : "") + " damage");
     if (k === "heal" && s.dice) bits.push("heals " + (amount != null ? amount : s.dice));
     if (s.temp_hp) bits.push(s.temp_hp + " temp HP");
@@ -128,18 +130,19 @@
     if (Number(s.max_hp)) bits.push("+" + s.max_hp + " max HP");
     if (s.ongoing) bits.push((s.ongoing_kind === "heal" ? "heals " + s.ongoing : s.ongoing_kind === "temp" ? s.ongoing + " temp HP" : s.ongoing + " " + (s.ongoing_type || s.damage_type || "") + " damage").replace("  ", " ") + " each turn");
     if (s.repeat_save && s.hit && s.hit !== "attack") bits.push(ABIL_SHORT[s.hit] + " save each turn to end it");
+    if (s.escape) bits.push("can't move until it breaks free (" + ABIL_SHORT[s.escape] + " save" + (s.dc ? " DC " + s.dc : "") + ")");
     if (s.rounds && (s.condition || Number(s.ac) || s.roll_mod || s.dmg_mod || s.adv || s.ongoing || Number(s.max_hp))) bits.push(duration(s.rounds));
     return bits.join(" · ");
   }
   // How it lands: "spell attack +7", "Dex save DC 15", or nothing for spells that just work.
   function spellLands(s, sc, rule) {
-    if (spellHelps(s)) return "";
+    if (spellHelps(s) || s.terrain) return "";
     const atk = sc && sc.attack != null ? " " + signed(sc.attack) : s.attack_bonus != null ? " " + signed(Number(s.attack_bonus)) : "";
-    if (s.hit === "attack" || (rule && s.hit)) return "spell attack" + atk + (s.hit !== "attack" ? " (house rule)" : "");
+    if (s.hit === "attack" || (rule && s.hit)) return (s.move ? "attack" : "spell attack") + atk + (s.hit !== "attack" ? " (house rule)" : "");
     if (s.hit) return ABIL_SHORT[s.hit] + " save" + (s.dc ? " DC " + s.dc : sc && sc.dc ? " DC " + sc.dc : "") + (spellKind(s) === "damage" ? (s.save_half === false || (s.save_half == null && !s.level) ? "" : ", half on a save") : "");
     return spellKind(s) === "damage" ? "always hits" : "no save";
   }
-  const levelWord = (s) => !Number(s.level) ? "Cantrip" : "Level " + s.level;
+  const levelWord = (s) => s.move ? "" : !Number(s.level) ? "Cantrip" : "Level " + s.level; // a move (Grapple) isn't a spell
   // The spell list the server sent (sheet, combat, map). bookSpell("Hold person DC 13") -> Hold Person.
   function bookSpell(name) {
     const list = (window.SPELL_BOOK && window.SPELL_BOOK.spells) || [];
@@ -216,7 +219,7 @@
     const res = o.result;
     return h("div", { class: "cast-picker is-" + (k === "heal" ? "heal" : helps ? "help" : "harm"), role: "group", "aria-label": "Cast " + s.name },
       h("div", { class: "cast-head" }, icon(KIND_ICON[k] || "zap", "sm"), h("b", null, s.name),
-        h("span", { class: "tag" }, levelWord(s)), s.concentration ? h("span", { class: "tag", title: "Concentration: casting another concentration spell ends it, and damage can break it" }, "Concentration") : null,
+        levelWord(s) ? h("span", { class: "tag" }, levelWord(s)) : null, s.concentration ? h("span", { class: "tag", title: "Concentration: casting another concentration spell ends it, and damage can break it" }, "Concentration") : null,
         h("span", { class: "cast-what" }, [spellWhat(s), o.lands].filter(Boolean).join(" · "))),
       s.notes ? h("p", { class: "faint cast-notes" }, s.notes) : null,
       res ? castResult(res, o.onUndo) : null,
@@ -234,7 +237,7 @@
   const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
   function castResult(r, onUndo) {
     return h("div", { class: "cast-result", role: "status" },
-      h("div", { class: "cast-res-head" }, h("b", null, r.caster + " cast " + r.spell), r.spent ? h("span", { class: "tag" }, "level " + r.slot + " slot used") : null),
+      h("div", { class: "cast-res-head" }, h("b", null, r.caster + (r.move ? " used " : " cast ") + r.spell), r.spent ? h("span", { class: "tag" }, "level " + r.slot + " slot used") : null),
       r.targets.length ? h("ul", { class: "cast-res-list" }, r.targets.map((t) => h("li", { class: HOW_CLASS[t.how] || "" }, t.text))) : h("p", { class: "faint", style: "margin:4px 0" }, "Concentrating on it."),
       onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
   }

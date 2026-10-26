@@ -346,7 +346,8 @@
       (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
         ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0 }), null))
-        : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
+        : null) : a.cast ? out.push(Object.assign(spellAction(c, L.spellView(a.cast), { spell: a.cast }), { single: true, icon: "swords" }))
+        : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
         cooldown: a.cooldown || 0, cdName: a.name,
         info: (a.area ? areaText(a.area) + " · " : "") + (a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage"),
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
@@ -371,8 +372,10 @@
      and leaves the effect. Then the panel says what happened (with Undo for the HP). */
   function castNow(c, a, ids) {
     const slot = aim && aim.cast ? aim.slot : null, free = aim && aim.cast ? aim.free : false;
+    // a spell that changes the ground (Mend Earth) sends the squares it covers
+    const ground = a.cast.spell.terrain && view.aim ? { map_id: MID, cells: MapView.shapeCells(view.aim.shape, S.map) } : {};
     aim = null; view.aim = null; setTool("select"); renderSelected(); view.draw();
-    L.castSpell(EID(), Object.assign({ caster_id: c.id, targets: ids, slot: slot || null, free: !!free }, a.cast.body), (d) => {
+    L.castSpell(EID(), Object.assign({ caster_id: c.id, targets: ids, slot: slot || null, free: !!free }, ground, a.cast.body), (d) => {
       if (!d || !d.cast) { renderSelected(); return; }
       enc = d;
       const r = d.cast, hows = r.targets.map((t) => t.how);
@@ -464,7 +467,8 @@
     .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean);
   async function confirmAim() {
     const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
-    if (!targets.length) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
+    const ground = a.cast && a.cast.spell.terrain;
+    if (!targets.length && !ground) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
     if (a.cast) { castNow(c, a, targets.map((x) => x.id)); return; }
     view.aim = null; aim = null; setTool("select"); renderSelected();
     useMove(c, a);
@@ -610,12 +614,15 @@
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name), h("span", { class: "tag" }, areaText(a.aimArea))),
       h("p", { class: "fa-ask" }, a.aimArea.kind === "cone" || a.aimArea.kind === "line" ? "Click or drag where it should point. It comes out of " + c.name + "."
         : "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
-      h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
+      a.cast && a.cast.spell.terrain ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" },
+        a.cast.spell.terrain === "rock" ? "Rock rises in the highlighted squares, but not under anyone standing there." : "Rock, rubble and pits in the highlighted squares go back to plain ground.")
+      : h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
       a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, [L.spellWhat(a.cast.spell), L.spellLands(a.cast.spell, c.spellcasting, toHitRule())].filter(Boolean).join(" · ")) : null,
       a.cast ? slotPicker(c, a.cast.spell) : null,
       a.toHit && !a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
       h("div", { class: "row", style: "gap:8px" },
-        h("button", { type: "button", class: "btn btn-primary", disabled: !inArea.length, onclick: confirmAim }, icon("check", "sm"), " Confirm" + (inArea.length ? " · " + inArea.length : "")),
+        h("button", { type: "button", class: "btn btn-primary", disabled: !inArea.length && !(a.cast && a.cast.spell.terrain), onclick: confirmAim }, icon("check", "sm"),
+          " Confirm" + (inArea.length && !(a.cast && a.cast.spell.terrain) ? " · " + inArea.length : "")),
         h("button", { type: "button", class: "btn btn-sm", onclick: stopAim }, "Cancel")))
     : a ? h("div", { class: "fight-aim" + (a.heal ? " is-heal" : "") },
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name),

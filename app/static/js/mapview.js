@@ -17,6 +17,7 @@
     lava: { fill: "#d0502a", label: "Lava / fire", glow: true }, ice: { fill: "#cfe6ef", label: "Ice", shine: true },
     rubble: { fill: "#8a7f70", label: "Rubble / crates", rubble: true }, tree: { fill: "#6f8f4e", label: "Tree", tree: true },
     table: { fill: "#7a5a3a", label: "Table / furniture", table: true },
+    rock: { fill: "#5d5449", label: "Raised rock (blocks)", rock: true },
   };
   const KIND_COLOR = { pc: "#c7a25e", npc: "#6f8fae", enemy: "#b2402e", trap: "#7d4f8f", marker: "#8b8273", object: "#7a5a3a" };
   const COND_COLOR = { Blinded: "#555", Charmed: "#d36fb0", Deafened: "#777", Frightened: "#9b6fd3", Grappled: "#b08a3e", Incapacitated: "#8a8a8a",
@@ -296,6 +297,13 @@
       if (T.rubble) {
         ctx.fillStyle = "rgba(60,50,40,.55)";
         for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(X + (0.2 + hash(i, x) * 0.6) * cp, Y + (0.2 + hash(y, i) * 0.6) * cp, cp * (0.08 + hash(x + i, y) * 0.08), 0, Math.PI * 2); ctx.fill(); }
+      }
+      if (T.rock) { // a jagged boulder, so raised rock reads as solid, not as floor
+        ctx.fillStyle = "#3c352d";
+        ctx.beginPath(); ctx.moveTo(X + cp * 0.12, Y + cp * 0.85); ctx.lineTo(X + cp * 0.3, Y + cp * 0.25); ctx.lineTo(X + cp * 0.55, Y + cp * 0.12);
+        ctx.lineTo(X + cp * 0.85, Y + cp * 0.4); ctx.lineTo(X + cp * 0.88, Y + cp * 0.85); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = cp * 0.04;
+        ctx.beginPath(); ctx.moveTo(X + cp * 0.32, Y + cp * 0.3); ctx.lineTo(X + cp * 0.55, Y + cp * 0.18); ctx.lineTo(X + cp * 0.78, Y + cp * 0.42); ctx.stroke();
       }
       if (T.pit) {
         ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = cp * 0.04;
@@ -646,6 +654,7 @@
   }
   window.MapView = MapView;
   window.MapView.TERRAIN = TERRAIN;
+  window.MapView.shapeCells = shapeCells;
   window.MapView.KIND_COLOR = KIND_COLOR;
   window.MapView.shapeCells = shapeCells;
   window.MapView.tokensInShape = tokensInShape;

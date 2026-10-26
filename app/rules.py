@@ -464,6 +464,7 @@ DAMAGE_TYPES = ("acid", "bludgeoning", "cold", "fire", "force", "lightning", "ne
 # advantage a lasting effect gives: on the bearer's own attacks, or on attacks made against the bearer
 SPELL_ADV = ("", "attacks_adv", "attacks_dis", "attacked_adv", "attacked_dis")
 ONGOING_KINDS = ("damage", "heal", "temp")
+SPELL_TERRAIN = ("", "rock", "mend")  # what a spell does to the battle map: raise solid rock, or mend the ground
 HELP_EXCEPTIONS = {"sleep": False, "sanctuary": True}
 DICE_TEXT = re.compile(r"^[-+]?\s*(?:\d*d\d+|\d+|mod)(?:\s*[-+]\s*(?:\d*d\d+|\d+|mod))*$", re.I)
 
@@ -529,6 +530,9 @@ def spell_info(spell):
         "ongoing_save": _flag(spell, "ongoing_save", False),
         "repeat_save": _flag(spell, "repeat_save", False),
         "targets": _num(spell.get("targets"), 1, 50),
+        "terrain": spell.get("terrain") if spell.get("terrain") in SPELL_TERRAIN else "",
+        # a grapple: the target makes this save at the end of each of its turns to break free
+        "escape": spell.get("escape") if spell.get("escape") in ABILITIES else "",
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

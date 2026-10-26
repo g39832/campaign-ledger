@@ -275,6 +275,9 @@ def effect_for(ctx, sp, caster, cast_id, nums, slot):
         cond["ongoing"] = on
     if sp["repeat_save"] and sp["hit"] in ABILITIES and nums["dc"]:
         cond["save"] = {"ability": sp["hit"], "dc": nums["dc"]}
+    if sp["escape"] and nums["dc"]:
+        cond["save"] = {"ability": sp["escape"], "dc": nums["dc"]}
+        cond["note"] = (cond["note"] + " · " if cond["note"] else "") + f"can't move; {SHORT[sp['escape']]} save DC {nums['dc']} at the end of its turn to break free"
     return cond
 
 
@@ -322,6 +325,40 @@ def spell_over(ctx, cast_id):
         if mark:
             ctx.set_vitals(o, conditions=[x for x in o["conditions"] if x.get("id") != mark["id"]])
             ctx.log("spell", f"{mark.get('spell') or 'The spell'} has ended — {o['name']} is no longer concentrating")
+
+
+def change_ground(ctx, sp, data):
+    """Mend Earth and the like: raise solid rock over the squares it covers (not under
+    anyone standing there), or mend broken ground back to plain earth. Returns a line for the log."""
+    from .maps import MENDABLE, _bump, _cells, map_dict
+    row = ctx.conn.execute("SELECT * FROM maps WHERE id = ?", (int(data["map_id"]),)).fetchone()
+    if row is None or row["campaign_id"] != ctx.enc["campaign_id"]:
+        raise F.ApiError("That map isn't in this campaign")
+    m = map_dict(row)
+    cells = _cells(data, m)
+    terrain, changed = m["terrain"], 0
+    if sp["terrain"] == "rock":
+        taken = set()
+        for t in ctx.conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ? AND kind NOT IN ('marker', 'trap')", (m["id"],)):
+            for dx in range(t["size"]):
+                for dy in range(t["size"]):
+                    taken.add(f"{int(round(t['x'])) + dx},{int(round(t['y'])) + dy}")
+        for x, y in cells:
+            k = f"{x},{y}"
+            if k not in taken and terrain.get(k) != "rock":
+                terrain[k] = "rock"
+                changed += 1
+        what = f"raises solid rock over {changed} square{'s' if changed != 1 else ''}"
+    else:
+        for x, y in cells:
+            k = f"{x},{y}"
+            if terrain.get(k) in MENDABLE:
+                terrain.pop(k)
+                changed += 1
+        what = f"mends {changed} square{'s' if changed != 1 else ''} of ground"
+    ctx.conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (json.dumps(terrain), m["id"]))
+    _bump(ctx.conn, m["id"])
+    return what
 
 
 def concentration_check(ctx, c, damage):
@@ -409,7 +446,12 @@ def cast(ctx, caster_id, data, viewer=None):
     targets = list(dict.fromkeys(targets))
     if not sp["kind"]:
         raise F.ApiError(f"{sp['name']} is only notes — set what it does (damage, healing, buff or debuff) on the Spells tab")
-    if not targets and not sp["concentration"]:
+    if sp["terrain"]:
+        if not data.get("map_id") or not isinstance(data.get("cells"), list):
+            raise F.ApiError(f"Aim {sp['name']} on the battle map to choose where it goes")
+        if not (sp["dice"] or spell_lasts(sp) or sp["temp_hp"]):
+            targets = []  # it only changes the ground
+    elif not targets and not sp["concentration"]:
         raise F.ApiError(f"Pick who {sp['name']} is cast on")
     if sp["targets"] and len(targets) > sp["targets"]:
         raise F.ApiError(f"{sp['name']} reaches at most {sp['targets']} {'creature' if sp['targets'] == 1 else 'creatures'}")
@@ -511,14 +553,17 @@ def cast(ctx, caster_id, data, viewer=None):
         res["text"] = f"{t['name']}" + (f" {verdict}" if verdict else "") + (f" ({how})" if how else "") + (" — " + ", ".join(parts) if parts else "")
         lines.append(res["text"])
         results.append(res)
+    if sp["terrain"]:
+        lines.insert(0, change_ground(ctx, sp, data))
     if sp["cooldown"]:
         start_cooldown(ctx, caster["id"], sp["name"], sp["cooldown"])
     slot_word = f" with a level {slot} slot" if spent else at
-    head = f"{caster['name']} casts {sp['name']}{slot_word}" + (" (concentration)" if sp["concentration"] else "")
+    move = isinstance(data.get("spell"), dict) and bool(data["spell"].get("move"))  # Grapple: a move, not a spell
+    head = f"{caster['name']} {'uses' if move else 'casts'} {sp['name']}{slot_word}" + (" (concentration)" if sp["concentration"] else "")
     ctx.log("spell", head + (": " + "; ".join(lines) if lines else ""))
     return {"spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
             "spent": spent, "lands": lands, "targets": results, "summary": head + (": " + "; ".join(lines) if lines else ""),
-            "rolls": roller.ids, "concentration": sp["concentration"]}
+            "rolls": roller.ids, "concentration": sp["concentration"], "move": move}
 
 
 def _rolls_for(ids, viewer):

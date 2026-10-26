@@ -13,7 +13,18 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from . import fields as F
 from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
-from .maps import _bump, clamp_position, map_dict, player_view, fog_image
+from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
+
+SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
+
+
+def held_in_place(conn, char_id):
+    """The condition that keeps this character from moving (speed 0), if any."""
+    row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone()
+    for x in json.loads(row["conditions"] or "[]") if row else []:
+        if isinstance(x, dict) and not x.get("expired") and str(x.get("name") or "").strip().capitalize() in SPEED_ZERO:
+            return x["name"].strip()
+    return None
 from .rules import ac_bonus, cooldown_left, derived, is_healing, parse_cooldown, spell_does_something, spell_helps, spell_info, spell_lasts
 
 bp = Blueprint("play", __name__)
@@ -244,6 +255,11 @@ def api_move(token_id):
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(md, t["size"], x, y)
+        stuck = held_in_place(conn, owner)
+        if stuck:
+            raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
+        if blocked_path(md, t["size"], t["x"], t["y"], x, y):
+            raise F.ApiError("Solid rock is in the way — you can't move there", status=403)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         _bump(conn, m["id"])
     return jsonify({"ok": True, "x": x, "y": y})

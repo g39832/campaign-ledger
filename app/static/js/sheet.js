@@ -246,7 +246,8 @@
     { key: "notes", label: "Notes", placeholder: "Versatile (1d10)" },
     { key: "area", label: "Area (optional)", placeholder: "e.g. 10 ft cone, range 20" },
     { key: "cooldown", label: "Cooldown (turns)", type: "number", placeholder: "0" },
-  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null }, {
+    { key: "condition", label: "On a hit, they're", placeholder: "e.g. Grappled" },
+  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "" }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
     rowActions: (i, row) => L.isHealing(row)
@@ -322,7 +323,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -341,6 +342,7 @@
           does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
           field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
+          field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })),
           field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
         h("div", { class: "spell-top" },

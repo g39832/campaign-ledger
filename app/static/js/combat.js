@@ -402,6 +402,8 @@
       ? { name: a.name, note: a.ac ? "" : a.notes, cooldown: a.cooldown || 0,
         effect: a.ac ? { name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, rounds: null, hit: "", cooldown: a.cooldown || 0 } : null }
       : ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: a.has_hit,
+      // leaves a condition on a hit (Grapple): one button rolls the hit, the damage and puts it on
+      effect: a.cast || null, effectFirst: !!a.cast,
       hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e)
         : rule && !a.heal ? (e) => roll({ expression: "1d20", label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: a.has_hit ? "Hit" : "Hit +0",
@@ -443,7 +445,7 @@
       });
     };
     return h("div", { class: "detail-sec hit-box" + (healing ? " is-heal" : "") },
-      h("h3", { class: "rule-head" }, "Cast a spell", h("span", { class: "count" }, c.name + " casts")),
+      h("h3", { class: "rule-head" }, s.move ? "Use " + s.name : "Cast a spell", h("span", { class: "count" }, c.name + (s.move ? " attacks" : " casts"))),
       L.castPanel({ spell: s, people, chosen: k.chosen, slots: c.linked && Object.keys(c.spell_slots || {}).length ? c.spell_slots : null,
         slot: k.slot, free: k.free, allowFree: true, busy: k.busy, result: k.result, lands: L.spellLands(s, c.spellcasting, toHitRule()),
         onToggle: (p) => { k.chosen.has(p.id) ? k.chosen.delete(p.id) : k.chosen.add(p.id); renderDetail(); },
@@ -509,8 +511,9 @@
         if (r && r.result && r.result.natural === 20 && a.dmg && !a.heal) a.dmg(null, true).then(after("dmg"));
       }) }, a.hitLabel) : null,
       a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
-      a.effect ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(a.effect) ? " btn-heal" : ""), title: "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
-        icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), " Cast · " + L.spellWhat(a.effect)) : null,
+      a.effect ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(a.effect) ? " btn-heal" : a.effectFirst ? " btn-dmg" : ""),
+        title: a.effectFirst ? "Rolls to hit; on a hit it deals the damage and they're " + a.effect.condition : "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
+        icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), a.effectFirst ? " Use · " + a.effect.condition : " Cast · " + L.spellWhat(a.effect)) : null,
       a.note ? h("span", { class: "faint", style: "font-size:.85rem;overflow-wrap:anywhere" }, a.note) : null,
       a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then((r) => { if (r && !a.hit) used(a); after(a.heal ? "heal" : "dmg")(r); }) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
@@ -557,6 +560,8 @@
             s.concentration ? h("span", { class: "tag", title: "Concentration" }, "Conc.") : null),
           h("div", { class: "faint sr-what" }, [L.spellWhat(s), L.spellLands(s, sc || (s.dc ? { dc: s.dc } : null), rule), s.area ? s.area.size + " ft " + ({ circle: "radius", square: "cube" }[s.area.kind] || s.area.kind) : ""].filter(Boolean).join(" · "))),
         left ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
+          : s.terrain ? h("button", { type: "button", class: "btn btn-sm", title: "It changes the ground: aim it on the battle map", onclick: () => { try { localStorage.setItem("combat-sel-" + EID, c.id); } catch (e) { /* ignore */ } makeMap(); } },
+            icon("map", "sm"), " Aim on map")
           : h("button", { type: "button", class: "btn btn-sm " + (s.kind === "heal" || helps ? "btn-heal" : "btn-dmg"), title: "Pick who it reaches, then Cast",
             onclick: () => startCast(c, s, body) }, icon(L.KIND_ICON[s.kind] || "zap", "sm"), " Cast"));
     };
