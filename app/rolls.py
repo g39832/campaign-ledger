@@ -154,6 +154,23 @@ def with_effects(conn, ids, check_type, expr, label, mode):
     return expr, label, mode
 
 
+def _row_mult(conn, check):
+    from .combat import dmg_mult
+    if check.get("type") != "damage":
+        return 1
+    char_id = check.get("character_id")
+    if not char_id and check.get("combatant_id"):
+        row = conn.execute("SELECT character_id FROM combatants WHERE id = ?", (int(check["combatant_id"]),)).fetchone()
+        char_id = row["character_id"] if row else None
+    if not char_id:
+        return 1
+    row = conn.execute("SELECT attacks FROM characters WHERE id = ?", (int(char_id),)).fetchone()
+    try:
+        return dmg_mult(json.loads(row["attacks"] or "[]")[int(check.get("key"))])
+    except (TypeError, ValueError, IndexError):
+        return 1
+
+
 def _is_a_move(conn, check, ids):
     """Rolling to hit is making a move (and so is the damage of a move with no to-hit roll).
     Only counts in a running fight, on the roller's own turn."""
@@ -309,6 +326,10 @@ def api_roll():
         result = dice.roll(expr, mode=mode, crit=bool(data.get("crit")) and kind == "damage")
     except dice.DiceError as e:
         raise F.ApiError(str(e))
+    mult = _row_mult(conn, check) if check and kind == "damage" else 1
+    if mult > 1:  # Reckless attack: the rolled damage is doubled
+        result["multiplier"], result["total"] = mult, result["total"] * mult
+        label = f"{label} — {'doubled' if mult == 2 else '×' + str(mult)}"
     if data.get("crit") and kind == "damage":
         label = (label + " — critical").strip(" —")
     outcome = outcome_for(kind, result)

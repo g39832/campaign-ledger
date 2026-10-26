@@ -15,7 +15,7 @@ from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
 
-from .combat import extra_moves  # noqa: E402
+from .combat import dmg_mult, extra_moves  # noqa: E402
 
 SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
 
@@ -161,7 +161,8 @@ def _own_character(conn, char_id):
     out["ac_bonus"] = ac_bonus(c["conditions"])
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
-                       "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a)}
+                       "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a),
+                       "dmg_mult": dmg_mult(a)}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
     fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "

@@ -505,6 +505,11 @@ def cast(ctx, caster_id, data, viewer=None):
         raise F.ApiError(f"Pick who {sp['name']} is cast on")
     if sp["targets"] and len(targets) > sp["targets"]:
         raise F.ApiError(f"{sp['name']} reaches at most {sp['targets']} {'creature' if sp['targets'] == 1 else 'creatures'}")
+    if sp["cooldown"] and not data.get("force"):
+        from .rules import cooldown_left
+        left = cooldown_left(caster["conditions"], sp["name"], ctx.enc["id"])
+        if left:
+            raise F.ApiError(f"{sp['name']} is recharging — ready after {max(1, left - 1)} more of {caster['name']}'s turns")
     people = [ctx.combatant(t) for t in targets]
     nums = caster_numbers(ctx, caster)
     nums.update(extra)
@@ -576,6 +581,9 @@ def cast(ctx, caster_id, data, viewer=None):
             if half:
                 amount //= 2
             note = ""
+            if sp["dmg_mult"] > 1:
+                amount *= sp["dmg_mult"]
+                note = f", ×{sp['dmg_mult']}" if sp["dmg_mult"] != 2 else ", doubled"
             if not t["linked"]:
                 mult, word = damage_multiplier(t["statblock"], sp["damage_type"])
                 if mult != 1:

@@ -524,8 +524,9 @@
       a.surge ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "Use it on their turn: " + a.surgeN + " extra moves until the turn ends", onclick: a.surge },
         icon("zap", "sm"), " Use · +" + a.surgeN + " moves") : null,
       a.effect ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(a.effect) ? " btn-heal" : a.effectFirst ? " btn-dmg" : ""),
-        title: a.effectFirst ? "Rolls to hit; on a hit it deals the damage and they're " + a.effect.condition : "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
-        icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), a.effectFirst ? " Use · " + a.effect.condition : " Cast · " + L.spellWhat(a.effect)) : null,
+        title: a.effectFirst ? "Rolls to hit against their AC; on a hit it deals the damage" + (a.effect.dmg_mult > 1 ? " ×" + a.effect.dmg_mult : "") + (a.effect.condition ? " and they're " + a.effect.condition : "") : "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
+        icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), a.effectFirst ? " Use · " + [a.effect.condition, a.effect.dmg_mult > 1 ? (a.effect.dmg_mult == 2 ? "double damage" : "×" + a.effect.dmg_mult + " damage") : ""].filter(Boolean).join(", ")
+          : " Cast · " + L.spellWhat(a.effect)) : null,
       a.note ? h("span", { class: "faint", style: "font-size:.85rem;overflow-wrap:anywhere" }, a.note) : null,
       a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then((r) => { if (r && !a.hit) used(a); after(a.heal ? "heal" : "dmg")(r); }) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,

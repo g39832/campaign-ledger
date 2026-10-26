@@ -538,6 +538,8 @@ def spell_info(spell):
         "summon_count": _num(spell.get("summon_count"), 1, 10, 1),
         # a reaction: when they're hit, a d20 roll-off against the DM; win and the hit does half
         "parry": bool(spell.get("parry")),
+        # Reckless attack: on a hit the damage is multiplied (2 = double)
+        "dmg_mult": _num(spell.get("dmg_mult"), 1, 10, 1),
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

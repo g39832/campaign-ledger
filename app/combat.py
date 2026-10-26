@@ -34,6 +34,14 @@ VITAL_KEYS = ("hp", "max_hp", "temp_hp", "status", "death_successes", "death_fai
 ESCAPE_FROM = {"grappled": "str", "restrained": "str"}
 
 
+def dmg_mult(row):
+    """Damage × on a sheet row: Reckless attack doubles its damage on a hit (2). 1 = normal."""
+    try:
+        return max(1, min(10, int(row.get("dmg_mult") or 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
 def attack_cast(a, d):
     """A sheet attack that leaves a condition on a hit (Grapple: damage and Grappled) is
     used like a spell, so the hit, the damage and the condition all happen at once.
@@ -41,13 +49,14 @@ def attack_cast(a, d):
     from . import dice
     from .rules import DAMAGE_TYPES
     cond = str(a.get("condition") or "").strip()[:60]
-    if not cond:
+    mult = dmg_mult(a)
+    if not cond and mult == 1:
         return None
     text = str(a.get("damage") or "")
     expr = dice.damage_expression(text) or ""
     bonus = dice.attack_bonus(str(a.get("bonus") or ""))
     escape = ESCAPE_FROM.get(cond.lower(), "")
-    out = {"name": (a.get("name") or "Attack").strip() or "Attack", "effect": "damage" if expr else "debuff", "dice": expr,
+    out = {"name": (a.get("name") or "Attack").strip() or "Attack", "effect": "damage" if expr else "debuff", "dice": expr, "dmg_mult": mult,
            "damage_type": next((t for t in DAMAGE_TYPES if re.search(rf"\b{t}\b", text, re.I)), ""), "hit": "attack",
            "attack_bonus": bonus or 0, "condition": cond, "level": 0, "notes": str(a.get("notes") or "")[:300],
            "cooldown": parse_cooldown(a), "escape": escape, "move": True}
@@ -91,7 +100,7 @@ def _combatant_dict(r):
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
                            "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
-                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a),
+                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a),
                            "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:

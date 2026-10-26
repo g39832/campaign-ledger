@@ -117,6 +117,7 @@
   // What a spell does to whoever it lands on, in a few words.
   function spellWhat(s, amount) {
     const k = spellKind(s), bits = [];
+    if (Number(s.dmg_mult) > 1) bits.push((s.dmg_mult == 2 ? "double" : "×" + s.dmg_mult) + " damage on a hit");
     if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
