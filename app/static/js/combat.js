@@ -348,6 +348,7 @@
     if (c.kind === "enemy") sections.push(statblock(c));
 
     box.replaceChildren(...sections, h("datalist", { id: "cond-names" }, CONDITIONS.map((n) => h("option", { value: n }))));
+    L.restoreOpen(box);
   }
   const ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
   const attackLines = L.attackLines;

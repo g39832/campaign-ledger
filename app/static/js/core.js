@@ -160,20 +160,38 @@
     if (a.dc != null) return total >= a.dc ? "makes DC " + a.dc : "fails DC " + a.dc;
     return "";
   }
+  /* Panels that redraw when the game changes (the map's side panel, the combat details)
+     would snap every folded section shut. Each <details> remembers whether it was open,
+     by its data-key or its summary's text, and restoreOpen() puts it back after a redraw. */
+  const openState = new Map();
+  const detailsKey = (d) => d.dataset.key || ((d.querySelector(":scope > summary") || {}).textContent || "").trim();
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d && d.tagName === "DETAILS" && detailsKey(d)) openState.set(detailsKey(d), d.open);
+  }, true);
+  function restoreOpen(root) {
+    root.querySelectorAll("details").forEach((d) => { const k = detailsKey(d); if (k && openState.has(k)) d.open = openState.get(k); });
+  }
+  // what's been typed in a monster's attacks & spells boxes but not saved yet, so a redraw doesn't lose it
+  const drafts = new Map();
   const ATTACK_HELP = "One per line. Bite 1d6 · Claw +4 to hit 1d6+2 · Spread 1d20 must beat a 5";
   const SPELL_HELP = "One per line. Fire bolt +5 2d10 · Fireball 8d6 · Healing word heal 1d4+2 · Web: Restrained 10 rounds";
   /* Write an enemy's attacks and spells in the middle of a fight. With "all like it" ticked, every
      enemy of the same kind in the fight and the creature in the library change too. */
   function monsterEditor(c, onSaved) {
     const sb = c.statblock || {};
-    const atk = h("textarea", { rows: 3, class: "prose", "aria-label": "Attacks", placeholder: "Bite 1d6\nClaw +4 to hit 1d6+2" }, sb.attacks || "");
-    const spl = h("textarea", { rows: 3, class: "prose", "aria-label": "Spells", placeholder: "Fire bolt +5 2d10\nWeb: Restrained 10 rounds" }, sb.spells || "");
+    const dk = (f) => c.id + ":" + f;
+    const box = (f, label, placeholder) => h("textarea", { rows: 3, class: "prose", "aria-label": label, placeholder, "data-keep": "mon-" + dk(f),
+      oninput: (e) => drafts.set(dk(f), e.target.value) }, drafts.has(dk(f)) ? drafts.get(dk(f)) : sb[f] || "");
+    const atk = box("attacks", "Attacks", "Bite 1d6\nClaw +4 to hit 1d6+2");
+    const spl = box("spells", "Spells", "Fire bolt +5 2d10\nWeb: Restrained 10 rounds");
     const base = sb.base_name || c.name;
     const all = h("input", { type: "checkbox", checked: true });
     const save = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("check", "sm"), " Save attacks & spells");
     save.addEventListener("click", () => act("POST", "/api/combatants/" + c.id + "/statblock", { attacks: atk.value, spells: spl.value, all_like_it: all.checked },
-      (d) => { toast("Saved. The new buttons are ready.", "ok"); if (onSaved) onSaved(d); }, { onError: (e) => toast(e.message, "error") }));
-    return h("details", { class: "mon-edit", open: !(sb.attacks || sb.spells) ? true : null },
+      (d) => { drafts.delete(dk("attacks")); drafts.delete(dk("spells")); toast("Saved. The new buttons are ready.", "ok"); if (onSaved) onSaved(d); },
+      { onError: (e) => toast(e.message, "error") }));
+    return h("details", { class: "mon-edit", "data-key": "mon-edit-" + c.id, open: !(sb.attacks || sb.spells) || drafts.has(dk("attacks")) || drafts.has(dk("spells")) ? true : null },
       h("summary", { class: "lbl" }, (sb.attacks || sb.spells) ? "Change attacks & spells" : "Write attacks & spells"),
       h("label", { class: "field" }, h("span", null, "Attacks"), atk, h("small", { class: "faint" }, ATTACK_HELP)),
       h("label", { class: "field" }, h("span", null, "Spells"), spl, h("small", { class: "faint" }, SPELL_HELP)),
@@ -549,5 +567,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

@@ -257,9 +257,14 @@
     const id = Number(e.target.value); e.target.value = "";
     if (id) run("POST", "/api/maps/" + MID + "/tokens", { character_id: id, x: 0, y: 0 });
   });
+  let selPending = false;
   function renderSelected() {
     const box = $("#selected-panel");
     const t = S.tokens.find((x) => x.id === selectedToken);
+    // typing in the panel (token notes, label, a monster's attacks): wait until they're done
+    const ae = document.activeElement;
+    if (t && box.contains(ae) && ae.matches("textarea, input[type=text], select")) { selPending = true; return; }
+    selPending = false;
     box.hidden = !t;
     if (!t) return;
     const patch = (field, to) => run("PATCH", "/api/tokens/" + t.id, { changes: { [field]: { from: t[field], to } } });
@@ -269,7 +274,7 @@
     const keep = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.keep;
     box.replaceChildren(
       fight || h("h3", { class: "rule-head" }, "Selected token"),
-      h(fight ? "details" : "div", { class: "token-settings", style: "display:grid;gap:8px" },
+      h(fight ? "details" : "div", { class: "token-settings", "data-key": "token-settings", style: "display:grid;gap:8px" },
         fight ? h("summary", { class: "lbl" }, "Token settings") : null,
         h("div", null, h("b", null, t.display), t.hp != null ? h("span", { class: "faint" }, " · " + t.hp + "/" + t.max_hp + " HP") : null,
           t.character_id && !t.combatant_id ? h("div", { class: "faint", style: "font-size:.82rem" }, "HP and conditions come from the character sheet; this token only sets position.") : null),
@@ -284,8 +289,10 @@
         t.combatant_hidden ? h("div", { class: "faint", style: "font-size:.82rem" }, "This combatant is hidden in the encounter, so players can't see it either way.") : null,
         h("label", { class: "field" }, h("span", null, "Token notes (only you see these)"), h("textarea", { rows: 3, class: "note-input", onchange: (e) => patch("notes", e.target.value) }, t.notes)),
         del));
+    L.restoreOpen(box);
     if (keep) { const el = box.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
   }
+  $("#selected-panel").addEventListener("focusout", () => setTimeout(() => { if (selPending) renderSelected(); }, 0));
 
   // ---- fight from the map: pick a token, click an attack or spell, tap who it's on -----------
   const EID = () => S.map.encounter_id;
