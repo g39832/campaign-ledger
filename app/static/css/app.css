@@ -769,6 +769,11 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .fight-result.is-crit { border-left-color: var(--danger); color: var(--danger); }
 .fight-result.is-heal { border-left-color: var(--hp-high); }
 .fight-note { font-size: .88rem; color: var(--text-2, var(--text)); padding-left: 10px; border-left: 2px solid var(--line); overflow-wrap: anywhere; }
+.turnbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 6px 4px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--raised); }
+.turnbar .tb-now { font-size: .95rem; }
+.fight-act.is-recharging { opacity: .6; cursor: not-allowed; border-style: dashed; }
+.fight-act.is-offturn { border-style: dashed; }
+.fight-act.is-armed { border-color: var(--hp-mid); box-shadow: inset 3px 0 0 var(--hp-mid); }
 .mon-edit { display: grid; gap: 8px; margin-top: 10px; padding: 8px 10px; border: 1px dashed var(--line-strong, var(--line)); border-radius: var(--radius); }
 .mon-edit > summary { cursor: pointer; }
 .mon-edit:not([open]) { padding-bottom: 8px; }
@@ -1133,8 +1138,10 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #attacks .list-editor, #attacks .list-editor tbody { display: block; width: 100%; }
 #attacks .list-editor thead { display: none; }
 #attacks .list-editor tr { display: grid; position: static; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line);
-  grid-template-columns: auto minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) 30px;
-  grid-template-areas: "acts name bonus damage del" "acts notes notes area area"; align-items: start; }
+  grid-template-columns: auto minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) minmax(72px, .6fr) 30px;
+  grid-template-areas: "acts name bonus damage cooldown del" "acts notes notes area area area"; align-items: start; }
+#attacks td.f-cooldown { grid-area: cooldown; }
+#attacks td.f-cooldown input { width: 100%; }
 #attacks .list-editor td { display: block; width: auto !important; min-width: 0; border: 0; padding: 0; order: 0; }
 #attacks td.acts-cell { grid-area: acts; align-self: center; margin: 0; }
 #attacks td.acts-cell .roll-row { flex-direction: column; align-items: stretch; gap: 4px; }
@@ -1151,7 +1158,7 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #attacks textarea::placeholder { font-style: italic; color: var(--text-3); opacity: .7; }
 #attacks textarea:not(:focus)::placeholder { color: transparent; }
 @container (max-width: 460px) {
-  #attacks .list-editor tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px;
-    grid-template-areas: "name name del" "bonus damage damage" "notes notes notes" "area area area" "acts acts acts"; }
+  #attacks .list-editor tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
+    grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "acts acts acts acts"; }
   #attacks td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; }
 }

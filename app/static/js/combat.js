@@ -398,14 +398,14 @@
     if (c.linked) return (c.attacks || []).map((a, i) => !a.has_dmg && !a.has_hit
       // no dice: "+2 ac to target" goes on through the cast picker; anything else is just shown
       ? { name: a.name, note: a.ac ? "" : a.notes, effect: a.ac ? { name: a.name, effect: "effect", condition: a.name, ac: a.ac, rounds: null, hit: "" } : null }
-      : ({ name: a.name, heal: !!a.heal,
+      : ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: a.has_hit,
       hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e)
         : rule && !a.heal ? (e) => roll({ expression: "1d20", label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: a.has_hit ? "Hit" : "Hit +0",
       dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: a.heal ? "Heal" : "Dmg" }));
     if (c.kind !== "enemy") return [];
     const lines = attackLines(c.statblock.attacks).concat(attackLines(c.statblock.spells).map((a) => Object.assign({ spell: true }, a)));
-    return lines.map((a) => ({ name: a.name, spell: !!a.spell, heal: !!a.heal,
+    return lines.map((a) => ({ name: a.name, spell: !!a.spell, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: !!a.hit,
       hit: !a.check && !a.heal && (a.dmg || !a.condition) && (a.hit || rule) ? (e) => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: "Hit " + (a.hit || "+0"),
       dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + (a.heal ? " healing" : " damage"), kind: a.heal ? "heal" : "damage", subject: c.name, crit }, e) : null,
@@ -496,9 +496,18 @@
       else { modeOf.set(c.id, "damage"); lastAttack.set(c.id, { label: r.label, total: r.total, natural: r.result && r.result.natural }); }
       renderDetail();
     };
-    const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => h("div", { class: "roll-row", style: "align-items:center" },
+    const cdLeft = (name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0); return x ? x.rounds_left : 0; };
+    const isTurnNow = S.encounter.status === "active" && S.encounter.current_id === c.id;
+    const used = (a) => { if (a.cooldown && S.encounter.status === "active") run("POST", "/api/combatants/" + c.id + "/cooldown", { name: a.name, turns: a.cooldown }); };
+    const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => cdLeft(a.name) ? h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
+      h("span", { class: "tag", title: "Remove “" + a.name + " recharging” under Conditions to use it early" }, icon("hourglass", "sm"),
+        (() => { const w = Math.max(0, cdLeft(a.name) - (isTurnNow ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
+      : h("div", { class: "roll-row", style: "align-items:center" },
+      h("b", { style: "min-width:7ch" }, a.name),
+      a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
       a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then((r) => {
+        if (r) used(a);
         after("hit")(r);
         if (r && r.result && r.result.natural === 20 && a.dmg && !a.heal) a.dmg(null, true).then(after("dmg"));
       }) }, a.hitLabel) : null,
@@ -507,7 +516,7 @@
         icon("zap", "sm"), " Cast · " + L.spellWhat(a.effect)) : null,
       a.spell ? h("span", { class: "tag" }, "spell") : null,
       a.note ? h("span", { class: "faint", style: "font-size:.85rem;overflow-wrap:anywhere" }, a.note) : null,
-      a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then(after(a.heal ? "heal" : "dmg")) },
+      a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then((r) => { if (r && !a.hit) used(a); after(a.heal ? "heal" : "dmg")(r); }) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
       a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;
 

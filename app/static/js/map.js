@@ -219,16 +219,38 @@
   armed($("#areas-clear"), () => run("DELETE", "/api/maps/" + MID + "/shapes"), "Clear all areas?");
 
   // ---- turn order (read-only, plus Next turn) -----------------------------------------------
+  const encAct = (path) => act("POST", "/api/encounters/" + S.encounter.id + "/" + path, {}, () => refresh(true), { onError: (err) => toast(err.message, "error") });
+  function renderTurnbar() {
+    const bar = $("#turnbar"), e = S.encounter;
+    bar.hidden = !e;
+    if (!e) return;
+    const missing = e.order.filter((o) => o.init_roll == null).length;
+    const cur = e.order.find((o) => o.id === e.current_id);
+    bar.replaceChildren(...(e.status === "active" ? [
+      h("span", { class: "tb-now" }, h("span", { class: "faint" }, "Round " + e.round + " · "), h("b", null, cur ? cur.name : "—"), cur ? "'s turn" : ""),
+      h("button", { type: "button", class: "btn btn-sm", id: "tb-prev", title: "Previous turn (P)", onclick: () => encAct("prev") }, icon("skip-back", "sm"), " Prev", h("span", { class: "kbd" }, "P")),
+      h("button", { type: "button", class: "btn btn-sm btn-primary", id: "tb-next", title: "Next turn (N)", onclick: () => encAct("next") }, "Next turn ", icon("skip-forward", "sm"), h("span", { class: "kbd" }, "N")),
+    ] : e.status === "ended" ? [
+      h("span", { class: "tb-now faint" }, "Combat over"),
+      h("button", { type: "button", class: "btn btn-sm", onclick: () => encAct("reopen") }, icon("rotate-ccw", "sm"), " Reopen"),
+    ] : [
+      h("span", { class: "tb-now faint" }, "Not started"),
+      missing ? h("button", { type: "button", class: "btn btn-sm", title: "Roll initiative for everyone who hasn't got one", onclick: () => encAct("roll") },
+        icon("dice-5", "sm"), " Roll initiative (" + missing + ")") : null,
+      h("button", { type: "button", class: "btn btn-sm btn-primary", id: "tb-start", onclick: () => missing
+        ? act("POST", "/api/encounters/" + e.id + "/roll", {}, () => encAct("start"), { onError: (err) => toast(err.message, "error") })
+        : encAct("start") }, icon("play", "sm"), missing ? " Roll & start combat" : " Start combat"),
+    ]));
+  }
   function renderOrder() {
+    renderTurnbar();
     const box = $("#order"), e = S.encounter;
     if (!e) { box.replaceChildren(h("p", { class: "faint", style: "margin:0;font-size:.9rem" }, "Link an encounter in Map & grid settings to show its turn order here.")); return; }
     box.replaceChildren(
       h("div", { class: "row", style: "align-items:center;margin-bottom:6px" },
         h("a", { href: "/combat/" + e.id, style: "font-weight:700" }, e.name),
         h("span", { class: "faint" }, e.status === "active" ? "Round " + e.round : e.status === "ended" ? "ended" : "not started"),
-        h("span", { class: "grow" }),
-        e.status === "active" ? h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () =>
-          act("POST", "/api/encounters/" + e.id + "/next", {}, () => refresh(true)) }, "Next turn") : null),
+        h("span", { class: "grow" })),
       h("ol", { class: "mini-order" }, e.order.map((o) => h("li", {
         class: (o.id === e.current_id && e.status === "active" ? "is-current" : "") + (["dead", "defeated", "fled"].includes(o.status) ? " is-out" : "") },
         h("span", { class: "i" }, o.init_roll ?? "—"), h("span", { class: "grow" }, o.name), o.hidden ? h("span", { class: "faint", title: "Hidden from players" }, icon("eye-off", "sm")) : null,
@@ -323,6 +345,7 @@
         // no dice: "+2 ac to target" works like a buff spell; anything else is just a note
         ? out.push({ name: a.name, many: true, icon: a.ac > 0 ? "shield-plus" : "zap", info: signed(a.ac) + " AC", effect: { name: a.name, condition: a.name, ac: a.ac, rounds: null } })
         : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
+        cooldown: a.cooldown || 0, cdName: a.name,
         info: (a.area ? areaText(a.area) + " · " : "") + (a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage"),
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
@@ -357,7 +380,7 @@
   }
   // One line of a monster's Attacks or Spells box. Spells can reach several targets.
   function monsterAction(c, a, spell, rule) {
-    if (a.check) return { name: a.name, instant: true, icon: "dice-5",
+    if (a.check) return { name: a.name, instant: true, icon: "dice-5", cooldown: a.cooldown || 0, cdName: a.name,
       info: "roll " + a.check + (a.beat != null ? " · beat " + a.beat : a.dc != null ? " · DC " + a.dc : ""),
       run: async () => {
         const r = await roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name });
@@ -374,8 +397,9 @@
     const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
     const aimArea = a.aimArea || null, shown = (aimArea ? areaText(aimArea) + " · " : "") + info;
     return spell || a.area || aimArea
-      ? { name: a.name, many: true, heal: a.heal, icon, info: shown, toHit, effect, aimArea, dmg, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null }
-      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg };
+      ? { name: a.name, many: true, heal: a.heal, icon, info: shown, toHit, effect, aimArea, dmg, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null,
+        cooldown: a.cooldown || 0, cdName: a.name }
+      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg, cooldown: a.cooldown || 0, cdName: a.name };
   }
   function say(by, text, kind, undo) {
     lastResult = { by, text, kind, undo };
@@ -430,6 +454,7 @@
     const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
     if (!targets.length) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
     view.aim = null; aim = null; setTool("select"); renderSelected();
+    useMove(c, a);
     let amount = null;
     if (a.dmg) { const d = await a.dmg(false); if (!d) return; amount = Math.max(0, d.total); }
     const lines = [];
@@ -452,9 +477,18 @@
     say(c.id, a.name + ": " + (lines.join("; ") || "no one") + ".", lines.some((l) => !l.startsWith("missed")) ? "hit" : "miss");
   }
 
+  // A move with a cooldown starts recharging once it's used (only in a running fight).
+  function useMove(c, a) {
+    if (!a.cooldown || !enc || enc.encounter.status !== "active") return;
+    act("POST", "/api/combatants/" + c.id + "/cooldown", { name: a.cdName, turns: a.cooldown }, () => { enc = null; refresh(true); },
+      { onError: (e) => toast(e.message, "error") });
+  }
+  const cdLeft = (c, name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0); return x ? x.rounds_left : 0; };
+  let offTurnArmed = null; // "combatant:move" armed by a first click when it isn't their turn
+
   async function arm(c, a) {
     lastResult = null;
-    if (a.instant) { await a.run(); return; } // a plain roll: no target to pick
+    if (a.instant) { useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
     if (a.aimArea) { startAim(c, a); return; }
     aim = { by: c.id, act: a, amount: null, done: new Set(), half: false };
     if (a.roll) { // area / healing spells: roll once, then every tap gets the same amount
@@ -474,6 +508,7 @@
     if (!target) { toast((t.display || "That token") + " isn't a fighter, just a marker on the map. Heroes and monsters in the fight can be targeted.", "error"); return; }
     if (a.single) {
       aim = null; setTool(view.tool);
+      useMove(c, a);
       let crit = false, how = "";
       if (a.toHit) {
         const r = await rollToHit(a, target);
@@ -493,6 +528,7 @@
     }
     // spells that reach several: each tap lands on one more (rolling to hit each one first)
     if (cur.done.has(target.id)) return;
+    if (!cur.done.size) useMove(c, a);
     cur.done.add(target.id);
     renderSelected();
     let how = "", crit = false;
@@ -580,8 +616,20 @@
       aiming, res,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),
-        acts.map((x) => h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : ""), onclick: () => arm(c, x) },
-          icon(x.icon, "sm"), h("b", null, x.name), x.info ? h("span", { class: "faint" }, x.info) : null)))
+        acts.map((x) => {
+          const left = x.cooldown ? cdLeft(c, x.cdName) : 0, wait = Math.max(0, left - (isTurn ? 1 : 0));
+          const offTurn = enc.encounter.status === "active" && !isTurn, key = c.id + ":" + x.name, armedNow = offTurnArmed === key;
+          if (left) return h("button", { type: "button", class: "fight-act is-recharging", disabled: true, title: x.name + " is recharging" },
+            icon("hourglass", "sm"), h("b", null, x.name), h("span", { class: "faint" }, wait ? "recharging · ready in " + wait + " turn" + (wait === 1 ? "" : "s") : "recharging · ready next turn"));
+          return h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : "") + (offTurn ? " is-offturn" : "") + (armedNow ? " is-armed" : ""),
+            title: offTurn ? "It's not " + c.name + "'s turn — click twice to use it anyway (a reaction)" : null,
+            onclick: () => {
+              if (offTurn && !armedNow) { offTurnArmed = key; renderSelected(); return; }
+              offTurnArmed = null; arm(c, x);
+            } },
+            icon(x.icon, "sm"), h("b", null, x.name),
+            h("span", { class: "faint" }, armedNow ? "not their turn — click again to use it anyway" : [x.info, x.cooldown ? x.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · ")));
+        }))
         : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet."
           : "No attacks or spells written for " + c.name + " yet. Write some below."),
       (c.linked ? (c.attacks || []).filter((x) => !x.has_dmg && !x.has_hit && !x.ac).map((x) => x.name + (x.notes ? ": " + x.notes : ""))
@@ -649,6 +697,8 @@
     const el = e.target;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
     if ((e.key === "c" || e.key === "C") && $("#to-combat")) { e.preventDefault(); location.href = $("#to-combat").href; }
+    if ((e.key === "n" || e.key === "N") && $("#tb-next")) { e.preventDefault(); $("#tb-next").click(); }
+    if ((e.key === "p" || e.key === "P") && $("#tb-prev")) { e.preventDefault(); $("#tb-prev").click(); }
   });
   if (new URLSearchParams(location.search).has("new")) {
     toast("Made a battle map for “" + (S.encounter ? S.encounter.name : S.map.name) + "”. The party is on the left edge and enemies on the right; drag them into place.", "ok", { ms: 9000 });

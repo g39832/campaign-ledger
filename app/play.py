@@ -14,7 +14,7 @@ from . import fields as F
 from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
-from .rules import ac_bonus, derived, is_healing, spell_helps, spell_info
+from .rules import ac_bonus, cooldown_left, derived, is_healing, parse_cooldown, spell_helps, spell_info
 
 bp = Blueprint("play", __name__)
 
@@ -146,8 +146,13 @@ def _own_character(conn, char_id):
     out["ac_bonus"] = ac_bonus(c["conditions"])
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
-                       "heal": is_healing(a)}
+                       "heal": is_healing(a), "cooldown": parse_cooldown(a),
+                       "recharging": cooldown_left(c["conditions"], (a.get("name") or "Attack").strip() or "Attack")}
                       for i, a in enumerate(c["attacks"] or [])]
+    # in a running fight: is it this character's turn? (attacks wait for it)
+    fight = conn.execute("SELECT e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
+                         "WHERE cb.character_id = ? AND e.status = 'active' ORDER BY e.updated_at DESC LIMIT 1", (char_id,)).fetchone()
+    out["my_turn"] = None if fight is None else fight["current_id"] == fight["cb_id"]
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
                      if spell_info(s)["effect"] or spell_info(s)["ac"] or spell_info(s)["condition"]]
     out["derived"] = d

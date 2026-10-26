@@ -126,6 +126,42 @@ def build_check(conn, check):
     raise F.ApiError("Unknown roll type")
 
 
+def _player_turn_rules(conn, viewer, check):
+    """In a running fight a player attacks only on their own turn, and a move that's
+    recharging can't be used. Returns (combatant id, move, turns) when this roll uses
+    a move with a cooldown, so it starts recharging."""
+    from .rest import active_combatant
+    from .rules import cooldown_left, parse_cooldown
+    t = check.get("type")
+    if t not in ("attack", "damage", "spell_attack", "spell"):
+        return None
+    char_id = int(check["character_id"])
+    cb = active_combatant(conn, char_id)
+    if cb is None:
+        return None
+    enc = conn.execute("SELECT status, current_id FROM encounters WHERE id = ?", (cb["encounter_id"],)).fetchone()
+    if enc["status"] != "active":
+        return None
+    if enc["current_id"] != cb["id"]:
+        raise F.ApiError("It's not your turn yet — you can attack when your turn comes round", status=403)
+    if t not in ("attack", "damage"):
+        return None
+    ch = _character(conn, char_id)
+    try:
+        row = (ch.get("attacks") or [])[int(check.get("key"))]
+    except (TypeError, ValueError, IndexError):
+        return None
+    turns = parse_cooldown(row)
+    uses = t == "attack" or not str(row.get("bonus") or "").strip()  # the to-hit roll, or the damage of a move with no to-hit
+    if not turns or not uses:
+        return None
+    name = (row.get("name") or "Attack").strip() or "Attack"
+    left = cooldown_left(ch.get("conditions"), name)
+    if left:
+        raise F.ApiError(f"{name} is recharging — ready after {max(1, left - 1)} more of your turns", status=400)
+    return cb["id"], name, turns
+
+
 def outcome_for(kind, result):
     nat = result.get("natural")
     if kind == "death":
@@ -197,6 +233,7 @@ def api_roll():
                 raise F.ApiError("Players can only roll for their own character", status=403)
         expr, label, kind, subject, got = build_check(conn, check)
         ids.update(got)
+        used = _player_turn_rules(conn, viewer, check) if viewer["role"] == "player" else None
         if data.get("label"):
             label = str(data["label"])[:120]
     else:
@@ -227,6 +264,12 @@ def api_roll():
             return jsonify({"roll": roll_dict(row, viewer), "repeat": True})
         roll_id = save_roll(conn, viewer, campaign_id, result, label=label, kind=kind, subject=subject, ids=ids,
                             visibility=visibility, op_id=op_id, outcome=outcome)
+        if check and viewer["role"] == "player" and used:
+            from .combat import Ctx, start_cooldown
+            cb_id, move, turns = used
+            ctx = Ctx(conn, conn.execute("SELECT encounter_id FROM combatants WHERE id = ?", (cb_id,)).fetchone()["encounter_id"])
+            start_cooldown(ctx, cb_id, move, turns)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         if apply_init:
             _apply_initiative(conn, ids, result["total"], result)
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()

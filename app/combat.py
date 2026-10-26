@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, knocked_prone, parse_area, roll_d20, is_healing, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, cooldown_left, derived, initiative_sort_key, knocked_prone, parse_area, parse_cooldown, roll_d20, is_healing, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -66,7 +66,7 @@ def _combatant_dict(r):
                  attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
-                           "area": parse_area(a.get("area")) or parse_area(a.get("notes"))}
+                           "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a)}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
@@ -558,6 +558,39 @@ def api_remove(cid):
         ctx.conn.execute("DELETE FROM combatants WHERE id = ?", (cid,))
         ctx.log("roster", f"Removed {c['name']} from the encounter")
     return mutate(eid, fn, _body().get("op_id"))
+
+
+def start_cooldown(ctx, cid, name, turns):
+    """A move was used: it can't be used again during the user's next `turns`
+    turns. Kept as an effect on them that counts down at the end of each of their
+    own turns and removes itself, so it shows on the sheet and the player screen."""
+    if ctx.enc["status"] != "active" or not turns:
+        return
+    c = ctx.combatant(cid)
+    turns = max(1, min(20, int(turns)))
+    keep = [x for x in c["conditions"] if x.get("cooldown") != name]
+    cond = {"id": uuid.uuid4().hex[:12], "name": f"{name} recharging", "note": f"Ready again after {turns} of {c['name']}'s turns",
+            "rounds_left": turns + 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
+            "expired": False, "applied_round": ctx.enc["round"], "cooldown": name}
+    ctx.set_vitals(c, conditions=keep + [cond])
+    ctx.log("condition", f"{c['name']} used {name} — recharging for {turns} turn{'s' if turns != 1 else ''}")
+
+
+@bp.post("/combatants/<int:cid>/cooldown")
+def api_cooldown(cid):
+    """The DM used a move with a cooldown for this combatant. {name, turns}"""
+    eid = _enc_of_combatant(cid)
+    data = _body()
+    name = str(data.get("name") or "").strip()[:80]
+    if not name:
+        raise F.ApiError("Which move?")
+    turns = _int(data, "turns", 1, 20)
+
+    def fn(ctx):
+        if cooldown_left(ctx.combatant(cid)["conditions"], name) and not data.get("force"):
+            raise F.ApiError(f"{name} is still recharging")
+        start_cooldown(ctx, cid, name, turns)
+    return mutate(eid, fn, data.get("op_id"))
 
 
 @bp.post("/combatants/<int:cid>/statblock")

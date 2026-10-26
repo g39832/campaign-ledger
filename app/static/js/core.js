@@ -150,7 +150,9 @@
     }
     // breath weapons and other areas reach several creatures
     const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
-    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line) };
+    const cd = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i.exec(line);
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM && !cd ? Number(roundsM[1]) : null, area, aimArea: parseArea(line),
+      cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0 };
   }
   /* "15 ft cone", "20-foot radius", "10 ft cone, range 20" -> { kind, size, range } to aim on the map.
      Same rule as rules.parse_area on the server; without a range the area starts at the attacker. */

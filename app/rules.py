@@ -519,6 +519,32 @@ def parse_area(text):
     return {"kind": AREA_KINDS[m.group(2).lower()], "size": size, "range": max(0, min(1000, rng))}
 
 
+COOLDOWN_RE = re.compile(r"(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)", re.I)
+
+
+def parse_cooldown(row):
+    """How many of their own turns a move needs to recharge after it's used: the
+    Cooldown box on the sheet, or notes like '3 turn cool down'. 0 = no cooldown."""
+    if not isinstance(row, dict):
+        return 0
+    v = row.get("cooldown")
+    if v not in (None, ""):
+        try:
+            return max(0, min(20, int(v)))
+        except (TypeError, ValueError):
+            pass
+    m = COOLDOWN_RE.search(" ".join(str(row.get(k) or "") for k in ("name", "notes")))
+    return max(0, min(20, int(m.group(1) or m.group(2)))) if m else 0
+
+
+def cooldown_left(conditions, name):
+    """Rounds left on a move's cooldown (0 = ready)."""
+    for x in conditions or []:
+        if isinstance(x, dict) and x.get("cooldown") == name and not x.get("expired") and (x.get("rounds_left") or 0) > 0:
+            return x["rounds_left"]
+    return 0
+
+
 def knocked_prone(conditions):
     """A hero who drops to 0 HP is knocked prone. Returns the new list, or None if
     they're already prone."""

@@ -210,8 +210,16 @@
           d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Spell attack " + signed(d.spell.attack)) : null),
         h("div", { class: "stats" }, ABIL.map(([k, label]) => h("button", { type: "button", class: "stat", title: "Roll a " + label + " check", onclick: (ev) => roll({ type: "ability", key: k }, ev) },
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
-        c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"), ...c.attacks.map((a) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
+        c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"),
+          c.my_turn === false ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Attacks unlock on your turn.") : null,
+          ...c.attacks.map((a) => a.recharging ? h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, a.name || "Attack"),
+          h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, a.recharging - (c.my_turn ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
+          : c.my_turn === false ? h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
+          h("b", { class: "grow" }, a.name || "Attack"), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
+          : h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
+          h("b", { class: "grow" }, a.name || "Attack"),
+          a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: attackThen({ type: "attack", key: a.index }, a.damage && !a.heal ? { type: "damage", key: a.index } : null) }, "Hit " + a.bonus) : null,
           a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) }, a.heal ? "Heal" : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
