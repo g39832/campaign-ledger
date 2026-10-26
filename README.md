@@ -125,6 +125,7 @@ A damage roll never changes HP by itself. Its history entry gets an **Apply N to
 * **Effects:** tokens show condition badges, floating damage and heal numbers, and a pulse on whoever's turn it is.
 * **Zoom:** scroll wheel, pinch, or the + / − / fit buttons.
 * **Grid:** square size, offset (to line up with an image), columns and rows, distance per square, colour and opacity, snapping, and background colour.
+* **Fight right on the map:** click a token that's in the fight. The side panel shows its HP, AC, attacks and spells. Click an attack, then tap who it's aimed at: the app rolls to hit against their AC and, on a hit, rolls and deals the damage (doubled dice on a natural 20). Area and healing spells roll once; then tap each one they reach, with a "saved: half damage" box. Every hit has **Undo**, and there are Damage / Heal buttons for quick fixes.
 * **Tokens:** "Add encounter" places a token for every combatant. You can also add characters one at a time. Each token has a label, type, size (Medium to Gargantuan), colour, "Hidden from players" and DM notes.
 * **Tokens only store a position.** HP, conditions and turn order come from the encounter and the character sheets, so moving a token never changes combat, and combat changes show up on the map. The current turn's token is ringed in red, and the turn order with a **Next turn** button sits beside the map.
 * **Show to players** makes this the map players see.

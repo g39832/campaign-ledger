@@ -115,6 +115,15 @@
       h("div", { class: "row", style: "margin-top:10px" },
         h("button", { type: "button", class: "btn btn-sm" + (done ? " btn-primary" : ""), onclick: onDone }, done ? "Done" : "Cancel")));
   }
+  // "Scimitar. Melee Weapon Attack: +4 to hit ... Hit: 5 (1d6 + 2)" -> { name, hit: "+4", dmg: "1d6+2" }, one per stat-block line
+  function attackLines(text) {
+    return String(text || "").split(/\n+/).map((line) => {
+      const name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1];
+      const hit = line.match(/([+-]\s*\d+)\s*to hit/i);
+      const dmg = line.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)/i);
+      return name && (hit || dmg) ? { name: name.trim(), hit: hit ? hit[1].replace(/\s/g, "") : null, dmg: dmg ? dmg[1].replace(/\s/g, "") : null } : null;
+    }).filter(Boolean);
+  }
   function icon(name, cls) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
@@ -484,5 +493,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, attackLines, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

@@ -738,6 +738,38 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .target-chip.is-heal.is-on .num { color: rgba(16, 20, 12, .8); }
 .hit-verdict .hits { color: var(--ok); font-weight: 700; }
 
+/* ---------- map: fight from the selected token ---------- */
+.fight { display: grid; gap: 8px; margin-bottom: 10px; }
+.fight-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.fight-name { font: 700 1.15rem var(--serif, inherit); overflow-wrap: anywhere; }
+.fight-ac { font-size: .95rem; }
+.fight-ac b { font-size: 1.15rem; }
+.fight-hp { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.fight-hp .num { font-size: .9rem; }
+.fight-acts { display: grid; gap: 6px; }
+.fight-act { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); background: var(--raised, transparent); color: var(--text); font: inherit; cursor: pointer; }
+.fight-act b { overflow-wrap: anywhere; }
+.fight-act .faint { font-size: .84rem; margin-left: auto; }
+.fight-act:hover { border-color: var(--accent); background: var(--accent-soft); }
+.fight-act.is-heal:hover { border-color: var(--hp-high); }
+.fight-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fight-aim { border: 2px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; background: var(--accent-soft); animation: fight-pulse 1.4s ease-in-out infinite; }
+.fight-aim.is-heal { border-color: var(--hp-high); background: color-mix(in srgb, var(--hp-high) 12%, transparent); }
+.fa-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 1.05rem; }
+.fa-ask { margin: 6px 0 8px; font-weight: 700; font-size: 1.02rem; }
+@keyframes fight-pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .fight-aim { animation: none; } }
+.fight-result { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; border-radius: var(--radius); font-weight: 700; border-left: 4px solid var(--accent); background: var(--raised); }
+.fight-result.is-miss { border-left-color: var(--text-3); font-weight: 600; }
+.fight-result.is-crit { border-left-color: var(--danger); color: var(--danger); }
+.fight-result.is-heal { border-left-color: var(--hp-high); }
+.fight-hpctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fight-hpctl input { width: 7ch; }
+.fight-aim .check { display: flex; margin: 0 0 8px; }
+.fight-aim > .btn { display: inline-flex; }
+.token-settings > summary { cursor: pointer; padding: 4px 0; }
+.token-settings[open] > summary { margin-bottom: 4px; }
+
 /* ---------- casting: tap the spell, then tap who ---------- */
 .cast-picker { border: 2px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; background: var(--surface, var(--bg)); margin: 6px 0 10px; }
 .cast-picker.is-heal, .cast-picker.is-help { border-color: var(--hp-high); }

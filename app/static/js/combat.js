@@ -336,14 +336,7 @@
     box.replaceChildren(...sections, h("datalist", { id: "cond-names" }, CONDITIONS.map((n) => h("option", { value: n }))));
   }
   const ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
-  function attackLines(text) {
-    return String(text || "").split(/\n+/).map((line) => {
-      const name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1];
-      const hit = line.match(/([+-]\s*\d+)\s*to hit/i);
-      const dmg = line.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)/i);
-      return name && (hit || dmg) ? { name: name.trim(), hit: hit ? hit[1].replace(/\s/g, "") : null, dmg: dmg ? dmg[1].replace(/\s/g, "") : null } : null;
-    }).filter(Boolean);
-  }
+  const attackLines = L.attackLines;
   function rollSection(c) {
     const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
     const btns = [];

@@ -12,7 +12,11 @@
   const view = new MapView($("#stage"), {
     role: "dm",
     imageUrl: (m) => (m.image ? "/api/uploads/" + m.image : null),
-    onSelect: (t) => { selectedToken = t ? t.id : null; renderSelected(); renderTokens(); },
+    onSelect: (t) => {
+      if (aim) { aimAt(t); view.selectedId = selectedToken; view.draw(); return; } // picking a target, not a new token
+      selectedToken = t ? t.id : null; renderSelected(); renderTokens();
+    },
+    canMove: () => !aim,
     onMove: (t, x, y) => run("POST", "/api/tokens/" + t.id + "/move", { x, y }),
     onBrush: (tool, cells) => {
       if (tool === "paint") run("POST", "/api/maps/" + MID + "/terrain", { cells, value: terrainKind === "erase" ? null : terrainKind });
@@ -31,6 +35,10 @@
     onSelectShape: () => renderAreas(),
   });
   let selectedToken = null;
+  let aim = null;        // { by, act, amount, done: Set, half } while the DM taps who an attack or spell hits
+  let lastResult = null; // { by, text, kind, undo } what the last attack did, shown under the buttons
+  let enc = null, encLoading = false; // the map's encounter with full combatant details, for the fight panel
+  let hpAmt = "";
   let pendingMonster = null; // the monster waiting to be clicked onto the map
 
   function run(method, url, body, after) {
@@ -76,6 +84,7 @@
   };
   function setTool(t) {
     if (t !== "place" && pendingMonster) { pendingMonster = null; renderMonsters(); }
+    if (t !== "select" && aim) { aim = null; renderSelected(); }
     view.tool = t;
     $$("[data-tool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.tool === t); b.setAttribute("aria-pressed", b.dataset.tool === t); });
     $("#hint").textContent = HINTS[t];
@@ -243,11 +252,14 @@
     const patch = (field, to) => run("PATCH", "/api/tokens/" + t.id, { changes: { [field]: { from: t[field], to } } });
     const del = h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger" }, icon("trash-2", "sm"), " Remove token");
     armed(del, () => run("DELETE", "/api/tokens/" + t.id, {}, () => { selectedToken = null; renderSelected(); }), "Remove from map?");
+    const fight = t.combatant_id ? fightPanel(t) : null;
+    const keep = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.keep;
     box.replaceChildren(
-      h("h3", { class: "rule-head" }, "Selected token"),
-      h("div", { style: "display:grid;gap:8px" },
+      fight || h("h3", { class: "rule-head" }, "Selected token"),
+      h(fight ? "details" : "div", { class: "token-settings", style: "display:grid;gap:8px" },
+        fight ? h("summary", { class: "lbl" }, "Token settings") : null,
         h("div", null, h("b", null, t.display), t.hp != null ? h("span", { class: "faint" }, " · " + t.hp + "/" + t.max_hp + " HP") : null,
-          t.combatant_id || t.character_id ? h("div", { class: "faint", style: "font-size:.82rem" }, "HP and conditions come from " + (t.combatant_id ? "the encounter" : "the character sheet") + "; this token only sets position.") : null),
+          t.character_id && !t.combatant_id ? h("div", { class: "faint", style: "font-size:.82rem" }, "HP and conditions come from the character sheet; this token only sets position.") : null),
         h("div", { class: "grid2" },
           h("label", { class: "field" }, h("span", null, "Label"), h("input", { type: "text", value: t.label, placeholder: t.name || "", onchange: (e) => patch("label", e.target.value) })),
           h("label", { class: "field" }, h("span", null, "Type"), h("select", { onchange: (e) => patch("kind", e.target.value) },
@@ -259,6 +271,160 @@
         t.combatant_hidden ? h("div", { class: "faint", style: "font-size:.82rem" }, "This combatant is hidden in the encounter, so players can't see it either way.") : null,
         h("label", { class: "field" }, h("span", null, "Token notes (only you see these)"), h("textarea", { rows: 3, class: "note-input", onchange: (e) => patch("notes", e.target.value) }, t.notes)),
         del));
+    if (keep) { const el = box.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
+  }
+
+  // ---- fight from the map: pick a token, click an attack or spell, tap who it's on -----------
+  const EID = () => S.map.encounter_id;
+  const fighter = (id) => enc && enc.combatants.find((c) => c.id === id);
+  const signed = L.signed;
+  function ensureEnc() {
+    const want = S.encounter ? S.encounter.rev : null;
+    if (encLoading || !EID() || (enc && enc.encounter.id === EID() && enc.encounter.rev === want)) return;
+    encLoading = true;
+    api("GET", "/api/encounters/" + EID()).then((d) => { enc = d; }).catch(() => { enc = null; })
+      .finally(() => { encLoading = false; renderSelected(); });
+  }
+  const roll = (req) => Dice.roll(Object.assign({ encounter_id: EID() }, req));
+  // Everything this combatant can do, as buttons. single: one target, rolled when it's tapped.
+  function actionsFor(c) {
+    const out = [];
+    if (c.linked) {
+      (c.attacks || []).forEach((a, i) => out.push({ name: a.name || "Attack", heal: !!a.heal, single: true, icon: a.heal ? "heart" : "swords",
+        info: a.heal ? "heals" : a.has_hit ? "attack roll" : "damage",
+        toHit: a.has_hit && !a.heal ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } }) : null,
+        dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
+      const sc = c.spellcasting;
+      (c.spells || []).forEach((s) => {
+        const rollSpell = (crit) => roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit });
+        const what = L.spellWhat(s);
+        if (s.effect === "damage" && s.hit === "attack" && s.dice)
+          out.push({ name: s.name, single: true, icon: "wand-sparkles", info: "spell attack" + (sc ? " " + signed(sc.attack) : "") + " · " + s.dice,
+            toHit: () => roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack" }), dmg: rollSpell });
+        else if (s.effect === "damage" && s.dice)
+          out.push({ name: s.name, many: true, icon: "wand-sparkles", info: (s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice, save: !!s.hit, roll: () => rollSpell(false) });
+        else if (s.effect === "heal" && s.dice)
+          out.push({ name: s.name, many: true, heal: true, icon: "heart", info: "heals " + s.dice, roll: () => rollSpell(false), spell: s });
+        else if (s.condition || s.ac)
+          out.push({ name: s.name, many: true, icon: L.spellHelps(s) ? "shield-plus" : "zap", info: what, effect: s });
+      });
+    } else {
+      L.attackLines((c.statblock || {}).attacks).forEach((a) => out.push({ name: a.name, single: true, icon: "swords",
+        info: [a.hit ? a.hit + " to hit" : "", a.dmg].filter(Boolean).join(" · "),
+        toHit: a.hit ? () => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }) : null,
+        dmg: a.dmg ? (crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }) : null }));
+    }
+    return out;
+  }
+  function say(by, text, kind, undo) {
+    lastResult = { by, text, kind, undo };
+    renderSelected();
+    if (window.FX) FX.sound(kind === "miss" ? "fumble" : kind === "heal" ? "heal" : kind === "crit" ? "crit" : "hit");
+  }
+  const undoHp = () => act("POST", "/api/encounters/" + EID() + "/undo", {}, () => { lastResult = null; refresh(true); });
+  const hpTo = (target, op, amount, by, after) => act("POST", "/api/encounters/" + EID() + "/damage",
+    { targets: [target.id], amount, op, attacker_id: by.id }, () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
+
+  async function arm(c, a) {
+    lastResult = null;
+    aim = { by: c.id, act: a, amount: null, done: new Set(), half: false };
+    if (a.roll) { // area / healing spells: roll once, then every tap gets the same amount
+      const r = await a.roll();
+      if (!r) { aim = null; renderSelected(); return; }
+      aim.amount = Math.max(0, r.total);
+    }
+    setTool("select");
+    $("#hint").textContent = a.name + ": tap " + (a.single ? "who it's aimed at" : "each one it reaches") + " on the map. Esc cancels.";
+    renderSelected();
+  }
+  function stopAim() { aim = null; setTool(view.tool); renderSelected(); }
+  async function aimAt(t) {
+    const c = fighter(aim.by), a = aim.act;
+    const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
+    if (!t) return;
+    if (!target) { toast("That token isn't in this fight. Only tokens from the map's encounter can be hit.", "error"); return; }
+    if (a.single) {
+      aim = null; setTool(view.tool);
+      let crit = false;
+      if (a.toHit) {
+        const r = await a.toHit();
+        if (!r) { renderSelected(); return; }
+        const nat = r.result && r.result.natural;
+        crit = nat === 20;
+        if (!(crit || (nat !== 1 && r.total >= target.ac))) {
+          say(c.id, a.name + ": missed " + target.name + " (" + r.total + " vs AC " + target.ac + (nat === 1 ? ", natural 1" : "") + ").", "miss");
+          return;
+        }
+        if (!a.dmg) { say(c.id, a.name + ": hit " + target.name + " (" + r.total + " vs AC " + target.ac + ").", "hit"); return; }
+      }
+      if (!a.dmg) return;
+      const d = await a.dmg(crit && !a.heal);
+      if (!d) { renderSelected(); return; }
+      const n = Math.max(0, d.total);
+      hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.heal ? a.name + ": healed " + target.name + " for " + n + "."
+        : (crit ? "Critical hit! " : "Hit! ") + n + " damage to " + target.name + (a.toHit ? "" : " (" + a.name + ")") + ".", a.heal ? "heal" : crit ? "crit" : "hit", true));
+      return;
+    }
+    // spells that reach several: each tap lands on one more
+    if (aim.done.has(target.id)) return;
+    aim.done.add(target.id);
+    if (a.effect) {
+      const s = a.effect, label = s.condition || s.name;
+      act("POST", "/api/encounters/" + EID() + "/conditions", { targets: [target.id], name: label, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition ? s.name : "" },
+        () => { refresh(true); lastResult = { by: c.id, text: label + " on " + target.name + ".", kind: "heal" }; renderSelected(); if (window.FX) FX.sound("ac"); },
+        { onError: (e) => toast(e.message, "error") });
+    } else {
+      const n = a.heal ? aim.amount : aim.half ? Math.floor(aim.amount / 2) : aim.amount;
+      hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.name + ": " + (a.heal ? "healed " + target.name + " for " + n : n + " damage to " + target.name + (aim && aim.half ? " (saved, half)" : "")) + ".", a.heal ? "heal" : "hit", true));
+    }
+    renderSelected();
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aim) stopAim(); });
+
+  function fightPanel(t) {
+    ensureEnc();
+    const c = fighter(t.combatant_id);
+    if (!c) return h("div", null, h("h3", { class: "rule-head" }, t.display), h("p", { class: "faint", style: "margin:0" }, encLoading || !enc ? "Loading…" : "This token's combatant was removed from the fight."));
+    const isTurn = enc.encounter.status === "active" && enc.encounter.current_id === c.id;
+    const pct = c.max_hp ? Math.max(0, Math.min(100, Math.round(c.hp / c.max_hp * 100))) : 0;
+    const acts = actionsFor(c);
+    const a = aim && aim.by === c.id ? aim.act : null;
+    // aiming: one big instruction instead of the buttons
+    const aiming = a ? h("div", { class: "fight-aim" + (a.heal ? " is-heal" : "") },
+      h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name),
+        aim.amount != null ? h("span", { class: "tag" }, (a.heal ? "heals " : "") + aim.amount + (a.heal ? "" : " damage")) : null),
+      h("p", { class: "fa-ask" }, a.single ? "Now tap who " + c.name + " " + (a.heal ? "heals" : "attacks") + " on the map."
+        : aim.done.size ? "Tap anyone else it reaches, or Done." : "Now tap each one it reaches on the map."),
+      a.single && a.toHit ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "It rolls to hit against their AC, then rolls and deals the damage.") : null,
+      a.save ? h("label", { class: "check" }, h("input", { type: "checkbox", checked: aim.half, onchange: (e) => { aim.half = e.target.checked; } }), "This one saved: half damage") : null,
+      h("button", { type: "button", class: "btn btn-sm" + (aim.done.size ? " btn-primary" : ""), onclick: stopAim }, aim.done.size ? "Done" : "Cancel")) : null;
+    const res = lastResult && lastResult.by === c.id ? h("div", { class: "fight-result is-" + lastResult.kind, role: "status" },
+      h("span", null, lastResult.text), lastResult.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: undoHp }, icon("undo-2", "sm"), " Undo") : null) : null;
+    const amt = h("input", { type: "number", min: 0, placeholder: "0", inputmode: "numeric", "data-keep": "fight-amt", "aria-label": "Amount", value: hpAmt,
+      oninput: (e) => { hpAmt = e.target.value; } });
+    const hp = (op) => {
+      const n = Math.trunc(Number(amt.value));
+      if (amt.value === "" || !Number.isFinite(n) || n < 0) { amt.focus(); return; }
+      hpAmt = "";
+      act("POST", "/api/combatants/" + c.id + "/hp", { op, amount: n }, () => refresh(true), { onError: (e) => toast(e.message, "error") });
+    };
+    return h("div", { class: "fight" },
+      h("div", { class: "fight-head" },
+        h("b", { class: "fight-name" }, c.name), isTurn ? h("span", { class: "tag is-good" }, "Their turn") : null,
+        h("span", { class: "grow" }), h("span", { class: "fight-ac", title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : "Armor class" }, h("b", null, c.ac), " AC")),
+      h("div", { class: "fight-hp" }, h("span", { class: "hpbar", "data-level": pct <= 25 ? "low" : pct <= 50 ? "mid" : "high" }, h("span", { class: "hpbar-fill", style: "width:" + pct + "%" })),
+        h("span", { class: "num" }, c.hp + " / " + c.max_hp + " HP" + (c.temp_hp ? " +" + c.temp_hp + " temp" : ""))),
+      (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")))) : null,
+      aiming, res,
+      a ? null : acts.length ? h("div", { class: "fight-acts" },
+        h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),
+        acts.map((x) => h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : ""), onclick: () => arm(c, x) },
+          icon(x.icon, "sm"), h("b", null, x.name), x.info ? h("span", { class: "faint" }, x.info) : null)))
+        : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet." : "No attacks in this stat block. Add lines like “Bite. +4 to hit, 1d6+2 piercing” on the Combat screen."),
+      a ? null : h("div", { class: "hp-ctl fight-hpctl" }, amt,
+        h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => hp("damage") }, "Damage"),
+        h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: () => hp("heal") }, "Heal")),
+      h("a", { class: "faint", style: "font-size:.85rem", href: "/combat/" + EID() }, "Open the full fight on the Combat screen"));
   }
 
   // ---- settings autosave -----------------------------------------------------------------
