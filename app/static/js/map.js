@@ -286,40 +286,67 @@
       .finally(() => { encLoading = false; renderSelected(); });
   }
   const roll = (req) => Dice.roll(Object.assign({ encounter_id: EID() }, req));
-  // Everything this combatant can do, as buttons. single: one target, rolled when it's tapped.
+  // House rule (Settings → Combat): every attack and harmful spell rolls d20 + bonus against AC.
+  const toHitRule = () => !enc || !enc.settings || enc.settings.roll_to_hit !== false;
+  /* Everything this combatant can do, as buttons.
+     single: one target, rolled when it's tapped. many: tap each one it reaches.
+     toHit: rolled against each target's AC first. dmg / roll: the damage (or healing). effect: a condition it puts on. */
   function actionsFor(c) {
-    const out = [];
+    const out = [], rule = toHitRule();
     if (c.linked) {
       (c.attacks || []).forEach((a, i) => out.push({ name: a.name || "Attack", heal: !!a.heal, single: true, icon: a.heal ? "heart" : "swords",
-        info: a.heal ? "heals" : a.has_hit ? "attack roll" : "damage",
-        toHit: a.has_hit && !a.heal ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } }) : null,
+        info: a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage",
+        toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
+          : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
       const sc = c.spellcasting;
       (c.spells || []).forEach((s) => {
         const rollSpell = (crit) => roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit });
+        const spellAtk = sc ? () => roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack" })
+          : () => roll({ expression: "1d20", label: s.name + " attack", kind: "attack", subject: c.name });
+        const atkInfo = "spell attack " + (sc ? signed(sc.attack) : "+0");
         const what = L.spellWhat(s);
         if (s.effect === "damage" && s.hit === "attack" && s.dice)
-          out.push({ name: s.name, single: true, icon: "wand-sparkles", info: "spell attack" + (sc ? " " + signed(sc.attack) : "") + " · " + s.dice,
-            toHit: () => roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack" }), dmg: rollSpell });
+          out.push({ name: s.name, single: true, icon: "wand-sparkles", info: atkInfo + " · " + s.dice, toHit: spellAtk, dmg: rollSpell });
         else if (s.effect === "damage" && s.dice)
-          out.push({ name: s.name, many: true, icon: "wand-sparkles", info: (s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice, save: !!s.hit, roll: () => rollSpell(false) });
+          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false),
+            info: (rule ? atkInfo + " · " : s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice,
+            toHit: rule ? spellAtk : null, save: !rule && !!s.hit });
         else if (s.effect === "heal" && s.dice)
-          out.push({ name: s.name, many: true, heal: true, icon: "heart", info: "heals " + s.dice, roll: () => rollSpell(false), spell: s });
-        else if (s.condition || s.ac)
-          out.push({ name: s.name, many: true, icon: L.spellHelps(s) ? "shield-plus" : "zap", info: what, effect: s });
+          out.push({ name: s.name, many: true, heal: true, icon: "heart", info: "heals " + s.dice, roll: () => rollSpell(false) });
+        else if (s.condition || s.ac) {
+          const helps = L.spellHelps(s);
+          out.push({ name: s.name, many: true, icon: helps ? "shield-plus" : "zap", info: (rule && !helps ? atkInfo + " · " : "") + what, effect: s,
+            toHit: rule && !helps ? spellAtk : null });
+        }
       });
     } else {
-      L.attackLines((c.statblock || {}).attacks).forEach((a) => out.push(a.check ? { name: a.name, instant: true, icon: "dice-5",
-        info: "roll " + a.check + (a.beat != null ? " · beat " + a.beat : a.dc != null ? " · DC " + a.dc : ""),
-        run: async () => {
-          const r = await roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name });
-          if (r) say(c.id, a.name + ": rolled " + r.total + (L.checkVerdict(a, r.total) ? " — " + L.checkVerdict(a, r.total) : "") + ".", a.beat != null || a.dc != null ? (L.checkVerdict(a, r.total).startsWith("beats") || L.checkVerdict(a, r.total).startsWith("makes") ? "hit" : "miss") : "hit");
-        } } : { name: a.name, single: true, icon: "swords",
-        info: [a.hit ? a.hit + " to hit" : "", a.dmg ? a.dmg + (a.hit ? "" : " damage") : ""].filter(Boolean).join(" · "),
-        toHit: a.hit ? () => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }) : null,
-        dmg: a.dmg ? (crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }) : null }));
+      const sb = c.statblock || {};
+      L.attackLines(sb.attacks).forEach((a) => out.push(monsterAction(c, a, false, rule)));
+      L.attackLines(sb.spells).forEach((a) => out.push(monsterAction(c, a, true, rule)));
     }
     return out;
+  }
+  // One line of a monster's Attacks or Spells box. Spells can reach several targets.
+  function monsterAction(c, a, spell, rule) {
+    if (a.check) return { name: a.name, instant: true, icon: "dice-5",
+      info: "roll " + a.check + (a.beat != null ? " · beat " + a.beat : a.dc != null ? " · DC " + a.dc : ""),
+      run: async () => {
+        const r = await roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name });
+        if (!r) return;
+        const v = L.checkVerdict(a, r.total);
+        say(c.id, a.name + ": rolled " + r.total + (v ? " — " + v : "") + ".", v && !/^(beats|makes)/.test(v) ? "miss" : "hit");
+      } };
+    const kind = a.heal ? "heal" : "damage";
+    const dmg = a.dmg ? (crit) => roll({ expression: a.dmg, label: a.name + (a.heal ? " healing" : " damage"), kind, subject: c.name, crit }) : null;
+    const toHit = a.heal ? null : a.hit || rule ? () => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }) : null;
+    const effect = a.condition ? { name: a.name, condition: a.condition, rounds: a.rounds, ac: 0 } : null;
+    const info = [toHit ? (a.hit || "+0") + " to hit" : "", a.dmg ? (a.heal ? "heals " : "") + a.dmg + (a.heal || toHit ? "" : " damage") : "",
+      a.condition ? a.condition + (a.rounds ? " " + a.rounds + " rds" : "") : ""].filter(Boolean).join(" · ");
+    const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
+    return spell
+      ? { name: a.name, many: true, heal: a.heal, icon, info, toHit, effect, roll: dmg ? () => dmg(false) : null }
+      : { name: a.name, single: true, heal: a.heal, icon, info, toHit, effect, dmg };
   }
   function say(by, text, kind, undo) {
     lastResult = { by, text, kind, undo };
@@ -329,6 +356,17 @@
   const undoHp = () => act("POST", "/api/encounters/" + EID() + "/undo", {}, () => { lastResult = null; refresh(true); });
   const hpTo = (target, op, amount, by, after) => act("POST", "/api/encounters/" + EID() + "/damage",
     { targets: [target.id], amount, op, attacker_id: by.id }, () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
+  const putEffect = (c, target, s, after) => act("POST", "/api/encounters/" + EID() + "/conditions",
+    { targets: [target.id], name: s.condition || s.name, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition && s.condition !== s.name ? s.name : "" },
+    () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
+  // Roll to hit against the target's AC: { hit, crit, text } or null if the roll failed to happen.
+  async function rollToHit(a, target) {
+    const r = await a.toHit();
+    if (!r) return null;
+    const nat = r.result && r.result.natural, crit = nat === 20;
+    const hit = crit || (nat !== 1 && r.total >= target.ac);
+    return { hit, crit, text: r.total + " vs AC " + target.ac + (nat === 1 ? ", natural 1" : crit ? ", natural 20" : "") };
+  }
 
   async function arm(c, a) {
     lastResult = null;
@@ -345,46 +383,50 @@
   }
   function stopAim() { aim = null; setTool(view.tool); renderSelected(); }
   async function aimAt(t) {
-    const c = fighter(aim.by), a = aim.act;
+    const cur = aim, c = fighter(cur.by), a = cur.act;
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
     if (!t) return;
     if (!target) { toast("That token isn't in this fight. Only tokens from the map's encounter can be hit.", "error"); return; }
     if (a.single) {
       aim = null; setTool(view.tool);
-      let crit = false;
+      let crit = false, how = "";
       if (a.toHit) {
-        const r = await a.toHit();
+        const r = await rollToHit(a, target);
         if (!r) { renderSelected(); return; }
-        const nat = r.result && r.result.natural;
-        crit = nat === 20;
-        if (!(crit || (nat !== 1 && r.total >= target.ac))) {
-          say(c.id, a.name + ": missed " + target.name + " (" + r.total + " vs AC " + target.ac + (nat === 1 ? ", natural 1" : "") + ").", "miss");
-          return;
-        }
-        if (!a.dmg) { say(c.id, a.name + ": hit " + target.name + " (" + r.total + " vs AC " + target.ac + ").", "hit"); return; }
+        if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
+        crit = r.crit; how = " (" + r.text + ")";
       }
-      if (!a.dmg) return;
+      if (a.effect) putEffect(c, target, a.effect, a.dmg ? null : () => say(c.id, a.name + ": " + target.name + " is " + a.effect.condition + how + ".", "hit"));
+      if (!a.dmg) { if (!a.effect) say(c.id, a.name + ": hit " + target.name + how + ".", "hit"); return; }
       const d = await a.dmg(crit && !a.heal);
       if (!d) { renderSelected(); return; }
       const n = Math.max(0, d.total);
       hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.heal ? a.name + ": healed " + target.name + " for " + n + "."
-        : (crit ? "Critical hit! " : "Hit! ") + n + " damage to " + target.name + (a.toHit ? "" : " (" + a.name + ")") + ".", a.heal ? "heal" : crit ? "crit" : "hit", true));
+        : (crit ? "Critical hit! " : "Hit! ") + n + " damage to " + target.name + " with " + a.name + how + (a.effect ? ", and " + a.effect.condition : "") + ".",
+        a.heal ? "heal" : crit ? "crit" : "hit", true));
       return;
     }
-    // spells that reach several: each tap lands on one more
-    if (aim.done.has(target.id)) return;
-    aim.done.add(target.id);
-    if (a.effect) {
-      const s = a.effect, label = s.condition || s.name;
-      act("POST", "/api/encounters/" + EID() + "/conditions", { targets: [target.id], name: label, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition ? s.name : "" },
-        () => { refresh(true); lastResult = { by: c.id, text: label + " on " + target.name + ".", kind: "heal" }; renderSelected(); if (window.FX) FX.sound("ac"); },
-        { onError: (e) => toast(e.message, "error") });
-    } else {
-      const n = a.heal ? aim.amount : aim.half ? Math.floor(aim.amount / 2) : aim.amount;
-      hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.name + ": " + (a.heal ? "healed " + target.name + " for " + n : n + " damage to " + target.name + (aim && aim.half ? " (saved, half)" : "")) + ".", a.heal ? "heal" : "hit", true));
-    }
+    // spells that reach several: each tap lands on one more (rolling to hit each one first)
+    if (cur.done.has(target.id)) return;
+    cur.done.add(target.id);
     renderSelected();
+    let how = "";
+    if (a.toHit) {
+      const r = await rollToHit(a, target);
+      if (!r) { cur.done.delete(target.id); renderSelected(); return; }
+      if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
+      how = " (" + r.text + ")";
+    }
+    if (a.effect && cur.amount == null) {
+      putEffect(c, target, a.effect, () => say(c.id, a.name + ": " + (a.effect.condition || a.effect.name) + " on " + target.name + how + ".", a.toHit ? "hit" : "heal"));
+      return;
+    }
+    if (a.effect) putEffect(c, target, a.effect);
+    const half = !a.heal && cur.half, n = half ? Math.floor(cur.amount / 2) : cur.amount;
+    hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.name + ": " + (a.heal ? "healed " + target.name + " for " + n
+      : n + " damage to " + target.name + (half ? " (saved, half)" : "") + how) + ".", a.heal ? "heal" : "hit", true));
   }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aim) stopAim(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aim) stopAim(); });
 
   function fightPanel(t) {
@@ -401,7 +443,8 @@
         aim.amount != null ? h("span", { class: "tag" }, (a.heal ? "heals " : "") + aim.amount + (a.heal ? "" : " damage")) : null),
       h("p", { class: "fa-ask" }, a.single ? "Now tap who " + c.name + " " + (a.heal ? "heals" : "attacks") + " on the map."
         : aim.done.size ? "Tap anyone else it reaches, or Done." : "Now tap each one it reaches on the map."),
-      a.single && a.toHit ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "It rolls to hit against their AC, then rolls and deals the damage.") : null,
+      a.toHit ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, a.single ? "It rolls a d20 to hit against their AC; on a hit it " + (a.dmg ? "rolls and deals the damage." : "lands.")
+        : "Each one you tap gets its own d20 roll against their AC" + (aim.amount != null ? "; a hit takes the " + aim.amount + "." : ".")) : null,
       a.save ? h("label", { class: "check" }, h("input", { type: "checkbox", checked: aim.half, onchange: (e) => { aim.half = e.target.checked; } }), "This one saved: half damage") : null,
       h("button", { type: "button", class: "btn btn-sm" + (aim.done.size ? " btn-primary" : ""), onclick: stopAim }, aim.done.size ? "Done" : "Cancel")) : null;
     const res = lastResult && lastResult.by === c.id ? h("div", { class: "fight-result is-" + lastResult.kind, role: "status" },
@@ -427,8 +470,9 @@
         acts.map((x) => h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : ""), onclick: () => arm(c, x) },
           icon(x.icon, "sm"), h("b", null, x.name), x.info ? h("span", { class: "faint" }, x.info) : null)))
         : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet."
-          : "No attacks written for " + c.name + " yet. Add them in the Attacks box of its stat block, one per line, like “Bite 1d6” or “Claw. +4 to hit, 1d6+2”."),
-      c.linked ? null : L.attackNotes((c.statblock || {}).attacks).map((n) => h("div", { class: "fight-note" }, n)),
+          : "No attacks or spells written for " + c.name + " yet. Write some below."),
+      c.linked ? null : L.attackNotes((c.statblock || {}).attacks).concat(L.attackNotes((c.statblock || {}).spells)).map((n) => h("div", { class: "fight-note" }, n)),
+      c.linked || a ? null : L.monsterEditor(c, () => { enc = null; refresh(true); renderSelected(); }),
       a ? null : h("div", { class: "hp-ctl fight-hpctl" }, amt,
         h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => hp("damage") }, "Damage"),
         h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: () => hp("heal") }, "Heal")),

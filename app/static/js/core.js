@@ -119,23 +119,36 @@
        "Scimitar. Melee Weapon Attack: +4 to hit ... Hit: 5 (1d6 + 2)" -> { name, hit: "+4", dmg: "1d6+2" }
        "Bite 1d4" / "Snipe shot - 1d20 damage"                         -> { name, dmg }
        "Spread 1d20 must beat a 5" / "Entangle 1d20"                    -> { name, check: "1d20", beat: 5 }  (a roll, not damage)
-       "can summon a mad mushroom"                                      -> { note }                          (no dice) */
+       "can summon a mad mushroom"                                      -> { note }                          (no dice)
+     and for spells:
+       "Fire bolt +5 2d10"                                              -> { name, hit: "+5", dmg: "2d10" }
+       "Healing word heal 1d4+2"                                        -> { name, heal: true, dmg: "1d4+2" }
+       "Web: Restrained 10 rounds"                                      -> { name, condition: "Restrained", rounds: 10 } */
+  const CONDITION_WORDS = ["Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated", "Invisible",
+    "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
   function parseAttack(raw) {
     const line = String(raw || "").trim();
     if (!line) return null;
-    const hitM = line.match(/([+-]\s*\d+)\s*to hit/i);
+    const hitM = line.match(/([+-]\s*\d+)\s*to hit/i) || line.match(/(?:^|\s)([+-]\d+)(?=\s+\d*d\d)/i);
     const diceM = line.match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)/i);
-    if (!diceM && !hitM) return /[a-z]/i.test(line) ? { note: line } : null;
+    const cond = CONDITION_WORDS.find((w) => new RegExp("\\b" + w + "\\b", "i").test(line));
+    const roundsM = line.match(/(\d+)\s*(?:rounds?|rds?)\b/i);
+    if (!diceM && !hitM && !cond) return /[a-z]/i.test(line) ? { note: line } : null;
     let name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1] || line.split(/\s+[-–—:]\s*|\s*:\s*|\s*\d*d\d|\s*[+-]\s*\d/i)[0];
-    name = name.replace(/\d*d\d+(?:\s*[+-]\s*\d+)?/gi, "").replace(/\bDC\s*\d+/gi, "").replace(/[\s\-–—:,]+$/, "").trim() || "Attack";
+    name = name.replace(/\d*d\d+(?:\s*[+-]\s*\d+)?/gi, "").replace(/\bDC\s*\d+/gi, "").replace(/\d+\s*(?:rounds?|rds?)\b/gi, "");
+    if (cond) name = name.replace(new RegExp("\\b" + cond + "\\b", "i"), "");
+    name = name.replace(/[\s\-–—:,]+$/, "").trim();
+    if (/\s/.test(name)) name = name.replace(/\s+heal(?:s|ing)?$/i, "");
+    name = name || cond || "Attack";
     name = name.charAt(0).toUpperCase() + name.slice(1);
     const expr = diceM ? diceM[1].replace(/\s/g, "").replace(/^d/i, "1d") : null;
     const hit = hitM ? hitM[1].replace(/\s/g, "") : null;
-    if (expr && /^1d20([+-]\d+)?$/i.test(expr) && !hit && !/damage|dmg/i.test(line)) {
+    const heal = /\bheal(?:s|ing)?\b/i.test(line) && !!expr;
+    if (expr && /^1d20([+-]\d+)?$/i.test(expr) && !hit && !heal && !cond && !/damage|dmg/i.test(line)) {
       const dc = line.match(/\b(?:beat|beats)\s+(?:a\s+)?(\d+)/i), dcM = line.match(/\bDC\s*(\d+)/i);
       return { name, check: expr, beat: dc ? Number(dc[1]) : null, dc: dcM ? Number(dcM[1]) : null };
     }
-    return { name, hit, dmg: expr };
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null };
   }
   const attackLines = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && !a.note);
   const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);
@@ -144,6 +157,26 @@
     if (a.beat != null) return total > a.beat ? "beats " + a.beat : "doesn't beat " + a.beat;
     if (a.dc != null) return total >= a.dc ? "makes DC " + a.dc : "fails DC " + a.dc;
     return "";
+  }
+  const ATTACK_HELP = "One per line. Bite 1d6 · Claw +4 to hit 1d6+2 · Spread 1d20 must beat a 5";
+  const SPELL_HELP = "One per line. Fire bolt +5 2d10 · Fireball 8d6 · Healing word heal 1d4+2 · Web: Restrained 10 rounds";
+  /* Write an enemy's attacks and spells in the middle of a fight. With "all like it" ticked, every
+     enemy of the same kind in the fight and the creature in the library change too. */
+  function monsterEditor(c, onSaved) {
+    const sb = c.statblock || {};
+    const atk = h("textarea", { rows: 3, class: "prose", "aria-label": "Attacks", placeholder: "Bite 1d6\nClaw +4 to hit 1d6+2" }, sb.attacks || "");
+    const spl = h("textarea", { rows: 3, class: "prose", "aria-label": "Spells", placeholder: "Fire bolt +5 2d10\nWeb: Restrained 10 rounds" }, sb.spells || "");
+    const base = sb.base_name || c.name;
+    const all = h("input", { type: "checkbox", checked: true });
+    const save = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("check", "sm"), " Save attacks & spells");
+    save.addEventListener("click", () => act("POST", "/api/combatants/" + c.id + "/statblock", { attacks: atk.value, spells: spl.value, all_like_it: all.checked },
+      (d) => { toast("Saved. The new buttons are ready.", "ok"); if (onSaved) onSaved(d); }, { onError: (e) => toast(e.message, "error") }));
+    return h("details", { class: "mon-edit", open: !(sb.attacks || sb.spells) ? true : null },
+      h("summary", { class: "lbl" }, (sb.attacks || sb.spells) ? "Change attacks & spells" : "Write attacks & spells"),
+      h("label", { class: "field" }, h("span", null, "Attacks"), atk, h("small", { class: "faint" }, ATTACK_HELP)),
+      h("label", { class: "field" }, h("span", null, "Spells"), spl, h("small", { class: "faint" }, SPELL_HELP)),
+      h("label", { class: "check" }, all, "Every " + base + " in this fight" + (c.creature_id ? ", and in the creature library" : "")),
+      save);
   }
   function icon(name, cls) {
     const ns = "http://www.w3.org/2000/svg";
@@ -514,5 +547,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

@@ -34,7 +34,7 @@
     const box = $("#editor");
     if (!c) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No creature selected"), "Pick one from the list or create a new stat block.")); return; }
     const model = {};
-    ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "traits", "resistances", "immunities",
+    ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "spells", "traits", "resistances", "immunities",
       "vulnerabilities", "condition_immunities", "senses", "languages", "notes"].forEach((k) => { model[k] = c[k]; });
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
@@ -89,7 +89,10 @@
         prop("Vulnerabilities", "vulnerabilities"), prop("Condition immunities", "condition_immunities"),
         prop("Senses", "senses", { placeholder: "darkvision 60 ft., passive Perception 9" }), prop("Languages", "languages"),
         h("div", { class: "full" }, prop("Traits & special abilities", "traits", { rows: 4, class: "prose" })),
-        h("div", { class: "full" }, prop("Actions & attacks", "attacks", { rows: 5, class: "prose", placeholder: "Scimitar. Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage." })),
+        h("div", { class: "full" }, prop("Actions & attacks", "attacks", { rows: 5, class: "prose", placeholder: "Bite 1d6\nClaw +4 to hit 1d6+2\nScimitar. Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage." }),
+          h("small", { class: "faint" }, L.ATTACK_HELP)),
+        h("div", { class: "full" }, prop("Spells", "spells", { rows: 4, class: "prose", placeholder: "Fire bolt +5 2d10\nFireball 8d6\nHealing word heal 1d4+2\nWeb: Restrained 10 rounds" }),
+          h("small", { class: "faint" }, L.SPELL_HELP)),
         h("div", { class: "full" }, prop("DM notes", "notes", { rows: 3 })))),
       toEncounter,
       h("div", { class: "row", style: "margin-top:12px;justify-content:flex-end" }, del));

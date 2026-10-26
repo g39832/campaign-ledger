@@ -52,6 +52,10 @@
         <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.temp_hp_stacking"> Stack</label></div>
       </div>
       <div class="setting">
+        <div><b>Everything rolls to hit</b></div><div class="desc">Every attack and harmful spell rolls a d20 plus its bonus against the target's AC; no bonus means +0. Healing and helpful spells just land. Turn off to use saving throws for spells that have them (book rules).</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.roll_to_hit"> On</label></div>
+      </div>
+      <div class="setting">
         <div><b>Initiative ties</b></div><div class="desc">How combatants with the same initiative roll are ordered.</div>
         <div class="ctl"><select data-set="combat.tie_break" style="width:auto">
           <option value="modifier">Higher modifier first</option>
@@ -154,5 +158,5 @@
 })();
 </script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=31"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=33"></script>
 {% endblock %}

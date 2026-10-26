@@ -548,6 +548,33 @@ def api_remove(cid):
     return mutate(eid, fn, _body().get("op_id"))
 
 
+@bp.post("/combatants/<int:cid>/statblock")
+def api_statblock(cid):
+    """Change an enemy's attacks and spells. {attacks, spells, all_like_it: bool}.
+    With all_like_it, every enemy of the same kind in this fight changes too, and
+    so does the creature in the library, so the next ones added match."""
+    eid = _enc_of_combatant(cid)
+    data = _body()
+    fields = {k: str(data[k])[:20000] for k in ("attacks", "spells") if k in data and data[k] is not None}
+    if not fields:
+        raise F.ApiError("Nothing to change")
+
+    def fn(ctx):
+        c = ctx.combatant(cid)
+        if c["linked"]:
+            raise F.ApiError("Characters' attacks and spells are on their character sheet")
+        base = c["statblock"].get("base_name")
+        same = [x for x in ctx.combatants() if not x["linked"] and (x["id"] == cid or (data.get("all_like_it") and base and x["statblock"].get("base_name") == base))]
+        for x in same:
+            ctx.conn.execute("UPDATE combatants SET statblock = ? WHERE id = ?", (json.dumps(x["statblock"] | fields), x["id"]))
+        if data.get("all_like_it") and c["creature_id"]:
+            ctx.conn.execute(f"UPDATE creatures SET {', '.join(k + ' = ?' for k in fields)}, updated_at = ? WHERE id = ?",
+                             (*fields.values(), now_iso(), c["creature_id"]))
+        what = " and ".join("attacks" if k == "attacks" else "spells" for k in fields)
+        ctx.log("edit", f"Changed {what} for {', '.join(x['name'] for x in same)}")
+    return mutate(eid, fn, data.get("op_id"))
+
+
 @bp.patch("/combatants/<int:cid>")
 def api_patch_combatant(cid):
     eid = _enc_of_combatant(cid)

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 MIGRATIONS = {
     1: """
@@ -345,6 +345,10 @@ MIGRATIONS = {
     # v5: spell areas (circles, cones, lines, squares) drawn on a battle map.
     5: """
     ALTER TABLE maps ADD COLUMN shapes TEXT NOT NULL DEFAULT '[]';
+    """,
+    # v6: monsters can have spells (one per line, like their attacks).
+    6: """
+    ALTER TABLE creatures ADD COLUMN spells TEXT NOT NULL DEFAULT '';
     """,
 }
 

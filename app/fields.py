@@ -296,6 +296,7 @@ CREATURE = {
     "speed": Text(200),
     "abilities": Json("dict"),
     "attacks": Text(),
+    "spells": Text(),
     "traits": Text(),
     "resistances": Text(1000),
     "immunities": Text(1000),

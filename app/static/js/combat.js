@@ -373,15 +373,25 @@
     [...set].forEach((id) => { if (!byId(id)) set.delete(id); });
     return set;
   }
+  // House rule (Settings → Combat): every attack and harmful spell rolls d20 + bonus against AC.
+  const toHitRule = () => S.settings.roll_to_hit !== false;
   function attacksFor(c) {
     const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
+    const rule = toHitRule();
     if (c.linked) return (c.attacks || []).map((a, i) => ({ name: a.name, heal: !!a.heal,
-      hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e) : null, hitLabel: "Hit",
+      hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e)
+        : rule && !a.heal ? (e) => roll({ expression: "1d20", label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
+      hitLabel: a.has_hit ? "Hit" : "Hit +0",
       dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: a.heal ? "Heal" : "Dmg" }));
     if (c.kind !== "enemy") return [];
-    return attackLines(c.statblock.attacks).map((a) => ({ name: a.name,
-      hit: a.hit ? (e) => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }, e) : null, hitLabel: "Hit " + a.hit,
-      dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }, e) : null, dmgLabel: "Dmg " + a.dmg,
+    const lines = attackLines(c.statblock.attacks).concat(attackLines(c.statblock.spells).map((a) => Object.assign({ spell: true }, a)));
+    return lines.map((a) => ({ name: a.name, spell: !!a.spell, heal: !!a.heal,
+      hit: !a.check && !a.heal && (a.dmg || !a.condition) && (a.hit || rule) ? (e) => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
+      hitLabel: "Hit " + (a.hit || "+0"),
+      dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + (a.heal ? " healing" : " damage"), kind: a.heal ? "heal" : "damage", subject: c.name, crit }, e) : null,
+      dmgLabel: (a.heal ? "Heal " : "Dmg ") + a.dmg,
+      // a condition (Web: Restrained) goes on through the cast picker; it's harmful, so it rolls to hit first
+      effect: a.condition ? { name: a.name, effect: "effect", condition: a.condition, rounds: a.rounds, ac: 0, hit: "x", toHit: "1d20" + (a.hit || "") } : null,
       chk: a.check ? (e) => roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name }, e).then((r) => {
         if (r && L.checkVerdict(a, r.total)) toast(c.name + " — " + a.name + ": " + r.total + ", " + L.checkVerdict(a, r.total) + ".", "ok");
         return r; }) : null,
@@ -393,10 +403,23 @@
       .map((x) => ({ id: x.id, name: x.id === c.id ? x.name + " (self)" : x.name, ally: !isFoe(c, x), done: casting.done.has(x.id),
         info: healing ? x.hp + "/" + x.max_hp + " HP" : "AC " + x.ac }));
     const end = () => { casting = null; renderDetail(); };
-    const onPick = (p) => {
-      const target = byId(p.id), label = s.condition || s.name;
+    const onPick = async (p) => {
+      const target = byId(p.id), label = s.condition || s.name, cur = casting;
       if (!target) return;
       casting.done.add(p.id);
+      if (toHitRule() && !healing && !L.spellHelps(s)) {
+        renderDetail();
+        const r = await Dice.roll(c.spellcasting && !s.toHit
+          ? { check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }
+          : { expression: s.toHit || "1d20", label: s.name + " attack", kind: "attack", subject: c.name, encounter_id: EID });
+        if (!r) { cur.done.delete(p.id); renderDetail(); return; }
+        const nat = r.result && r.result.natural;
+        if (!(nat === 20 || (nat !== 1 && r.total >= target.ac))) {
+          toast(s.name + ": missed " + target.name + " (" + r.total + " vs AC " + target.ac + ").", "error");
+          return;
+        }
+        toast(s.name + " hits " + target.name + " (" + r.total + " vs AC " + target.ac + ").", "ok");
+      }
       if (healing && casting.amount != null) {
         run("POST", "/api/encounters/" + EID + "/damage", { targets: [p.id], amount: casting.amount, op: "heal", attacker_id: c.id },
           () => toast(s.name + ": healed " + target.name + " for " + casting.amount + ".", "ok",
@@ -457,6 +480,9 @@
       h("b", { style: "min-width:7ch" }, a.name),
       a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then(after("hit")) }, a.hitLabel) : null,
       a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
+      a.effect ? h("button", { type: "button", class: "btn btn-sm", title: "Then tap who it's on" + (toHitRule() ? "; each one rolls to hit" : ""), onclick: () => cast(a.effect) },
+        icon("zap", "sm"), " Cast · " + L.spellWhat(a.effect)) : null,
+      a.spell ? h("span", { class: "tag" }, "spell") : null,
       a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then(after(a.heal ? "heal" : "dmg")) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
       a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;
@@ -469,10 +495,11 @@
       h("div", { class: "lbl" }, "Spells", sc ? h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" }, " · save DC " + sc.dc + " · attack " + signed(sc.attack)) : null),
       c.spells.map((s) => {
         const rollSpell = (e, crit) => Dice.roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit, encounter_id: EID }, e);
-        const saveTag = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "")) : null;
+        const rule = toHitRule();
+        const saveTag = !rule && s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "")) : null;
         return h("div", { class: "roll-row", style: "align-items:center" },
           h("b", { style: "min-width:7ch" }, s.name),
-          s.effect === "damage" && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) =>
+          s.effect === "damage" && (s.hit === "attack" || rule) ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) =>
             Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e).then(after("hit")) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
           s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => rollSpell(e, false).then(after("dmg")) }, "Dmg " + s.dice) : null,
           s.effect === "damage" && s.dice && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => rollSpell(e, true).then(after("dmg")) }, "Crit") : null,
@@ -570,6 +597,8 @@
       line("Condition immunities", s.condition_immunities), line("Senses", s.senses), line("Languages", s.languages),
       s.traits ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Traits"), h("div", { class: "pre" }, s.traits)) : null,
       s.attacks ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Actions"), h("div", { class: "pre" }, s.attacks)) : null,
+      s.spells ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Spells"), h("div", { class: "pre" }, s.spells)) : null,
+      L.monsterEditor(c, (d) => apply(d)),
       s.notes ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Creature notes"), h("div", { class: "pre note-box" }, s.notes)) : null);
   }
 

@@ -59,6 +59,7 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "tie_break": "modifier",     # modifier | pc_first | enemy_first | manual
         "auto_sort": True,
         "skip_statuses": ["dead", "defeated", "fled"],
+        "roll_to_hit": True,  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
     },
     "players": {
         "edit_hp": True,      # players may apply damage/healing/temp HP to their own character
