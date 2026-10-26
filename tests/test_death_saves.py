@@ -86,7 +86,8 @@ def test_three_successes_stable_and_natural_20_gets_up(api, fight, monkeypatch):
     assert y["hp"] == 1 and y["status"] == "ok" and (y["death_successes"], y["death_failures"]) == (0, 0)
 
 
-def test_an_ally_next_to_them_gives_a_bonus(api, fight):
+def test_an_ally_next_to_them_gives_a_bonus(api, fight, monkeypatch):
+    fixed_d20(monkeypatch, 12)  # a natural 20 would get her up and end the saves
     eid, lux, mid = fight["eid"], fight["by"]["Lux"], fight["map"]
     api.post(f"/api/encounters/{eid}/damage", {"targets": [lux["id"]], "amount": 20})
     lt = tok(api, mid, "Lux")
@@ -102,7 +103,8 @@ def test_an_ally_next_to_them_gives_a_bonus(api, fight):
     assert api.post(f"/api/combatants/{lux['id']}/death-save", {})["roll"]["expression"] == "1d20"
 
 
-def test_bonus_size_is_a_setting(api, fight):
+def test_bonus_size_is_a_setting(api, fight, monkeypatch):
+    fixed_d20(monkeypatch, 12)
     camp = next(c for c in api.get("/api/campaigns")["campaigns"] if c["id"] == fight["camp"]["id"])
     s = camp["settings"]
     s["combat"]["ally_death_save_bonus"] = 5

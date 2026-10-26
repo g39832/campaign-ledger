@@ -267,3 +267,21 @@ def test_combat_and_map_are_one_click_apart(api, camp):
     assert f'href="/combat/{eid}"' in home and f'href="/map/{mid}"' in home, "the top menu jumps into the running fight"
     other = api.post(f"/api/campaigns/{camp['id']}/maps", {"preset": "cave"}, 201)["map"]["id"]
     assert 'id="to-combat"' not in api.c.get(f"/map/{other}").get_data(as_text=True), "a map with no fight has no switch"
+
+
+def test_area_attacks_know_their_shape_and_range(api, camp):
+    from app.rules import parse_area
+    assert parse_area("10 ft cone, range 20") == {"kind": "cone", "size": 10, "range": 20}
+    assert parse_area("1 action · 90 ft · 20 ft square · concentration") == {"kind": "square", "size": 20, "range": 90}
+    assert parse_area("150 ft · 20-foot radius") == {"kind": "circle", "size": 20, "range": 150}
+    assert parse_area("1 action · 15 ft cone · fire") == {"kind": "cone", "size": 15, "range": 0}
+    assert parse_area("10ft 3 turn cool down") is None
+    yam = api.character(camp["id"], name="Yamato")
+    yam = api.set_char(yam, attacks=[{"name": "Wide Slash", "bonus": "0", "damage": "2d12", "notes": "3 turn cool down", "area": "10 ft cone, range 20"},
+                                     {"name": "Parry", "bonus": "0", "damage": "1d4", "notes": ""}],
+                       spells=[{"name": "Burning Hands", "effect": "damage", "dice": "3d6", "hit": "dex", "notes": "1 action · 15 ft cone · fire"}])
+    eid = api.encounter(camp["id"])["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [yam["id"]]})
+    c = st["combatants"][0]
+    assert c["attacks"][0]["area"] == {"kind": "cone", "size": 10, "range": 20} and c["attacks"][1]["area"] is None
+    assert c["spells"][0]["area"] == {"kind": "cone", "size": 15, "range": 0}

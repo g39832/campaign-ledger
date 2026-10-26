@@ -220,7 +220,13 @@
       const shapes = (m.shapes || []).map((sh) => (this.drag && this.drag.shape && this.drag.shape.id === sh.id ? Object.assign({}, sh, { x: this.drag.at[0], y: this.drag.at[1] }) : sh));
       for (const sh of shapes) this.drawShape(sh, cp, ox, oy, false);
       if (this.areaDraft) this.drawShape(this.areaDraft, cp, ox, oy, true);
+      if (this.aim) this.drawAim(cp, ox, oy);
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
+      if (this.aim && this.aim.hits) for (const t of this.tokens) if (this.aim.hits.has(t.id)) {
+        const r = t.size * cp * 0.5, X = ox + (t.x + t.size / 2) * cp, Y = oy + (t.y + t.size / 2) * cp;
+        ctx.save(); ctx.strokeStyle = "#ffd36b"; ctx.lineWidth = cp * 0.1; ctx.shadowColor = "#ffb347"; ctx.shadowBlur = cp * 0.4;
+        ctx.beginPath(); ctx.arc(X, Y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
       if (m.fog_enabled) {
         const dm = this.opts.role === "dm";
         ctx.fillStyle = dm ? "rgba(10,8,6,.55)" : "#080706";
@@ -308,6 +314,24 @@
         ctx.strokeRect(X + cp * 0.08, Y + cp * 0.08, cp * 0.84, cp * 0.84);
       }
       ctx.globalAlpha = 1;
+    }
+    // An area attack being aimed: the dotted range ring around the attacker, then the area itself.
+    drawAim(cp, ox, oy) {
+      const a = this.aim, ctx = this.ctx, per = this.map.scale_value || 5;
+      if (a.range > 0) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,211,107,.85)"; ctx.fillStyle = "rgba(255,211,107,.07)"; ctx.lineWidth = cp * 0.05; ctx.setLineDash([cp * 0.2, cp * 0.14]);
+        ctx.beginPath(); ctx.arc(ox + a.from[0] * cp, oy + a.from[1] * cp, (a.range / per + a.fromR) * cp, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+      this.drawShape(Object.assign({ color: "#ffb347" }, a.shape), cp, ox, oy, true);
+    }
+    // keep the area's origin within range of the attacker (measured from the edge of their token)
+    clampAim(x, y) {
+      const a = this.aim, per = this.map.scale_value || 5, max = a.range / per + a.fromR;
+      const dx = x - a.from[0], dy = y - a.from[1], d = Math.hypot(dx, dy);
+      if (d <= max || d === 0) return [x, y];
+      return [a.from[0] + dx / d * max, a.from[1] + dy / d * max];
     }
     drawShape(sh, cp, ox, oy, draft) {
       const ctx = this.ctx, m = this.map, per = m.scale_value || 5, L = sh.size / per;
@@ -465,7 +489,7 @@
     bind() {
       const c = this.canvas;
       c.addEventListener("wheel", (e) => { e.preventDefault(); const [x, y] = this.pos(e); this.zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, x, y); }, { passive: false });
-      c.addEventListener("dblclick", (e) => { if (this.map && this.tool !== "area") this.ping(...this.pos(e)); });
+      c.addEventListener("dblclick", (e) => { if (this.map && this.tool !== "area" && this.tool !== "aim") this.ping(...this.pos(e)); });
       c.addEventListener("pointerdown", (e) => {
         if (!this.map) return;
         try { c.setPointerCapture(e.pointerId); } catch (err) { /* capture is a nicety; drawing works without it */ }
@@ -479,7 +503,7 @@
         }
         // a quick second tap on a phone counts as a double-click
         const now = performance.now();
-        if (e.pointerType === "touch" && this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 24 && this.tool !== "area") {
+        if (e.pointerType === "touch" && this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 24 && this.tool !== "area" && this.tool !== "aim") {
           this.lastTap = null; this.ping(...p); return;
         }
         this.lastTap = { t: now, p };
@@ -509,6 +533,14 @@
           const cell = this.toCell(...p); this.drag = { measure: true }; this.ruler = [cell, cell];
         } else if (tool === "ping") {
           this.ping(...p);
+        } else if (tool === "aim" && this.aim) {
+          const [cx, cy] = this.toCell(...p), s = this.aim.shape, per = this.map.scale_value || 5;
+          const near = Math.hypot(cx - s.x, cy - s.y) < 0.7;
+          if (!near || s.kind === "circle" || s.kind === "square") {
+            const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, per)); s.x = x; s.y = y;
+          }
+          this.drag = { aim: true };
+          this.draw();
         } else if (tool === "area") {
           const [cx, cy] = this.toCell(...p), a = this.areaSpec, per = this.map.scale_value || 5;
           const [x, y] = snapOrigin(a.kind, cx, cy, a.size, per);
@@ -549,6 +581,14 @@
           const [nx, ny] = snapOrigin(d.shape.kind, cx - d.grab[0], cy - d.grab[1], d.shape.size, per);
           d.moved = d.moved || nx !== d.shape.x || ny !== d.shape.y;
           d.at = [nx, ny];
+        } else if (d.aim && this.aim) {
+          const [cx, cy] = this.toCell(...p), s = this.aim.shape;
+          if (s.kind === "cone" || s.kind === "line") {
+            if (Math.hypot(cx - s.x, cy - s.y) > 0.3) s.dir = Math.round(Math.atan2(cy - s.y, cx - s.x) * 180 / Math.PI / 5) * 5;
+          } else {
+            const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, this.map.scale_value || 5)); s.x = x; s.y = y;
+          }
+          this.aim.hits = new Set(tokensInShape(s, this.map, this.tokens).map((t) => t.id));
         } else if (d.area && this.areaDraft) {
           const [cx, cy] = this.toCell(...p), a = this.areaDraft;
           if (a.kind === "cone" || a.kind === "line") {
@@ -576,6 +616,10 @@
         if (d && d.shape && d.moved && this.opts.onShapeMove) {
           d.shape.x = d.at[0]; d.shape.y = d.at[1];
           this.opts.onShapeMove(d.shape, d.at[0], d.at[1]);
+        }
+        if (d && d.aim && this.aim && this.opts.onAim) {
+          this.aim.hits = new Set(tokensInShape(this.aim.shape, this.map, this.tokens).map((t) => t.id));
+          this.opts.onAim(this.aim);
         }
         if (d && d.area && this.areaDraft && this.opts.onArea) {
           const a = this.areaDraft; this.areaDraft = null;

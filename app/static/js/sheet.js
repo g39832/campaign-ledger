@@ -243,7 +243,8 @@
     { key: "bonus", label: "Atk / DC", placeholder: "+5", width: "80px" },
     { key: "damage", label: "Damage & type", placeholder: "1d8+3 slashing" },
     { key: "notes", label: "Notes", placeholder: "Versatile (1d10)" },
-  ], { name: "", bonus: "", damage: "", notes: "" }, {
+    { key: "area", label: "Area", placeholder: "10 ft cone, range 20", width: "150px" },
+  ], { name: "", bonus: "", damage: "", notes: "", area: "" }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
     rowActions: (i, row) => L.isHealing(row)

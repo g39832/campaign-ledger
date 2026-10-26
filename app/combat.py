@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, knocked_prone, roll_d20, is_healing, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, initiative_sort_key, knocked_prone, parse_area, roll_d20, is_healing, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -65,7 +65,8 @@ def _combatant_dict(r):
                  # Attack names (in sheet order) so combat can offer the sheet's Hit / Dmg rolls.
                  attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
-                           "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a)}
+                           "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
+                           "area": parse_area(a.get("area")) or parse_area(a.get("notes"))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],

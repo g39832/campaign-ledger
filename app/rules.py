@@ -475,6 +475,7 @@ def spell_info(spell):
     except (TypeError, ValueError):
         ac = 0
     return {"name": (str(spell.get("name") or "").strip() or "Spell")[:80], "level": spell.get("level"), "ac": ac,
+            "area": parse_area(spell.get("area") or spell.get("notes")),
             "effect": effect, "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
             "condition": str(spell.get("condition") or "").strip()[:60],
             "rounds": rounds if rounds and 0 < rounds <= 1000 else None}
@@ -491,6 +492,31 @@ def spell_helps(sp):
     if key in HELP_EXCEPTIONS:
         return HELP_EXCEPTIONS[key]
     return sp["effect"] == "heal" or sp["ac"] > 0 or (sp["effect"] == "effect" and not sp["hit"])
+
+
+AREA_KINDS = {"cone": "cone", "line": "line", "cube": "square", "square": "square",
+              "radius": "circle", "sphere": "circle", "circle": "circle", "cylinder": "circle", "emanation": "circle"}
+AREA_RE = re.compile(r"(\d+)\s*-?\s*(?:ft|foot|feet)\.?\s*(cone|line|cube|square|radius|sphere|circle|cylinder|emanation)\b", re.I)
+RANGE_RE = re.compile(r"\brange\s*(?:of\s*)?(\d+)", re.I)
+FEET_RE = re.compile(r"(\d+)\s*-?\s*(?:ft|foot|feet)\b", re.I)
+
+
+def parse_area(text):
+    """'10 ft cone, range 20' -> {'kind': 'cone', 'size': 10, 'range': 20}. Also reads
+    spell notes like '1 action · 90 ft · 20 ft square' (range 90). Without a range an
+    area starts at the attacker (range 0). None when the text names no area."""
+    text = str(text or "")
+    m = AREA_RE.search(text)
+    if not m:
+        return None
+    size = max(5, min(500, int(m.group(1))))
+    r = RANGE_RE.search(text)
+    if r:
+        rng = int(r.group(1))
+    else:
+        other = [int(f.group(1)) for f in FEET_RE.finditer(text) if not (m.start() <= f.start() < m.end())]
+        rng = other[0] if other else 0
+    return {"kind": AREA_KINDS[m.group(2).lower()], "size": size, "range": max(0, min(1000, rng))}
 
 
 def knocked_prone(conditions):

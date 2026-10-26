@@ -48,6 +48,10 @@ def test_shorthand_and_book_style():
     pb = got[6]["acts"][0]
     assert (pb["name"], pb["dc"]) == ("Poison breath", 13)
     assert got[7] == {"acts": [], "notes": ["can summon a mad mushroom"]}
+    area = parse(["Cold Breath (Recharge 5–6). Exhales an icy blast in a 15-foot cone. 5d8 cold damage", "Fireball 8d6 range 150 20 ft radius", "Bite 1d4"])
+    assert area[0]["acts"][0]["aimArea"] == {"kind": "cone", "size": 15, "range": 0}
+    assert area[1]["acts"][0]["aimArea"] == {"kind": "circle", "size": 20, "range": 150}
+    assert area[2]["acts"][0]["aimArea"] is None
 
 
 def test_every_monster_book_monster_gets_buttons():

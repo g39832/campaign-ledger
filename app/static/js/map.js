@@ -35,6 +35,7 @@
       (d) => { view.selectedShape = d.shape_id; renderAreas(); if (window.FX) FX.sound("hit"); }),
     onShapeMove: (sh, x, y) => run("PATCH", "/api/maps/" + MID + "/shapes/" + sh.id, { x, y }),
     onSelectShape: () => renderAreas(),
+    onAim: () => renderSelected(),
   });
   let selectedToken = null;
   let aim = null;        // { by, act, amount, done: Set, half } while the DM taps who an attack or spell hits
@@ -96,10 +97,11 @@
     place: "Click a square to drop a marker. It starts hidden from players.",
     ping: "Click to ping a spot. Everyone sees a ripple there for a few seconds. (Double-click works with any tool.)",
     area: "Click to place the area. For cones and lines, press where it starts and drag to aim.",
+    aim: "Aiming: press and drag to point it (cones and lines turn; circles and cubes move). Then Confirm on the right. Esc cancels.",
   };
   function setTool(t) {
     if (t !== "place" && pendingMonster) { pendingMonster = null; renderMonsters(); }
-    if (t !== "select" && aim) { aim = null; renderSelected(); }
+    if (t !== "select" && t !== "aim" && aim) { aim = null; view.aim = null; renderSelected(); }
     view.tool = t;
     $$("[data-tool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.tool === t); b.setAttribute("aria-pressed", b.dataset.tool === t); });
     $("#hint").textContent = HINTS[t];
@@ -320,8 +322,8 @@
       (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" works like a buff spell; anything else is just a note
         ? out.push({ name: a.name, many: true, icon: a.ac > 0 ? "shield-plus" : "zap", info: signed(a.ac) + " AC", effect: { name: a.name, condition: a.name, ac: a.ac, rounds: null } })
-        : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: true, icon: a.heal ? "heart" : "swords",
-        info: a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage",
+        : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
+        info: (a.area ? areaText(a.area) + " · " : "") + (a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage"),
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
@@ -335,15 +337,15 @@
         if (s.effect === "damage" && s.hit === "attack" && s.dice)
           out.push({ name: s.name, single: true, icon: "wand-sparkles", info: atkInfo + " · " + s.dice, toHit: spellAtk, dmg: rollSpell });
         else if (s.effect === "damage" && s.dice)
-          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false), crit: () => rollSpell(true),
-            info: (rule ? atkInfo + " · " : s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice,
+          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false), crit: () => rollSpell(true), dmg: rollSpell, aimArea: s.area,
+            info: (s.area ? areaText(s.area) + " · " : "") + (rule ? atkInfo + " · " : s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice,
             toHit: rule ? spellAtk : null, save: !rule && !!s.hit });
         else if (s.effect === "heal" && s.dice)
           out.push({ name: s.name, many: true, heal: true, icon: "heart", info: "heals " + s.dice, roll: () => rollSpell(false) });
         else if (s.condition || s.ac) {
           const helps = L.spellHelps(s);
-          out.push({ name: s.name, many: true, icon: helps ? "shield-plus" : "zap", info: (rule && !helps ? atkInfo + " · " : "") + what, effect: s,
-            toHit: rule && !helps ? spellAtk : null });
+          out.push({ name: s.name, many: true, icon: helps ? "shield-plus" : "zap", info: (s.area ? areaText(s.area) + " · " : "") + (rule && !helps ? atkInfo + " · " : "") + what, effect: s,
+            toHit: rule && !helps ? spellAtk : null, aimArea: s.area });
         }
       });
     } else {
@@ -370,9 +372,10 @@
     const info = [toHit ? (a.hit || "+0") + " to hit" : "", a.dmg ? (a.heal ? "heals " : "") + a.dmg + (a.heal || toHit ? "" : " damage") : "",
       a.condition ? a.condition + (a.rounds ? " " + a.rounds + " rds" : "") : ""].filter(Boolean).join(" · ");
     const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
-    return spell || a.area
-      ? { name: a.name, many: true, heal: a.heal, icon, info, toHit, effect, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null }
-      : { name: a.name, single: true, heal: a.heal, icon, info, toHit, effect, dmg };
+    const aimArea = a.aimArea || null, shown = (aimArea ? areaText(aimArea) + " · " : "") + info;
+    return spell || a.area || aimArea
+      ? { name: a.name, many: true, heal: a.heal, icon, info: shown, toHit, effect, aimArea, dmg, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null }
+      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg };
   }
   function say(by, text, kind, undo) {
     lastResult = { by, text, kind, undo };
@@ -394,9 +397,65 @@
     return { hit, crit, text: r.total + " vs AC " + target.ac + (nat === 1 ? ", natural 1" : crit ? ", natural 20" : "") };
   }
 
+  const SHAPE_WORD = { cone: "cone", line: "line", square: "cube", circle: "radius" };
+  const areaText = (ar) => ar.size + " ft " + SHAPE_WORD[ar.kind] + (ar.range ? " · range " + ar.range + " ft" : "");
+  /* Area attacks (Wide Slash: 10 ft cone, range 20): the area appears by the attacker pointing
+     at the nearest enemy; drag on the map to aim it (it can't go past the range), see who's
+     caught, then Confirm. Everyone in it rolls to hit (house rule) and takes the damage. */
+  function startAim(c, a) {
+    const me = S.tokens.find((t) => t.combatant_id === c.id);
+    if (!me) { toast("Put " + c.name + " on the map first.", "error"); return; }
+    const from = [me.x + me.size / 2, me.y + me.size / 2], fromR = me.size / 2, ar = a.aimArea;
+    const foes = S.tokens.filter((t) => t.combatant_id && t.id !== me.id && fighter(t.combatant_id) && (fighter(t.combatant_id).kind === "enemy") !== (c.kind === "enemy")
+      && !["dead", "defeated"].includes(t.status));
+    const near = foes.sort((p, q) => Math.hypot(p.x - me.x, p.y - me.y) - Math.hypot(q.x - me.x, q.y - me.y))[0];
+    const to = near ? [near.x + near.size / 2, near.y + near.size / 2] : [from[0] + 1, from[1]];
+    const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
+    const shape = { kind: ar.kind, size: ar.size, width: 5, dir: Math.round(ang * 180 / Math.PI / 5) * 5, label: a.name };
+    if (ar.kind === "cone" || ar.kind === "line") { shape.x = from[0] + Math.cos(ang) * fromR; shape.y = from[1] + Math.sin(ang) * fromR; }
+    else { shape.x = to[0]; shape.y = to[1]; }
+    aim = { by: c.id, act: a, area: true, amount: null, done: new Set(), half: false };
+    view.aim = { shape, from, fromR, range: ar.range || 0, hits: new Set() };
+    if (ar.kind !== "cone" && ar.kind !== "line") [shape.x, shape.y] = view.clampAim(shape.x, shape.y);
+    view.aim.hits = new Set(MapView.tokensInShape(shape, S.map, S.tokens).map((t) => t.id));
+    setTool("aim");
+    $("#hint").textContent = a.name + ": " + HINTS.aim;
+    renderSelected();
+    view.draw();
+  }
+  // who's caught in the aimed area (not the attacker)
+  const caught = (c) => !view.aim ? [] : [...view.aim.hits].map((id) => S.tokens.find((t) => t.id === id))
+    .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean);
+  async function confirmAim() {
+    const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
+    if (!targets.length) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
+    view.aim = null; aim = null; setTool("select"); renderSelected();
+    let amount = null;
+    if (a.dmg) { const d = await a.dmg(false); if (!d) return; amount = Math.max(0, d.total); }
+    const lines = [];
+    for (const target of targets) {
+      let how = "", crit = false;
+      if (a.toHit) {
+        const r = await rollToHit(a, target);
+        if (!r) continue;
+        if (!r.hit) { lines.push("missed " + target.name + " (" + r.text + ")"); continue; }
+        how = " (" + r.text + ")"; crit = r.crit;
+      }
+      let n = amount;
+      if (crit && a.dmg && !a.heal) { const d = await a.dmg(true); if (d) n = Math.max(0, d.total); }
+      if (a.effect) putEffect(c, target, a.effect);
+      if (n != null) {
+        await hpTo(target, a.heal ? "heal" : "damage", n, c);
+        lines.push((crit ? "CRIT on " : a.heal ? "healed " : "hit ") + target.name + " for " + n + how);
+      } else lines.push((a.effect ? (a.effect.condition || a.effect.name) + " on " : "hit ") + target.name + how);
+    }
+    say(c.id, a.name + ": " + (lines.join("; ") || "no one") + ".", lines.some((l) => !l.startsWith("missed")) ? "hit" : "miss");
+  }
+
   async function arm(c, a) {
     lastResult = null;
     if (a.instant) { await a.run(); return; } // a plain roll: no target to pick
+    if (a.aimArea) { startAim(c, a); return; }
     aim = { by: c.id, act: a, amount: null, done: new Set(), half: false };
     if (a.roll) { // area / healing spells: roll once, then every tap gets the same amount
       const r = await a.roll();
@@ -407,7 +466,7 @@
     $("#hint").textContent = a.name + ": tap " + (a.single ? "who it's aimed at" : "each one it reaches") + " on the map. Esc cancels.";
     renderSelected();
   }
-  function stopAim() { aim = null; setTool(view.tool); renderSelected(); }
+  function stopAim() { const wasArea = aim && aim.area; aim = null; view.aim = null; setTool(wasArea ? "select" : view.tool); renderSelected(); view.draw(); }
   async function aimAt(t) {
     const cur = aim, c = fighter(cur.by), a = cur.act;
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
@@ -473,7 +532,16 @@
     const acts = actionsFor(c);
     const a = aim && aim.by === c.id ? aim.act : null;
     // aiming: one big instruction instead of the buttons
-    const aiming = a ? h("div", { class: "fight-aim" + (a.heal ? " is-heal" : "") },
+    const inArea = a && aim.area ? caught(c) : [];
+    const aiming = a && aim.area ? h("div", { class: "fight-aim" },
+      h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name), h("span", { class: "tag" }, areaText(a.aimArea))),
+      h("p", { class: "fa-ask" }, "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
+      h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
+      a.toHit ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
+      h("div", { class: "row", style: "gap:8px" },
+        h("button", { type: "button", class: "btn btn-primary", disabled: !inArea.length, onclick: confirmAim }, icon("check", "sm"), " Confirm" + (inArea.length ? " · " + inArea.length : "")),
+        h("button", { type: "button", class: "btn btn-sm", onclick: stopAim }, "Cancel")))
+    : a ? h("div", { class: "fight-aim" + (a.heal ? " is-heal" : "") },
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name),
         aim.amount != null ? h("span", { class: "tag" }, (a.heal ? "heals " : "") + aim.amount + (a.heal ? "" : " damage")) : null),
       h("p", { class: "fa-ask" }, a.single ? "Now tap who " + c.name + " " + (a.heal ? "heals" : "attacks") + " on the map."

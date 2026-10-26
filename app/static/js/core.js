@@ -150,7 +150,24 @@
     }
     // breath weapons and other areas reach several creatures
     const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
-    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area };
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line) };
+  }
+  /* "15 ft cone", "20-foot radius", "10 ft cone, range 20" -> { kind, size, range } to aim on the map.
+     Same rule as rules.parse_area on the server; without a range the area starts at the attacker. */
+  const AREA_KINDS = { cone: "cone", line: "line", cube: "square", square: "square", radius: "circle", sphere: "circle",
+    circle: "circle", cylinder: "circle", emanation: "circle" };
+  function parseArea(text) {
+    text = String(text || "");
+    const m = /(\d+)\s*-?\s*(?:ft|foot|feet)\.?\s*(cone|line|cube|square|radius|sphere|circle|cylinder|emanation)\b/i.exec(text);
+    if (!m) return null;
+    const r = /\brange\s*(?:of\s*)?(\d+)/i.exec(text);
+    let range = r ? Number(r[1]) : 0;
+    if (!r) {
+      const re = /(\d+)\s*-?\s*(?:ft|foot|feet)\b/gi;
+      let f;
+      while ((f = re.exec(text))) if (f.index < m.index || f.index >= m.index + m[0].length) { range = Number(f[1]); break; }
+    }
+    return { kind: AREA_KINDS[m[2].toLowerCase()], size: Math.max(5, Number(m[1])), range };
   }
   const attackLines = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && !a.note);
   const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);
