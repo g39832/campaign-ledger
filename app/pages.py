@@ -126,7 +126,9 @@ def combat_list():
     camp = _require_campaign()
     if camp is None:
         return redirect(url_for("pages.dashboard"))
-    return render_template("combat_list.html", **_shell("combat", camp, encounters=list_encounters(camp["id"])))
+    from .encounter_presets import listing as encounter_presets
+    return render_template("combat_list.html", **_shell("combat", camp, encounters=list_encounters(camp["id"]),
+                                                        encounter_presets=encounter_presets()))
 
 
 @bp.get("/combat/<int:enc_id>")
@@ -184,8 +186,11 @@ def maps():
         "(SELECT COUNT(*) FROM map_tokens WHERE map_id = m.id) AS token_count FROM maps m "
         "LEFT JOIN encounters e ON e.id = m.encounter_id WHERE m.campaign_id = ? ORDER BY m.updated_at DESC",
         (camp["id"],)).fetchall()
+    from .map_presets import build, listing
+    presets = listing()
     return render_template("maps.html", **_shell("map", camp, maps=[dict(r) for r in rows],
-                                                 encounters=list_encounters(camp["id"])))
+                                                 encounters=list_encounters(camp["id"]), map_presets=presets,
+                                                 preset_terrain={p["key"]: build(p["key"]) for p in presets}))
 
 
 @bp.get("/map/<int:map_id>")

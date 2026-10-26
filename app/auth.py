@@ -34,6 +34,19 @@ def token_hash(raw):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def client_ip():
+    """Who is really asking. Behind a tunnel running on this computer (cloudflared)
+    every request arrives from 127.0.0.1, so use the visitor address the tunnel
+    passes along. That header is only believed when the request came from this
+    computer, so nobody can fake it from outside."""
+    if request.remote_addr in LOOPBACK:
+        for h in ("CF-Connecting-IP", "X-Forwarded-For"):
+            v = request.headers.get(h)
+            if v:
+                return v.split(",")[0].strip()[:64]
+    return request.remote_addr
+
+
 def is_local_request():
     if not current_app.config.get("TRUST_LOCALHOST", True):
         return False

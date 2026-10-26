@@ -11,7 +11,7 @@ import time
 from flask import Blueprint, current_app, jsonify, render_template, request, send_file
 
 from . import fields as F
-from .auth import PLAYER_COOKIE, current_identity, is_dm, token_hash
+from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
 from .rules import ac_bonus, derived, is_healing, spell_info
@@ -61,11 +61,11 @@ def join_page():
 
 @bp.get("/api/join/lookup")
 def api_lookup():
-    if _limited(request.remote_addr):
+    if _limited(client_ip()):
         raise F.ApiError("Too many tries. Wait a minute and try again.", status=429)
     camp = _campaign_by_code(request.args.get("code"))
     if camp is None:
-        _record_failure(request.remote_addr)
+        _record_failure(client_ip())
         raise F.NotFound("No game with that code. Check it with your DM.")
     conn = get_db()
     claimed = {r["character_id"] for r in conn.execute(
@@ -78,12 +78,12 @@ def api_lookup():
 
 @bp.post("/api/join")
 def api_join():
-    if _limited(request.remote_addr):
+    if _limited(client_ip()):
         raise F.ApiError("Too many tries. Wait a minute and try again.", status=429)
     data = request.get_json(silent=True) or {}
     camp = _campaign_by_code(data.get("code"))
     if camp is None:
-        _record_failure(request.remote_addr)
+        _record_failure(client_ip())
         raise F.NotFound("No game with that code. Check it with your DM.")
     name = str(data.get("name", "")).strip()[:40]
     if not name:
@@ -235,6 +235,22 @@ def api_move(token_id):
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         _bump(conn, m["id"])
     return jsonify({"ok": True, "x": x, "y": y})
+
+
+@bp.post("/api/play/ping")
+def api_play_ping():
+    """A player points at a spot on the shared map; everyone sees a ripple."""
+    from .maps import _ping_xy, add_ping, recent_pings
+    ident = _player_required()
+    data = request.get_json(silent=True) or {}
+    conn = get_db()
+    camp = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()
+    if not camp or not camp["live_map_id"]:
+        raise F.ApiError("There's no map shared right now")
+    m = map_dict(conn.execute("SELECT * FROM maps WHERE id = ?", (camp["live_map_id"],)).fetchone())
+    x, y = _ping_xy(data, m)
+    add_ping(m["id"], x, y, ident["name"], "#8fd3ff")
+    return jsonify({"pings": recent_pings(m["id"])})
 
 
 @bp.get("/api/play/map-image/<int:map_id>")

@@ -578,6 +578,72 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
   .ledger td .btn { margin-top: 4px; }
 }
 
+/* ---------- table effects ---------- */
+.fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 200; overflow: hidden; }
+.fx-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fx-float { position: fixed; transform: translate(-50%, -50%); font: 800 1.6rem/1 var(--sans); text-shadow: 0 2px 0 rgba(0,0,0,.7), 0 0 12px rgba(0,0,0,.5);
+  animation: fx-rise 1.5s cubic-bezier(.2,.7,.3,1) forwards; white-space: nowrap; }
+.fx-float.fx-dmg { color: #ff7a5c; }
+.fx-float.fx-heal { color: #9fdc7a; }
+.fx-float.fx-down { color: #f3ead6; font-size: 1.3rem; }
+.fx-float.fx-ac { color: #8fd3ff; font-size: 1.2rem; }
+.fx-float.fx-info { color: #f3d58a; }
+@keyframes fx-rise { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -60%) scale(1.25); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--drift, 0px)), -260%) scale(1); } }
+.fx-banner { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; padding: 14px 34px; border-radius: 6px;
+  background: rgba(16, 12, 9, .88); border: 2px solid var(--brass); box-shadow: 0 10px 40px rgba(0,0,0,.6); animation: fx-in .35s cubic-bezier(.2,1.4,.4,1); max-width: 92vw; }
+.fx-banner.is-out { animation: fx-out .35s ease-in forwards; }
+.fx-banner-title { font: 700 2rem/1.1 var(--caps); letter-spacing: .03em; color: #f3ead6; overflow-wrap: break-word; }
+.fx-banner-sub { font-size: .95rem; color: #c9b896; margin-top: 4px; overflow-wrap: break-word; }
+.fx-banner.fx-crit { border-color: #f3d58a; box-shadow: 0 0 50px rgba(243,213,138,.45), 0 10px 40px rgba(0,0,0,.6); }
+.fx-banner.fx-crit .fx-banner-title { color: #f3d58a; }
+.fx-banner.fx-fumble { border-color: #8b8273; } .fx-banner.fx-fumble .fx-banner-title { color: #b9ab92; }
+.fx-banner.fx-dmg { border-color: #b2402e; }
+.fx-banner.fx-down { border-color: #b2402e; } .fx-banner.fx-down .fx-banner-title { color: #ff9b7a; }
+@keyframes fx-in { from { opacity: 0; transform: translateX(-50%) translateY(-24px) scale(.85); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+@keyframes fx-out { to { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(.95); } }
+.fx-flash-hit { animation: fx-hit .5s ease-out; }
+.fx-flash-heal { animation: fx-heal .9s ease-out; }
+.fx-flash-down { animation: fx-down .9s ease-out; }
+.fx-flash-turn { animation: fx-turn 1s ease-out; }
+@keyframes fx-hit { 0% { box-shadow: inset 0 0 0 999px rgba(224,80,50,.35); transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); } 100% { box-shadow: inset 0 0 0 999px rgba(224,80,50,0); transform: translateX(0); } }
+@keyframes fx-heal { 0% { box-shadow: inset 0 0 0 999px rgba(125,190,90,.35), 0 0 0 0 rgba(125,190,90,.6); } 100% { box-shadow: inset 0 0 0 999px rgba(125,190,90,0), 0 0 0 14px rgba(125,190,90,0); } }
+@keyframes fx-down { 0% { filter: grayscale(0) brightness(1.4); } 100% { filter: grayscale(.6) brightness(1); } }
+@keyframes fx-turn { 0% { box-shadow: 0 0 0 0 rgba(243,213,138,.8); } 100% { box-shadow: 0 0 0 18px rgba(243,213,138,0); } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-float { animation-duration: 1.2s; } .fx-flash-hit { animation: none; } .fx-banner { animation: none; }
+}
+
+/* ---------- presets (maps and encounters) ---------- */
+.preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.preset-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.preset-card:hover { border-color: var(--brass); }
+.preset-card.is-armed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.preset-card .faint { font-size: .86rem; overflow-wrap: break-word; }
+.preset-thumb { width: 100%; height: auto; aspect-ratio: 3 / 2; border-radius: 3px; background: var(--raised); margin-bottom: 4px; }
+.preset-mons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+
+/* ---------- play online ---------- */
+.online-box { border: 1px solid var(--brass); border-radius: var(--radius); padding: 12px 14px; background: var(--brass-soft); }
+.share-url.big a { font-size: 1.05rem; font-weight: 700; overflow-wrap: anywhere; }
+.share-url { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.share-url code { overflow-wrap: anywhere; }
+.live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 30%, transparent); }
+.page-play .map-tools { flex-wrap: wrap; }
+
+/* ---------- map: spell areas ---------- */
+.area-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.area-presets .btn { min-height: 28px; padding: 3px 8px; font-size: .84rem; }
+.area-colors { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.area-colors button { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text-2); cursor: pointer; }
+.area-colors button.is-on { border-color: var(--text); color: var(--text); background: var(--raised); }
+.area-colors .swatch, .area-list .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,.4); flex: none; }
+.area-list { list-style: none; margin: 0; padding: 0; }
+.area-list li { padding: 6px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.area-list li.is-sel { background: var(--brass-soft); }
+
 /* ---------- attacks & spells section ---------- */
 .sub-head { font: 700 .82rem var(--caps); letter-spacing: .05em; color: var(--text-2); margin: 18px 0 8px; }
 .spellcasting { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; }
@@ -905,8 +971,9 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 @media (max-width: 640px) {
   .dd-keys { display: none; }
   .dice-btn { padding: 5px 7px; }
-  .map-tools button span { display: none; }
-  .map-hint { display: none; }
+  .map-tools { right: 8px; }
+  .map-tools button { flex-direction: column; gap: 1px; padding: 4px 6px; font-size: .7rem; }
+  .map-hint { font-size: .74rem; right: 56px; }
   .roll-grid { grid-template-columns: minmax(0, 1fr); }
 }
 

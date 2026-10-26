@@ -7,6 +7,21 @@
 </div>
 <div class="settings-grid">
   <div>
+    <section class="section online-box" id="online">
+      <h2 class="rule-head">Play online with friends anywhere <span class="count">free</span></h2>
+      <div id="online-body"><p class="faint">Checking…</p></div>
+      <details class="instructions" style="margin-top:8px">
+        <summary style="cursor:pointer;font-weight:700">How this works, and other free ways</summary>
+        <ul>
+          <li><b>Go online</b> starts a free Cloudflare “quick tunnel”: a private https link to this computer. No account, no router settings, no cost. The link changes each time you start it, and stops when you click Stop or close the app.</li>
+          <li>Anyone with the link reaches the <b>join page</b> only. They still need your join code, and people coming in through the link are never treated as the DM.</li>
+          <li>Keep this computer on and the app running while you play. Everything stays saved here.</li>
+          <li><b>Tailscale</b> (free) is the private alternative: friends install Tailscale, you share this computer with them, and they open <code>http://&lt;your Tailscale IP&gt;:5050/join</code>. Start the app with <code>start-lan.bat</code> for that.</li>
+          <li>Full guide: <code>ONLINE.md</code> in the app folder.</li>
+        </ul>
+      </details>
+    </section>
+
     <section class="section">
       <h2 class="rule-head">1 · Let them reach this computer</h2>
       {% if lan_mode %}
@@ -62,6 +77,48 @@
 <script type="application/json" id="boot-chars">{{ characters | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script>
+(function () {
+  const { h, icon, $, api, toast } = L;
+  let poll = 0;
+  async function load(after) {
+    try { render(await api("GET", "/api/online")); } catch (e) { $("#online-body").replaceChildren(h("p", { class: "faint" }, e.message)); }
+  }
+  function copy(text) {
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast("Copied.", "ok"), () => toast(text, null, { ms: 9000 }));
+  }
+  function render(s) {
+    const code = ($("#code") || {}).textContent || "";
+    const body = [];
+    if (!s.installed) {
+      body.push(h("p", null, "One-time setup: install Cloudflare's free ", h("b", null, "cloudflared"), " program. Open PowerShell and run:"),
+        h("div", { class: "share-url" }, h("code", null, s.install_hint), h("button", { type: "button", class: "btn btn-sm", onclick: () => copy(s.install_hint) }, icon("copy", "sm"), " Copy")),
+        h("p", { class: "faint" }, "Then close and reopen the app, and come back here."),
+        h("button", { type: "button", class: "btn btn-sm", onclick: () => load() }, icon("refresh-cw", "sm"), " Check again"));
+    } else if (s.running && s.url) {
+      const join = s.url + "/join";
+      body.push(h("p", null, h("span", { class: "live-dot" }), " ", h("b", null, "You're online."), " Send your friends this link and the join code:"),
+        h("div", { class: "share-url big" }, h("a", { href: join, target: "_blank", rel: "noopener" }, join),
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => copy(join) }, icon("copy", "sm"), " Copy link"),
+          code && code !== "—" ? h("button", { type: "button", class: "btn btn-sm", onclick: () => copy("Join my game: " + join + "  Code: " + code) }, icon("copy", "sm"), " Copy link + code") : null),
+        code && code !== "—" ? null : h("p", { class: "warn-box" }, "Joining is turned off. Make a join code below so friends can get in."),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger", onclick: () => api("POST", "/api/online/stop").then(render) }, "Stop (go offline)"));
+    } else if (s.running) {
+      body.push(h("p", null, icon("loader-circle", "sm"), " Connecting to Cloudflare…"));
+      clearTimeout(poll); poll = setTimeout(load, 1500);
+    } else {
+      body.push(h("p", null, "Get a link your friends can open from anywhere. Free, and nothing to set up on your router."),
+        s.error ? h("p", { class: "warn-box" }, s.error) : null,
+        h("button", { type: "button", class: "btn btn-primary", id: "go-online", onclick: async (e) => {
+          e.currentTarget.disabled = true; e.currentTarget.textContent = "Starting…";
+          try { render(await api("POST", "/api/online/start")); } catch (err) { toast(err.message, "error"); load(); }
+        } }, icon("link", "sm"), " Go online"));
+    }
+    $("#online-body").replaceChildren(...body);
+  }
+  load();
+})();
+</script>
 <script>
 (() => {
   const { h, $, api, act, toast, armed, fmtDate, fmtTime } = L;

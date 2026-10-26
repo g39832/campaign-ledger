@@ -34,7 +34,7 @@ JSON_COLUMNS = {
     "creatures": ["abilities"],
     "combatants": ["conditions", "statblock"],
     "journal_entries": ["tags"],
-    "maps": ["terrain"],
+    "maps": ["terrain", "shapes"],
     "rolls": ["result"],
 }
 CHILD_KEYS = ("characters", "morality_events", "creatures", "encounters", "journal", "combatants", "hp_changes",

@@ -20,6 +20,12 @@
     },
     onPlace: (x, y) => run("POST", "/api/maps/" + MID + "/tokens", { kind: "marker", label: "Marker", x, y, hidden: true },
       () => toast("Marker placed (hidden from players). Rename it or change it to a trap on the right.", "ok")),
+    canEditShapes: true,
+    onPing: (x, y) => { api("POST", "/api/maps/" + MID + "/ping", { x, y }).then((d) => view.setPings(d.pings)).catch((e) => toast(e.message, "error")); if (window.FX) FX.sound("ping"); },
+    onArea: (a) => run("POST", "/api/maps/" + MID + "/shapes", { kind: a.kind, x: a.x, y: a.y, size: a.size, width: a.width, dir: a.dir, color: a.color, label: a.label, hidden: a.hidden },
+      (d) => { view.selectedShape = d.shape_id; renderAreas(); if (window.FX) FX.sound("hit"); }),
+    onShapeMove: (sh, x, y) => run("PATCH", "/api/maps/" + MID + "/shapes/" + sh.id, { x, y }),
+    onSelectShape: () => renderAreas(),
   });
   let selectedToken = null;
 
@@ -31,7 +37,8 @@
     S = state;
     revs = { rev: S.map.rev, encounter_rev: S.encounter ? S.encounter.rev : null };
     view.setData(S.map, S.tokens);
-    renderTop(); renderOrder(); renderTokens(); renderSelected(); syncSettings();
+    renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings();
+    if (state.pings) view.setPings(state.pings);
   }
 
   // ---- top bar -------------------------------------------------------------------
@@ -60,6 +67,8 @@
     conceal: "Paint squares to hide them under fog.",
     paint: "Paint terrain. Choose a type in the Brush panel.",
     place: "Click a square to drop a marker. It starts hidden from players.",
+    ping: "Click to ping a spot. Everyone sees a ripple there for a few seconds. (Double-click works with any tool.)",
+    area: "Click to place the area. For cones and lines, press where it starts and drag to aim.",
   };
   function setTool(t) {
     view.tool = t;
@@ -69,6 +78,7 @@
     $("#brush-panel").hidden = !brushy;
     $("#terrain-palette").hidden = t !== "paint";
     $("#fog-all").hidden = t === "paint";
+    $("#area-panel").hidden = t !== "area";
     if (brushy && t !== "paint" && !S.map.fog_enabled) toast("Fog of war is off for this map. Turn it on in Map & grid settings so players only see revealed squares.");
   }
   $$("[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
@@ -86,6 +96,53 @@
   $("#zoom-out").addEventListener("click", () => view.zoom(0.8));
   $("#zoom-fit").addEventListener("click", () => view.fit());
   setTool("select");
+
+  // ---- spell areas -------------------------------------------------------------------------
+  const DAMAGE_COLORS = [["Fire", "#e0714f"], ["Cold", "#7fc4e8"], ["Lightning", "#f3d23a"], ["Acid", "#8fd14f"], ["Poison", "#5fa04a"],
+    ["Necrotic", "#7a5a9e"], ["Radiant", "#ffe9a0"], ["Thunder", "#6f8fd6"], ["Psychic", "#d36fb0"], ["Force", "#c8c8e8"], ["Dark", "#222"], ["Plain", "#c7a25e"]];
+  const AREA_PRESETS = [
+    ["Fireball", "circle", 20, "#e0714f"], ["Burning Hands", "cone", 15, "#e0714f"], ["Lightning Bolt", "line", 100, "#f3d23a"],
+    ["Thunderwave", "square", 15, "#6f8fd6"], ["Shatter", "circle", 10, "#6f8fd6"], ["Cone of Cold", "cone", 60, "#7fc4e8"],
+    ["Spirit Guardians", "circle", 15, "#ffe9a0"], ["Entangle", "square", 20, "#8fd14f"], ["Web", "square", 20, "#e8e8e8"],
+    ["Fog Cloud", "circle", 20, "#9aa0a6"], ["Darkness", "circle", 15, "#222"], ["Cloudkill", "circle", 20, "#5fa04a"],
+    ["Breath (cone)", "cone", 15, "#e0714f"], ["Breath (line)", "line", 30, "#8fd14f"],
+  ];
+  const spec = view.areaSpec;
+  function syncSpec() {
+    spec.kind = $("#area-kind").value; spec.size = Number($("#area-size").value) || 20;
+    spec.width = Number($("#area-width").value) || 5; spec.label = $("#area-label").value.trim(); spec.hidden = $("#area-hidden").checked;
+    $("#area-width-wrap").hidden = spec.kind !== "line";
+    $$("#area-colors button").forEach((b) => b.classList.toggle("is-on", b.dataset.c === spec.color));
+  }
+  ["#area-kind", "#area-size", "#area-width", "#area-label", "#area-hidden"].forEach((sel) => $(sel).addEventListener("input", syncSpec));
+  $("#area-colors").replaceChildren(...DAMAGE_COLORS.map(([name, c]) => h("button", { type: "button", "data-c": c, title: name, "aria-label": name,
+    onclick: () => { spec.color = c; syncSpec(); } }, h("span", { class: "swatch", style: "background:" + c }), name)));
+  $("#area-presets").replaceChildren(...AREA_PRESETS.map(([name, kind, size, c]) => h("button", { type: "button", class: "btn btn-sm",
+    onclick: () => { $("#area-kind").value = kind; $("#area-size").value = size; $("#area-label").value = name; spec.color = c; syncSpec(); toast(name + ": click the map to place it" + (kind === "cone" || kind === "line" ? ", then drag to aim." : "."), "ok"); } }, name)));
+  syncSpec();
+  function renderAreas() {
+    const shapes = S.map.shapes || [];
+    $("#areas-panel").hidden = !shapes.length;
+    $("#areas-count").textContent = shapes.length || "";
+    $("#areas").replaceChildren(...shapes.map((sh) => {
+      const inside = MapView.tokensInShape(sh, S.map, S.tokens).map((t) => t.display);
+      const turn = (deg) => run("PATCH", "/api/maps/" + MID + "/shapes/" + sh.id, { dir: (sh.dir || 0) + deg });
+      const del = h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove area", title: "Remove",
+        onclick: () => run("DELETE", "/api/maps/" + MID + "/shapes/" + sh.id) }, icon("x", "sm"));
+      return h("li", { class: view.selectedShape === sh.id ? "is-sel" : "", onclick: (e) => { if (e.target.closest("button")) return; view.selectedShape = sh.id; view.draw(); renderAreas(); } },
+        h("div", { class: "row", style: "align-items:center;gap:6px" },
+          h("span", { class: "swatch", style: "background:" + sh.color }),
+          h("b", { class: "grow" }, (sh.label || ({ circle: "Circle", cone: "Cone", line: "Line", square: "Cube" })[sh.kind]) + " · " + sh.size + " ft"),
+          sh.hidden ? h("span", { class: "faint", title: "Hidden from players" }, icon("eye-off", "sm")) : null,
+          sh.kind === "cone" || sh.kind === "line" ? [h("button", { type: "button", class: "icon-btn sm", title: "Turn left", "aria-label": "Turn left", onclick: () => turn(-45) }, icon("rotate-ccw", "sm")),
+            h("button", { type: "button", class: "icon-btn sm", title: "Turn right", "aria-label": "Turn right", onclick: () => turn(45) }, icon("refresh-cw", "sm"))] : null,
+          h("button", { type: "button", class: "icon-btn sm", title: sh.hidden ? "Show to players" : "Hide from players", "aria-label": "Toggle hidden",
+            onclick: () => run("PATCH", "/api/maps/" + MID + "/shapes/" + sh.id, { hidden: !sh.hidden }) }, icon("eye-off", "sm")),
+          del),
+        h("div", { class: "faint", style: "font-size:.85rem" }, inside.length ? "Inside: " + inside.join(", ") : "Nobody inside"));
+    }));
+  }
+  armed($("#areas-clear"), () => run("DELETE", "/api/maps/" + MID + "/shapes"), "Clear all areas?");
 
   // ---- turn order (read-only, plus Next turn) -----------------------------------------------
   function renderOrder() {
@@ -174,14 +231,17 @@
     try {
       if (!force) {
         const r = await api("GET", "/api/maps/" + MID + "/rev");
-        if (r.rev === revs.rev && r.encounter_rev === revs.encounter_rev) return;
+        if (r.rev === revs.rev && r.encounter_rev === revs.encounter_rev && r.ping === revs.ping) return;
+        revs.ping = r.ping;
       }
       const d = await api("GET", "/api/maps/" + MID);
-      revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null };
+      revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null, ping: revs.ping };
+      const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && p.by !== "DM");
       apply(d);
+      if (fresh.length && window.FX) FX.sound("ping");
     } catch (e) { /* offline */ }
   }
-  setInterval(refresh, 2000);
+  setInterval(refresh, 1500);
 
   // Dice can tumble across the map (an overlay canvas that never touches map data).
   if (window.Dice) { Dice.overlayHost = $("#stage"); $(".dd-overmap").hidden = false; }

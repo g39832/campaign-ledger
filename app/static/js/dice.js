@@ -450,10 +450,17 @@
       this.playing = true;
       $("#dice-skip").disabled = false;
       const run = tray.play(specs, { duration: DURATION[speed], size: speed === "dramatic" ? 72 : (tray === this.tray ? 40 : 44) });
+      if (window.FX && !opts.quiet) FX.sound("roll");
       run.then((settled) => {
         this.playing = false;
         $("#dice-skip").disabled = true;
         this.showResult(roll, false);
+        const nat = roll.result && roll.result.natural;
+        if (window.FX && !opts.quiet && (nat === 20 || nat === 1)) {
+          const who = roll.subject ? roll.subject + " · " : "";
+          if (nat === 20) { FX.banner("Natural 20!", who + (roll.label || "Critical"), "crit"); FX.burst(null, "crit"); FX.sound("crit"); }
+          else { FX.banner("Natural 1…", who + (roll.label || "Fumble"), "fumble"); FX.burst(null, "fumble", 30); FX.sound("fumble"); }
+        }
         this.dock.dataset.settled = JSON.stringify(settled);
         if (speed === "dramatic") setTimeout(() => { if (!this.playing) drama.hidden = true; }, 1400);
         if (tray !== this.tray) {

@@ -38,8 +38,10 @@ def create_app(config=None):
 
     app.teardown_appcontext(db.close_db)
 
-    from . import auth, backup, campaigns, characters, combat, creatures, journal, maps, morality, pages, play, rest, rolls
-    for module in (auth, campaigns, characters, morality, combat, creatures, journal, backup, rolls, maps, play, rest, pages):
+    from . import (auth, backup, campaigns, characters, combat, creatures, encounter_presets, journal, maps, morality,
+                   online, pages, play, rest, rolls)
+    for module in (auth, campaigns, characters, morality, combat, encounter_presets, creatures, journal, backup, rolls,
+                   maps, play, rest, online, pages):
         app.register_blueprint(module.bp)
     # Every request passes the DM/player permission check first.
     app.before_request(auth.guard)

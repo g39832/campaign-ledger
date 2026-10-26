@@ -33,7 +33,7 @@ def main():
     p.add_argument("--no-browser", action="store_true")
     args = p.parse_args()
 
-    app = create_app({"LAN_MODE": args.lan})
+    app = create_app({"LAN_MODE": args.lan, "PORT": args.port})
     host = "0.0.0.0" if args.lan else "127.0.0.1"
     url = f"http://127.0.0.1:{args.port}"
     print()

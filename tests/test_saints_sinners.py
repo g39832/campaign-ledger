@@ -153,7 +153,7 @@ def test_existing_database_upgrades_without_changing_data(tmp_path):
     conn.commit()
     conn.close()
     app = create_app({"DATA_DIR": str(data), "AUTO_SNAPSHOT": False})
-    assert any(f.startswith("pre-migration-v3-to-v4") for f in os.listdir(data / "backups"))
+    assert any(f.startswith(f"pre-migration-v3-to-v{appdb.SCHEMA_VERSION}") for f in os.listdir(data / "backups"))
     a = Api(app.test_client())
     camp = a.get("/api/campaigns")["campaigns"][0]
     assert camp["name"] == "Old" and camp["description"] == "kept"

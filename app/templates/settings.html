@@ -13,6 +13,25 @@
       </div>
     </section>
 
+    <section class="section" id="fx-settings">
+      <h2 class="rule-head">Effects &amp; sounds <span class="count">this device only</span></h2>
+      <div class="setting">
+        <div><b>Effects</b></div><div class="desc">Hit and heal flashes, floating numbers, turn banners, and bursts on a natural 20 or 1.</div>
+        <div class="ctl seg" data-fx="effects"><button type="button" data-v="1">On</button><button type="button" data-v="0">Off</button></div>
+      </div>
+      <div class="setting">
+        <div><b>Sounds</b></div><div class="desc">Little sounds for hits, heals, crits, turns and pings. Made by the browser, nothing to download.</div>
+        <div class="ctl seg" data-fx="sounds"><button type="button" data-v="1">On</button><button type="button" data-v="0">Off</button></div>
+      </div>
+      <div class="setting">
+        <div><b>Volume</b></div><div class="desc">How loud the sounds are.</div>
+        <div class="ctl"><input type="range" id="fx-volume" min="0" max="1" step="0.05" aria-label="Sound volume" style="width:160px"></div>
+      </div>
+      <div class="row" style="gap:6px;margin-top:6px">
+        <button type="button" class="btn btn-sm" id="fx-try">{{ icon("zap", "sm") }} Try it</button>
+      </div>
+    </section>
+
     {% if campaign %}
     <section class="section" id="rules">
       <h2 class="rule-head">Rules for “{{ campaign.name }}”</h2>
@@ -113,6 +132,23 @@
 <script type="application/json" id="boot">{{ (campaign.settings if campaign else {}) | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script>
+(function () {
+  if (!window.FX) return;
+  const sync = () => {
+    document.querySelectorAll("[data-fx]").forEach((seg) => seg.querySelectorAll("button").forEach((b) =>
+      b.classList.toggle("is-on", (b.dataset.v === "1") === !!FX.prefs[seg.dataset.fx])));
+    document.getElementById("fx-volume").value = FX.prefs.volume;
+  };
+  document.querySelectorAll("[data-fx] button").forEach((b) => b.addEventListener("click", () => { FX.set(b.closest("[data-fx]").dataset.fx, b.dataset.v === "1"); sync(); }));
+  document.getElementById("fx-volume").addEventListener("change", (e) => { FX.set("volume", Number(e.target.value)); FX.sound("heal"); });
+  document.getElementById("fx-try").addEventListener("click", (e) => {
+    FX.banner("Natural 20!", "This is what a crit looks like", "crit"); FX.burst(null, "crit"); FX.sound("crit");
+    FX.float(e.currentTarget, "−12", "dmg"); setTimeout(() => FX.float(e.currentTarget, "+8", "heal"), 500);
+  });
+  sync();
+})();
+</script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=22"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=24"></script>
 {% endblock %}

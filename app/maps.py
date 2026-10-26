@@ -21,12 +21,17 @@ from .db import get_db, new_uid, now_iso, tx
 bp = Blueprint("maps", __name__, url_prefix="/api")
 
 IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
-TERRAIN = ("floor", "wall", "water", "difficult", "pit", "door", "foliage")
+TERRAIN = ("floor", "wall", "water", "difficult", "pit", "door", "foliage",
+           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table")
+# Squares a token can't stand in when the app places tokens for you.
+BLOCKING = {"wall", "pit", "water", "lava", "tree", "table"}
+SHAPE_KINDS = ("circle", "cone", "line", "square")
 
 
 def map_dict(row):
     d = F.decode_row(row, F.MAP)
     d["terrain"] = json.loads(row["terrain"] or "{}")
+    d["shapes"] = json.loads(row["shapes"] or "[]") if "shapes" in row.keys() else []
     for k in ("id", "uid", "campaign_id", "image", "image_w", "image_h", "revealed", "rev", "created_at", "updated_at"):
         d[k] = row[k]
     return d
@@ -117,7 +122,7 @@ def dm_state(map_id):
     enc = encounter_summary(conn, m["encounter_id"])
     live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (m["campaign_id"],)).fetchone()["live_map_id"]
     return {"map": m, "tokens": tokens_for(conn, map_id, enc["current_id"] if enc and enc["status"] == "active" else None),
-            "encounter": enc, "live": live == map_id}
+            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id)}
 
 
 def player_view(conn, map_id, player):
@@ -152,7 +157,48 @@ def player_view(conn, map_id, player):
     public["terrain"] = terrain
     public["revealed"] = m["revealed"] if fog else ""
     public["image_url"] = f"/api/play/map-image/{map_id}?v={m['rev']}" if m["image"] else None
-    return {"map": public, "tokens": tokens}
+    public["shapes"] = [{k: v for k, v in s.items() if k != "hidden"} for s in m["shapes"] if not s.get("hidden")]
+    return {"map": public, "tokens": tokens, "pings": recent_pings(map_id)}
+
+
+# ---- pings: "look here!" ripples that everyone sees for a few seconds --------------
+# Kept in memory only: they're gone in seconds anyway.
+PING_SECONDS = 6
+
+
+def _ping_store():
+    return current_app.extensions.setdefault("map_pings", {})
+
+
+def recent_pings(map_id):
+    import time
+    now = time.time()
+    store = _ping_store()
+    keep = [p for p in store.get(map_id, []) if now - p["t"] < PING_SECONDS]
+    store[map_id] = keep
+    return [{"id": p["id"], "x": p["x"], "y": p["y"], "by": p["by"], "color": p["color"], "age": round(now - p["t"], 2)} for p in keep]
+
+
+def add_ping(map_id, x, y, by, color):
+    import time
+    store = _ping_store()
+    pings = [p for p in store.get(map_id, []) if time.time() - p["t"] < PING_SECONDS]
+    mine = [p for p in pings if p["by"] == by]
+    if len(mine) >= 3:  # no spamming: three at a time each
+        pings.remove(mine[0])
+    pings.append({"id": uuid.uuid4().hex[:10], "x": round(float(x), 2), "y": round(float(y), 2), "by": str(by)[:40],
+                  "color": color, "t": time.time()})
+    store[map_id] = pings[-30:]
+
+
+def _ping_xy(data, m):
+    try:
+        x, y = float(data.get("x")), float(data.get("y"))
+    except (TypeError, ValueError):
+        raise F.ApiError("Ping needs x and y")
+    if not (0 <= x <= m["cols"] and 0 <= y <= m["rows"]):
+        raise F.ApiError("That's off the map")
+    return x, y
 
 
 def fog_image(m, upload_dir, cache_dir):
@@ -202,9 +248,38 @@ def api_list(cid):
                     "live_map_id": live["live_map_id"] if live else None})
 
 
+@bp.get("/map-presets")
+def api_presets():
+    from .map_presets import listing
+    return jsonify({"presets": listing()})
+
+
+def create_map_from_preset(conn, cid, key, name=None, encounter_id=None):
+    from .map_presets import build
+    p = build(key)
+    if p is None:
+        raise F.ApiError("Unknown map preset")
+    ts = now_iso()
+    values = {"name": (name or p["name"])[:200], "cols": p["cols"], "rows": p["rows"], "bg_color": p["bg_color"],
+              "encounter_id": encounter_id}
+    mid = F.insert(conn, "maps", F.MAP, values, {"uid": new_uid(), "campaign_id": cid,
+                                                 "revealed": "0" * (p["cols"] * p["rows"]), "created_at": ts, "updated_at": ts})
+    conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (json.dumps(p["terrain"]), mid))
+    return mid
+
+
 @bp.post("/campaigns/<int:cid>/maps")
 def api_create(cid):
     data = dict(request.get_json(silent=True) or {})
+    if data.get("preset"):
+        conn = get_db()
+        if conn.execute("SELECT 1 FROM campaigns WHERE id = ?", (cid,)).fetchone() is None:
+            raise F.NotFound("Campaign not found")
+        _check_encounter(conn, cid, data.get("encounter_id"))
+        with tx() as conn:
+            mid = create_map_from_preset(conn, cid, str(data["preset"]), name=str(data.get("name") or "").strip() or None,
+                                         encounter_id=data.get("encounter_id"))
+        return jsonify(dm_state(mid)), 201
     values = F.validate_new(F.MAP, {k: v for k, v in data.items() if k in F.MAP})
     if not values.get("name", "").strip():
         raise F.ApiError("Name the map")
@@ -243,7 +318,8 @@ def api_rev(map_id):
     if m["encounter_id"]:
         e = conn.execute("SELECT rev FROM encounters WHERE id = ?", (m["encounter_id"],)).fetchone()
         enc_rev = e["rev"] if e else None
-    return jsonify({"rev": m["rev"], "encounter_rev": enc_rev})
+    pings = recent_pings(map_id)
+    return jsonify({"rev": m["rev"], "encounter_rev": enc_rev, "ping": pings[-1]["id"] if pings else None})
 
 
 @bp.patch("/maps/<int:map_id>")
@@ -414,11 +490,24 @@ def place_encounter_tokens(conn, map_id):
     side_of = lambda cb: "right" if cb["kind"] == "enemy" else "left"
     # Leave a blank row between tokens when the map is tall enough, so name labels don't overlap.
     step = {s: 2 if 2 * sum(side_of(cb) == s for cb in todo) - 1 <= m["rows"] else 1 for s in ("left", "right")}
+    taken = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (map_id,))}
+    open_ = lambda x, y: m["terrain"].get(f"{x},{y}") not in BLOCKING and (x, y) not in taken
+
+    def spot(side, y):
+        # Nearest open square to that edge on this row (then the rows around it).
+        cols = range(m["cols"] - 1, -1, -1) if side == "right" else range(m["cols"])
+        for dy in (0, 1, -1, 2, -2):
+            yy = y + dy
+            if 0 <= yy < m["rows"]:
+                for x in list(cols)[: max(1, m["cols"] // 2)]:
+                    if open_(x, yy):
+                        return x, yy
+        return (max(0, m["cols"] - 1) if side == "right" else 0), y
     ts, added, row = now_iso(), 0, {"left": 0, "right": 0}
     for cb in todo:
         side = side_of(cb)
-        x = max(0, m["cols"] - 1) if side == "right" else 0
-        y = min(m["rows"] - 1, row[side])
+        x, y = spot(side, min(m["rows"] - 1, row[side]))
+        taken.add((x, y))
         row[side] += step[side]
         conn.execute(
             "INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
@@ -457,6 +546,106 @@ def api_encounter_map(enc_id):
             map_id = row["id"]
         placed = place_encounter_tokens(conn, map_id)
     return jsonify({"map_id": map_id, "created": created, "placed": placed})
+
+
+# ---- spell areas -----------------------------------------------------------------
+
+def _shape(data, m, base=None):
+    s = dict(base or {})
+    if "kind" in data or base is None:
+        kind = data.get("kind")
+        if kind not in SHAPE_KINDS:
+            raise F.ApiError("Area must be a circle, cone, line or square")
+        s["kind"] = kind
+    for key, lo, hi in (("x", -1, m["cols"] + 1), ("y", -1, m["rows"] + 1)):
+        if key in data or base is None:
+            try:
+                v = float(data.get(key))
+            except (TypeError, ValueError):
+                raise F.ApiError(f"Area needs {key}")
+            s[key] = round(max(lo, min(hi, v)), 2)
+    if "size" in data or base is None:
+        try:
+            s["size"] = max(5, min(1000, int(data.get("size", 20))))
+        except (TypeError, ValueError):
+            raise F.ApiError("Size is in feet, like 20")
+    if "width" in data or base is None:
+        try:
+            s["width"] = max(5, min(200, int(data.get("width") or 5)))
+        except (TypeError, ValueError):
+            raise F.ApiError("Width is in feet, like 5")
+    if "dir" in data or base is None:
+        try:
+            s["dir"] = round(float(data.get("dir") or 0) % 360, 1)
+        except (TypeError, ValueError):
+            raise F.ApiError("Direction must be a number of degrees")
+    if "color" in data or base is None:
+        c = str(data.get("color") or "#e0714f")
+        s["color"] = c if len(c) == 7 and c.startswith("#") else "#e0714f"
+    if "label" in data or base is None:
+        s["label"] = str(data.get("label") or "").strip()[:40]
+    if "hidden" in data or base is None:
+        s["hidden"] = bool(data.get("hidden"))
+    return s
+
+
+@bp.post("/maps/<int:map_id>/shapes")
+def api_add_shape(map_id):
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        m = map_dict(_map_row(conn, map_id))
+        if len(m["shapes"]) >= 50:
+            raise F.ApiError("That's a lot of areas — clear some first")
+        s = _shape(data, m)
+        s["id"] = uuid.uuid4().hex[:10]
+        conn.execute("UPDATE maps SET shapes = ? WHERE id = ?", (json.dumps(m["shapes"] + [s]), map_id))
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id) | {"shape_id": s["id"]}), 201
+
+
+@bp.patch("/maps/<int:map_id>/shapes/<shape_id>")
+def api_patch_shape(map_id, shape_id):
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        m = map_dict(_map_row(conn, map_id))
+        shapes = m["shapes"]
+        for i, s in enumerate(shapes):
+            if s.get("id") == shape_id:
+                shapes[i] = _shape(data, m, base=s)
+                break
+        else:
+            raise F.NotFound("That area is gone")
+        conn.execute("UPDATE maps SET shapes = ? WHERE id = ?", (json.dumps(shapes), map_id))
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id))
+
+
+@bp.delete("/maps/<int:map_id>/shapes/<shape_id>")
+def api_delete_shape(map_id, shape_id):
+    with tx() as conn:
+        m = map_dict(_map_row(conn, map_id))
+        shapes = [s for s in m["shapes"] if s.get("id") != shape_id]
+        conn.execute("UPDATE maps SET shapes = ? WHERE id = ?", (json.dumps(shapes), map_id))
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id))
+
+
+@bp.delete("/maps/<int:map_id>/shapes")
+def api_clear_shapes(map_id):
+    with tx() as conn:
+        _map_row(conn, map_id)
+        conn.execute("UPDATE maps SET shapes = '[]' WHERE id = ?", (map_id,))
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id))
+
+
+@bp.post("/maps/<int:map_id>/ping")
+def api_ping(map_id):
+    data = request.get_json(silent=True) or {}
+    m = map_dict(_map_row(get_db(), map_id))
+    x, y = _ping_xy(data, m)
+    add_ping(map_id, x, y, "DM", "#f3d58a")
+    return jsonify({"pings": recent_pings(map_id)})
 
 
 def _token_map(conn, token_id):

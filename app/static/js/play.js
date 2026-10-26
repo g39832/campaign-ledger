@@ -23,12 +23,33 @@
     imageUrl: (m) => m.image_url,
     canMove: (t) => t.movable,
     onSelect: () => {},
+    onPing: async (x, y) => {
+      try { const d = await api("POST", "/api/play/ping", { x, y }); view.setPings(d.pings); if (window.FX) FX.sound("ping"); }
+      catch (e) { toast(e.message, "error"); }
+    },
     onMove: async (t, x, y) => {
       try { await api("POST", "/api/play/tokens/" + t.id + "/move", { x, y }); }
       catch (e) { toast(e.message, "error"); }
       load(true);
     },
   });
+  // tools: move, measure, ping
+  const PHINT = { select: null, measure: "Drag to measure. Diagonals count as one square.", ping: "Tap a spot to ping it. Everyone sees it for a few seconds." };
+  function setPTool(t) {
+    view.tool = t;
+    document.querySelectorAll("[data-ptool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.ptool === t); b.setAttribute("aria-pressed", b.dataset.ptool === t); });
+    if (PHINT[t]) $("#hint").textContent = PHINT[t]; else if (S) render();
+  }
+  document.querySelectorAll("[data-ptool]").forEach((b) => b.addEventListener("click", () => setPTool(b.dataset.ptool)));
+  setPTool("select");
+  // sounds on/off for this device
+  function soundIcon() {
+    const on = !window.FX || FX.prefs.sounds;
+    $("#sound-toggle-p").replaceChildren(icon(on ? "zap" : "x", "sm"));
+    $("#sound-toggle-p").title = on ? "Sounds on — click to mute" : "Sounds off — click to turn on";
+  }
+  $("#sound-toggle-p").addEventListener("click", () => { if (window.FX) FX.set("sounds", !FX.prefs.sounds); soundIcon(); });
+  soundIcon();
   $("#zoom-in").addEventListener("click", () => view.zoom(1.25));
   $("#zoom-out").addEventListener("click", () => view.zoom(0.8));
   $("#zoom-fit").addEventListener("click", () => view.fit());
@@ -99,7 +120,7 @@
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
       if (ms !== mapStamp && !view.drag) { mapStamp = ms; view.setData(m, S.mapTokens); }
       const mine = S.mapTokens.find((t) => t.own);
-      $("#hint").textContent = mine ? (mine.movable ? "Drag your token to move. Scroll or pinch to zoom." : "The DM has locked movement.") : "Scroll or pinch to zoom, drag to look around.";
+      if (view.tool === "select") $("#hint").textContent = (mine ? (mine.movable ? "Drag your token to move. " : "The DM has locked movement. ") : "Drag to look around. ") + "Double-tap to ping.";
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
@@ -159,14 +180,40 @@
     try {
       const d = await api("GET", "/api/play/state");
       d.mapTokens = [];
-      if (d.map) { const { map, tokens } = d.map; d.map = map; d.mapTokens = tokens; }
+      let pings = [];
+      if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; d.map = map; d.mapTokens = tokens; }
+      // pings first: they change every poll, so they're kept out of the "did anything change" check
+      const fresh = pings.filter((p) => !view.seenPings.has(p.id) && p.by !== (S && S.me ? S.me.name : ""));
+      view.setPings(pings);
+      if (fresh.length && window.FX) FX.sound("ping");
       const s = JSON.stringify(d);
       setStatus(true);
       if (s === stamp) return;
+      const before = S;
       stamp = s; S = d; render();
+      celebrate(before, d);
     } catch (e) {
       setStatus(false, e);
       if (e.status === 401) location.href = "/join";
+    }
+  }
+  // effects when your HP changes or the turn comes round
+  function celebrate(before, now) {
+    if (!before || !window.FX) return;
+    const a = before.character, b = now.character;
+    if (a && b && a.id === b.id && a.current_hp !== b.current_hp) {
+      const diff = b.current_hp - a.current_hp, box = $("#me");
+      FX.float(box, (diff > 0 ? "+" : "−") + Math.abs(diff), diff > 0 ? "heal" : "dmg");
+      FX.flash(box, diff > 0 ? "heal" : "hit");
+      FX.sound(diff > 0 ? "heal" : "hit");
+      if (b.current_hp === 0 && a.current_hp > 0) { FX.banner("You're down!", "Make death saves on your turn", "down"); FX.sound("down"); }
+    }
+    if (a && b && (b.ac || 0) > (a.ac || 0)) { FX.float($("#me"), "+" + (b.ac - a.ac) + " AC", "ac"); FX.sound("ac"); }
+    const ea = before.encounter, eb = now.encounter;
+    if (eb && eb.current && (!ea || ea.current !== eb.current || ea.round !== eb.round)) {
+      const mine = b && eb.order.some((o) => o.is_current && o.name === b.name);
+      if (mine) { FX.banner("Your turn!", "Round " + eb.round, "crit"); FX.sound("yourturn"); FX.flash($("#me"), "turn"); }
+      else { FX.banner(eb.current + "'s turn", "Round " + eb.round, "info"); FX.sound("turn"); }
     }
   }
   function setStatus(ok, err) {

@@ -13,6 +13,18 @@
   <button class="btn btn-primary" type="submit">{{ icon("swords", "sm") }} Create &amp; open</button>
 </form>
 
+<section class="section">
+  <h2 class="rule-head">Quick encounters <span class="count">party + Monster Book enemies + a ready-made map, in one click</span></h2>
+  <div class="preset-grid">
+    {% for p in encounter_presets %}
+    <button type="button" class="preset-card" data-enc-preset="{{ p.key }}">
+      <b>{{ p.name }}</b><span class="faint">{{ p.description }}</span>
+      <span class="preset-mons">{% for m in p.monsters %}<span class="tag">{{ m.count }} × {{ m.name }}</span>{% endfor %}</span>
+    </button>
+    {% endfor %}
+  </div>
+</section>
+
 {% for status, title in [("active", "Running"), ("planning", "Prepared"), ("ended", "Finished")] %}
   {% set group = encounters | selectattr("status", "equalto", status) | list %}
   {% if group or status == "active" %}
@@ -42,6 +54,12 @@
 <script type="application/json" id="boot-party">{{ characters_pc | default([]) | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script>
+L.$$("[data-enc-preset]").forEach((b) => b.addEventListener("click", () => {
+  if (!b.classList.contains("is-armed")) { L.$$("[data-enc-preset]").forEach((x) => x.classList.remove("is-armed")); b.classList.add("is-armed"); L.toast("Click again to set up “" + b.querySelector("b").textContent + "” with the party.", null); return; }
+  L.act("POST", "/api/campaigns/{{ campaign.id }}/encounter-presets/" + b.dataset.encPreset, { party: true }, (d) => { location.href = "/combat/" + d.encounter_id; });
+}));
+</script>
 <script>
 (() => {
   L.$$("[data-time]").forEach((el) => { const v = el.dataset.time; if (v) el.textContent = L.fmtDate(v) + ", " + L.fmtTime(v); });

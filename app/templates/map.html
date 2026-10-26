@@ -17,6 +17,8 @@
       <button type="button" data-tool="select" title="Select and move tokens (drag empty space to pan)">{{ icon("play", "sm") }}<span>Move</span></button>
       <button type="button" data-tool="pan" title="Pan">{{ icon("compass", "sm") }}<span>Pan</span></button>
       <button type="button" data-tool="measure" title="Measure distance">{{ icon("arrow-up-down", "sm") }}<span>Measure</span></button>
+      <button type="button" data-tool="ping" title="Ping: show everyone a spot (or double-click anywhere)">{{ icon("map-pin", "sm") }}<span>Ping</span></button>
+      <button type="button" data-tool="area" title="Spell areas: circles, cones, lines and cubes">{{ icon("zap", "sm") }}<span>Area</span></button>
       <span class="sep"></span>
       <button type="button" data-tool="reveal" title="Paint to reveal (fog of war)">{{ icon("sun", "sm") }}<span>Reveal</span></button>
       <button type="button" data-tool="conceal" title="Paint to hide (fog of war)">{{ icon("moon", "sm") }}<span>Hide</span></button>
@@ -43,6 +45,27 @@
         <button type="button" class="btn btn-sm" data-fog="reveal">Reveal all</button>
         <button type="button" class="btn btn-sm" data-fog="conceal">Hide all</button>
       </div>
+    </div>
+
+    <div class="panel" id="area-panel" hidden>
+      <h3 class="rule-head">Spell area</h3>
+      <div class="area-presets" id="area-presets"></div>
+      <div class="grid2" style="margin-top:8px">
+        <label class="field"><span>Shape</span><select id="area-kind">
+          <option value="circle">Circle / sphere</option><option value="cone">Cone</option><option value="line">Line</option><option value="square">Cube / square</option></select></label>
+        <label class="field"><span>Size (ft)</span><input type="number" id="area-size" min="5" max="1000" step="5" value="20"></label>
+        <label class="field" id="area-width-wrap" hidden><span>Line width (ft)</span><input type="number" id="area-width" min="5" max="200" step="5" value="5"></label>
+        <label class="field"><span>Label</span><input type="text" id="area-label" maxlength="40" placeholder="Fireball"></label>
+      </div>
+      <div class="area-colors" id="area-colors" role="group" aria-label="Colour"></div>
+      <label class="check" style="margin-top:6px"><input type="checkbox" id="area-hidden"> Hidden from players</label>
+      <p class="faint" style="font-size:.84rem;margin:6px 0 0">Click the map to place it. For cones and lines, press where it starts and drag to aim. Drag a placed area to move it.</p>
+    </div>
+
+    <div class="panel" id="areas-panel" hidden>
+      <h3 class="rule-head">Areas on the map <span class="count" id="areas-count"></span>
+        <button type="button" class="btn btn-sm btn-quiet" id="areas-clear">Clear all</button></h3>
+      <ul class="area-list" id="areas"></ul>
     </div>
 
     <div class="panel" id="selected-panel"></div>
@@ -99,6 +122,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=22"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=22"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=24"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=24"></script>
 {% endblock %}

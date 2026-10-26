@@ -5,8 +5,19 @@
 <div class="page-head">
   <div><h1>Battle maps</h1><div class="sub">Tactical maps for fights: upload a map image or draw one on a grid, place tokens, and reveal the battlefield to players as they explore.</div></div>
 </div>
+<section class="section">
+  <h2 class="rule-head">Start from a ready-made map <span class="count">walls, trees and water already painted</span></h2>
+  <div class="preset-grid" id="map-presets">
+    {% for p in map_presets %}
+    <button type="button" class="preset-card" data-preset="{{ p.key }}">
+      <canvas class="preset-thumb" width="150" height="100" data-thumb="{{ p.key }}" aria-hidden="true"></canvas>
+      <b>{{ p.name }}</b><span class="faint">{{ p.description }}</span><span class="faint num">{{ p.cols }} × {{ p.rows }} squares</span>
+    </button>
+    {% endfor %}
+  </div>
+</section>
 <form id="new-map" class="panel panel-pad row" style="margin-bottom:22px">
-  <label class="field" style="flex:2 1 220px"><span>New map</span><input type="text" name="name" maxlength="200" required placeholder="e.g. Goblin warrens, level 1"></label>
+  <label class="field" style="flex:2 1 220px"><span>New blank map</span><input type="text" name="name" maxlength="200" required placeholder="e.g. Goblin warrens, level 1"></label>
   <label class="field" style="flex:0 0 90px"><span>Columns</span><input type="number" name="cols" min="1" max="200" value="24"></label>
   <label class="field" style="flex:0 0 90px"><span>Rows</span><input type="number" name="rows" min="1" max="200" value="16"></label>
   <label class="field" style="flex:1 1 180px"><span>Encounter (optional)</span>
@@ -39,6 +50,7 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=24"></script>
 <script>
 // Deleting a map removes the map, its tokens, fog and terrain. Encounters, characters
 // and their HP are separate records and aren't touched.
@@ -47,6 +59,21 @@ L.$$("[data-delete-map]").forEach((b) => L.armed(b, () => L.act("DELETE", "/api/
   L.toast("Deleted the map “" + b.dataset.name + "”. Its encounter and characters are unchanged.", "ok");
   if (!document.querySelector("[data-delete-map]")) location.reload();
 }), "Delete “" + b.dataset.name + "”?"));
+// Ready-made maps: thumbnails drawn from the same terrain the map will have.
+const PRESET_TERRAIN = {{ preset_terrain | tojson }};
+L.$$("[data-thumb]").forEach((cv) => {
+  const p = PRESET_TERRAIN[cv.dataset.thumb], ctx = cv.getContext("2d");
+  const cs = Math.min(cv.width / p.cols, cv.height / p.rows);
+  ctx.fillStyle = p.bg_color; ctx.fillRect(0, 0, p.cols * cs, p.rows * cs);
+  for (const [k, kind] of Object.entries(p.terrain)) {
+    const [x, y] = k.split(",").map(Number), T = MapView.TERRAIN[kind];
+    if (T) { ctx.fillStyle = kind === "tree" ? "#3f5f2e" : T.fill; ctx.fillRect(x * cs, y * cs, Math.ceil(cs), Math.ceil(cs)); }
+  }
+});
+L.$$("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+  if (!b.classList.contains("is-armed")) { L.$$("[data-preset]").forEach((x) => x.classList.remove("is-armed")); b.classList.add("is-armed"); L.toast("Click again to make “" + b.querySelector("b").textContent + "”.", null); return; }
+  L.act("POST", "/api/campaigns/{{ campaign.id }}/maps", { preset: b.dataset.preset }, (d) => { location.href = "/map/" + d.map.id; });
+}));
 L.$("#new-map").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;

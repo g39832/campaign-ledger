@@ -39,10 +39,12 @@
   function apply(state) {
     const a = document.activeElement;
     const keep = a && a.dataset && a.dataset.keep ? { key: a.dataset.keep, start: a.selectionStart, end: a.selectionEnd, value: a.value } : null;
+    const before = S;
     S = state;
     if (selected && !byId(selected)) selected = null;
     if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
     renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
+    if (before !== state) celebrate(before, state);
     if (keep) {
       const el = document.querySelector('[data-keep="' + keep.key + '"]');
       if (el) { el.focus(); try { el.setSelectionRange(keep.start, keep.end); } catch (e) { /* number inputs */ } }
@@ -137,7 +139,7 @@
           run("PATCH", "/api/combatants/" + c.id, { changes: { init_roll: { from: c.init_roll, to: v === "" ? null : Number(v) } } });
         },
         onkeydown: (e) => { if (e.key === "Enter") e.target.blur(); } });
-      return h("li", { class: "combatant" + (isCur ? " is-current" : "") + (c.id === selected ? " is-selected" : "") + (OUT.has(c.status) ? " is-out" : ""),
+      return h("li", { class: "combatant" + (isCur ? " is-current" : "") + (c.id === selected ? " is-selected" : "") + (OUT.has(c.status) ? " is-out" : ""), "data-cid": c.id,
         "aria-current": isCur ? "true" : null,
         onclick: (e) => { if (!e.target.closest("input,button,a")) select(c.id); } },
         h("div", { class: "c-move" },
@@ -158,6 +160,33 @@
         h("div", { class: "c-ac" + (c.ac_bonus ? " has-bonus" : ""), title: c.ac_bonus ? c.ac_base + " " + signed(c.ac_bonus) + " from effects" : null },
           c.ac, h("small", null, c.ac_bonus ? "AC " + signed(c.ac_bonus) : "AC")));
     }));
+  }
+
+  // ---- effects: hits, heals, knock-outs and turn changes --------------------------------
+  function celebrate(before, now) {
+    if (!window.FX || !before || before.encounter.id !== now.encounter.id) return;
+    const was = new Map(before.combatants.map((c) => [c.id, c]));
+    let sound = null;
+    for (const c of now.combatants) {
+      const p = was.get(c.id);
+      if (!p) continue;
+      const row = document.querySelector('#init-list [data-cid="' + c.id + '"]');
+      const total = (x) => x.hp + (x.temp_hp || 0);
+      const diff = total(c) - total(p);
+      if (diff < 0) {
+        FX.float(row, "−" + Math.abs(diff), "dmg"); FX.flash(row, "hit"); sound = sound || "hit";
+        if (c.hp === 0 && p.hp > 0) { FX.float(row, OUT.has(c.status) || c.kind === "enemy" ? "Defeated!" : "Down!", "down"); FX.flash(row, "down"); sound = "down"; }
+      } else if (c.hp > p.hp) { FX.float(row, "+" + (c.hp - p.hp), "heal"); FX.flash(row, "heal"); FX.burst(row, "heal", 18); sound = sound || "heal"; }
+      if (c.ac > p.ac) { FX.float(row, "+" + (c.ac - p.ac) + " AC", "ac"); sound = sound || "ac"; }
+    }
+    const e0 = before.encounter, e1 = now.encounter;
+    if (e1.status === "active" && e0.status !== "active") { FX.banner("Roll for initiative!", e1.name, "crit"); sound = "start"; }
+    else if (e1.status === "ended" && e0.status === "active") { FX.banner("Combat over", e1.name, "info"); sound = "turn"; }
+    else if (e1.status === "active" && (e1.current_id !== e0.current_id || e1.round !== e0.round)) {
+      const cur = byId(e1.current_id);
+      if (cur) { FX.banner(cur.name + "'s turn", "Round " + e1.round, cur.kind === "enemy" ? "dmg" : "info"); sound = sound || "turn"; }
+    }
+    if (sound) FX.sound(sound);
   }
 
   // ---- detail panel ----------------------------------------------------------------

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 MIGRATIONS = {
     1: """
@@ -341,6 +341,10 @@ MIGRATIONS = {
     # Additive only (the per-character column from v3 is left as it was).
     4: """
     ALTER TABLE campaigns ADD COLUMN morality_score INTEGER NOT NULL DEFAULT 0;
+    """,
+    # v5: spell areas (circles, cones, lines, squares) drawn on a battle map.
+    5: """
+    ALTER TABLE maps ADD COLUMN shapes TEXT NOT NULL DEFAULT '[]';
     """,
 }
 

@@ -117,8 +117,12 @@ A damage roll never changes HP by itself. Its history entry gets an **Apply N to
   * **Pan**.
   * **Measure** is a ruler using the 5e rule that diagonals count as one square.
   * **Reveal / Hide** paint fog of war.
-  * **Terrain** paints walls, water, difficult ground, pits, doors and foliage.
+  * **Ping** shows everyone a spot with a ripple (double-click or double-tap works with any tool).
+  * **Area** places spell areas: circles, cones, lines and cubes. There are quick sizes for Fireball, Burning Hands, Lightning Bolt and more, plus damage-type colours. The squares an area covers light up, and the sidebar lists who's inside. Drag an area to move it, turn cones and lines, or hide one from players.
+  * **Terrain** paints walls, water, difficult ground, pits, doors, bushes, grass, sand, stone, wood, lava, ice, rubble, trees and furniture.
   * **Marker** drops a marker that starts hidden.
+* **Ready-made maps:** on the Battle maps page, start from a tavern, cave, forest road, dungeon, river crossing, arena, ship deck or crypt.
+* **Effects:** tokens show condition badges, floating damage and heal numbers, and a pulse on whoever's turn it is.
 * **Zoom:** scroll wheel, pinch, or the + / − / fit buttons.
 * **Grid:** square size, offset (to line up with an image), columns and rows, distance per square, colour and opacity, snapping, and background colour.
 * **Tokens:** "Add encounter" places a token for every combatant. You can also add characters one at a time. Each token has a label, type, size (Medium to Gargantuan), colour, "Hidden from players" and DM notes.
@@ -159,10 +163,11 @@ Players **can't**:
 * See any enemy's HP. Enemies only show as "bloodied" or "down".
 * Change anything else.
 
-**Friends who aren't on your Wi-Fi:**
+**Friends who aren't on your Wi-Fi (free):** click **Go online** on the Players page. It starts a free Cloudflare quick tunnel and shows a link to send, together with the join code. The first time, install cloudflared once with `winget install --id Cloudflare.cloudflared`. Tailscale is the private alternative. **[ONLINE.md](ONLINE.md)** has the full guide.
 
-* **Tailscale** (free, private) is the easiest. Everyone installs it and joins your Tailscale network, then friends use your Tailscale address (100.x.x.x) from the Players page.
-* **A tunnel** such as Cloudflare Tunnel gives a public https link. Visitors through a tunnel still need the join code and are never treated as the DM.
+**Quick encounters:** on the Combat page, one click sets up a fight: the party, Monster Book enemies and a matching ready-made map with everyone placed.
+
+**Effects & sounds:** hits, heals, knock-outs, turn banners and natural 20s / 1s get flashes, floating numbers and short sounds. The sounds are made by the browser, so there's nothing to download. Each device can turn effects and sounds on or off in **Settings → Effects & sounds**, and players have a sound button in their top bar.
 
 **Managing the table:**
 
