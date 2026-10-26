@@ -283,6 +283,15 @@
     ["attacked_adv", "Attacks against it have advantage"], ["attacked_dis", "Attacks against it have disadvantage"]];
   const ONGOING_PICK = [["damage", "damage"], ["heal", "healing"], ["temp", "temp HP"]];
   const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null, ac: null };
+  /* Spells fold up to one line (name, what it does, its roll buttons); click the arrow
+     or the summary to open one and edit it. Which ones are open is remembered on this
+     device. A spell that was just added opens by itself. */
+  const OPEN_KEY = "sheet-spells-open-" + char.id;
+  let openSpells = new Set();
+  try { openSpells = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); } catch (e) { /* private window */ }
+  const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openSpells])); } catch (e) { /* ignore */ } };
+  const setOpen = (i, on) => { on ? openSpells.add(i) : openSpells.delete(i); saveOpen(); };
+  const openNew = () => setOpen((model.spells || []).length - 1, true);
   function renderSpells() {
     const box = $("#spells");
     const list = model.spells || [];
@@ -315,11 +324,16 @@
       const what = L.spellWhat(v);
       const summary = what && does !== "damage" && does !== "heal" ? h("span", { class: "tag" + (Number(s.ac) > 0 ? " ac-tag" : "") }, what) : null;
       const del = h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove spell", title: "Remove",
-        onclick: () => { const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true); renderSpells(); } }, icon("trash-2", "sm"));
+        onclick: () => {
+          const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true);
+          openSpells = new Set([...openSpells].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); saveOpen();
+          renderSpells();
+        } }, icon("trash-2", "sm"));
       const back = s.from_attack ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Put it back in Attacks exactly as it was",
         onclick: () => {
           const l = clone(model.spells); const [row] = l.splice(i, 1);
           b.set("spells", l, true); b.set("attacks", (clone(model.attacks) || []).concat([row.from_attack]), true);
+          openSpells = new Set([...openSpells].filter((k) => k !== i).map((k) => (k > i ? k - 1 : k))); saveOpen();
           renderSpells(); renderAttacks(); toast(row.name + " is back in Attacks.", "ok");
         } }, icon("undo-2", "sm"), " Back to attacks") : null;
       const harmful = does === "damage" || does === "debuff";
@@ -348,12 +362,18 @@
           chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
           field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })),
           field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
-      return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
+      const open = openSpells.has(i);
+      const toggle = () => { setOpen(i, !open); renderSpells(); };
+      const brief = [L.levelWord(v), L.spellWhat(v) || (does ? "" : "notes"), s.notes ? String(s.notes).slice(0, 80) : ""].filter(Boolean).join(" · ");
+      return h("div", { class: "spell-card" + (does ? " does-" + does : "") + (open ? " is-open" : " is-folded") },
         h("div", { class: "spell-top" },
+          h("button", { type: "button", class: "icon-btn sm spell-fold", "aria-expanded": String(open), "aria-label": (open ? "Fold up " : "Open ") + (s.name || "spell"),
+            title: open ? "Fold it up" : "Open it to edit", onclick: toggle }, icon(open ? "chevron-down" : "chevron-right", "sm")),
           text(i, "name", { placeholder: "Spell name", "aria-label": "Spell name", class: "spell-name" }),
-          h("div", { class: "spell-rolls roll-row" }, rolls, save, summary, v.concentration ? h("span", { class: "tag" }, "Concentration") : null),
+          h("div", { class: "spell-rolls roll-row" }, rolls, save, open ? summary : null, v.concentration ? h("span", { class: "tag" }, "Concentration") : null),
           back, del),
-        h("div", { class: "spell-fields" },
+        open ? null : h("button", { type: "button", class: "spell-brief", onclick: toggle, title: "Open it to edit" }, brief || "Click to open"),
+        open ? h("div", { class: "spell-fields" },
           field("Does", pick(i, "effect", SPELL_DOES, null, does)),
           field("Level", pick(i, "level", [["0", "Cantrip"]].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), "Level " + n])), null, String(Number(s.level) || 0))),
           does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
@@ -365,13 +385,18 @@
           does && does !== "heal" || s.ongoing ? field("Rounds", num(i, "rounds", { min: 1, max: 100000, placeholder: "—", title: "How many rounds it lasts (1 minute = 10, 1 hour = 600)" })) : null,
           does ? chk(i, "concentration", "Concentration", !!v.concentration, "Casting another concentration spell ends it, and taking damage can break it") : null,
           more,
-          field("Time · range · notes", text(i, "notes", { placeholder: "1 action · 120 ft" }), "spell-notes")));
+          field("Time · range · notes", text(i, "notes", { placeholder: "1 action · 120 ft" }), "spell-notes")) : null);
     });
+    const allOpen = list.length && list.every((_, i) => openSpells.has(i));
     box.replaceChildren(
       list.length ? h("div", { class: "spell-list" }, cards) : h("p", { class: "faint", style: "margin:4px 0" }, "No spells yet."),
       h("div", { class: "row", style: "gap:6px;margin-top:6px" },
+        list.length > 1 ? h("button", { type: "button", class: "btn btn-sm btn-quiet", style: "margin:0", onclick: () => {
+          openSpells = allOpen ? new Set() : new Set(list.map((_, i) => i)); saveOpen(); renderSpells();
+        } }, icon(allOpen ? "chevron-right" : "chevron-down", "sm"), allOpen ? " Fold all" : " Open all") : null,
         h("button", { type: "button", class: "btn btn-sm btn-quiet add-row", style: "margin:0", onclick: () => {
           b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK)]), true);
+          openNew();
           renderSpells();
           const names = $$(".spell-name", box); if (names.length) names[names.length - 1].focus();
         } }, icon("plus", "sm"), " Add spell"),
@@ -410,6 +435,7 @@
     const s = attackToSpell(row);
     b.set("attacks", rows, true);
     b.set("spells", (clone(model.spells) || []).concat([s]), true);
+    openNew();
     renderAttacks(); renderSpells();
     toast(s.name + " moved to Spells" + (s.effect ? " as " + ({ damage: "a damage", heal: "a healing", buff: "a buff", debuff: "a debuff" })[s.effect] + " spell" : "") + ". Check what it does there.", "ok", { ms: 7000 });
   }
@@ -439,6 +465,7 @@
         ? h("span", { class: "book-done" }, icon("check", "sm"), " Added")
         : h("button", { type: "button", class: "btn btn-sm", onclick: () => {
           b.set("spells", (clone(model.spells) || []).concat([Object.assign({}, SPELL_BLANK, s)]), true);
+          openNew();
           renderSpells();
           toast(s.name + " added.", "ok");
         } }, icon("plus", "sm"), " Add"))) : [h("li", { class: "faint" }, "No spells match.")]));

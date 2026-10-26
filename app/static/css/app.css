@@ -1202,3 +1202,10 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .parry-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; padding: 8px 10px; border: 2px solid var(--brass); border-radius: var(--radius); background: var(--brass-soft); }
 .parry-box .grow { min-width: 160px; overflow-wrap: anywhere; }
 .c-parry { margin-left: 6px; min-height: 26px; padding: 2px 8px; }
+
+/* folded spell cards on the sheet: one line, click to open */
+.spell-card.is-folded { padding-bottom: 6px; }
+.spell-fold { flex: 0 0 auto; margin-left: -4px; }
+.spell-top .icon-btn.spell-fold { margin-left: -4px; }
+.spell-brief { display: block; width: 100%; margin: 2px 0 0; padding: 2px 0 2px 30px; border: 0; background: none; color: var(--text-3); font: inherit; font-size: .85rem; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.spell-brief:hover { color: var(--text); }
