@@ -298,6 +298,10 @@
     sections.push(h("div", { class: "detail-sec" },
       h("h3", { class: "rule-head" }, "Conditions & effects"),
       condItems.length ? h("div", { class: "cond-list" }, condItems) : h("p", { class: "faint", style: "margin:0" }, "None."),
+      c.conditions.some((x) => x.name === "Disengaged" && !x.expired) ? null : h("div", { class: "row", style: "margin:8px 0 4px" },
+        h("button", { type: "button", class: "btn btn-sm", title: "The Disengage action: they can move away without opportunity attacks until their turn ends",
+          onclick: () => run("POST", "/api/combatants/" + cid + "/conditions", { name: "Disengaged", rounds: 1, tick: "end", tick_on: cid, auto_expire: true, note: "No opportunity attacks while moving this turn" }) },
+          icon("compass", "sm"), " Disengage")),
       h("div", { class: "cond-quick", "aria-label": "Add a standard condition" },
         CONDITIONS.filter((n) => !c.conditions.some((x) => x.name === n)).map((n) => h("button", { type: "button", onclick: () => addCond(n, false) }, n))),
       h("details", { style: "margin-top:10px" }, h("summary", { class: "lbl", style: "cursor:pointer" }, "Add with duration or custom effect"),
@@ -361,6 +365,7 @@
   const amountOf = new Map();  // attacker id -> amount typed or rolled, so a re-render doesn't lose it
   const lastAttack = new Map(); // attacker id -> { label, total, natural }
   const modeOf = new Map();    // attacker id -> "damage" | "heal"
+  let casting = null;           // { by: caster id, spell, amount (healing), done: Set of target ids }
   const isFoe = (a, b) => (a.kind === "enemy") !== (b.kind === "enemy");
   const modeFor = (c) => modeOf.get(c.id) || "damage";
   function chosenTargets(attacker, mode) {
@@ -385,7 +390,36 @@
       hit: a.hit ? (e) => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }, e) : null, hitLabel: "Hit " + a.hit,
       dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }, e) : null, dmgLabel: "Dmg " + a.dmg }));
   }
+  function castSection(c) {
+    const s = casting.spell, healing = s.effect === "heal";
+    const people = S.combatants.filter((x) => x.id === c.id || !OUT.has(x.status))
+      .map((x) => ({ id: x.id, name: x.id === c.id ? x.name + " (self)" : x.name, ally: !isFoe(c, x), done: casting.done.has(x.id),
+        info: healing ? x.hp + "/" + x.max_hp + " HP" : "AC " + x.ac }));
+    const end = () => { casting = null; renderDetail(); };
+    const onPick = (p) => {
+      const target = byId(p.id), label = s.condition || s.name;
+      if (!target) return;
+      casting.done.add(p.id);
+      if (healing && casting.amount != null) {
+        run("POST", "/api/encounters/" + EID + "/damage", { targets: [p.id], amount: casting.amount, op: "heal", attacker_id: c.id },
+          () => toast(s.name + ": healed " + target.name + " for " + casting.amount + ".", "ok",
+            { action: { label: "Undo", run: () => run("POST", "/api/encounters/" + EID + "/undo", {}) } }));
+      }
+      if (s.condition || s.ac) {
+        run("POST", "/api/encounters/" + EID + "/conditions", { targets: [p.id], name: label, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition ? s.name : "" },
+          () => { if (!healing) toast(label + (s.ac ? " (" + signed(s.ac) + " AC)" : "") + " on " + target.name + ".", "ok"); });
+      }
+      renderDetail();
+    };
+    return h("div", { class: "detail-sec hit-box" + (healing ? " is-heal" : "") },
+      h("h3", { class: "rule-head" }, "Cast a spell", h("span", { class: "count" }, c.name + " casts")),
+      L.castPicker({ spell: s, amount: casting.amount, people, onPick, onDone: end }));
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; renderDetail(); } });
+
   function targetSection(c) {
+    if (casting && casting.by === c.id) return castSection(c);
+    if (casting) casting = null; // picked someone else: drop the half-cast spell
     const mode = modeFor(c), healing = mode === "heal";
     const set = chosenTargets(c, mode);
     const setMode = (m) => { if (m !== mode) { modeOf.set(c.id, m); renderDetail(); } };
@@ -431,16 +465,8 @@
 
     // Spells from the character sheet that do something.
     const sc = c.spellcasting;
-    const putOn = (s) => {
-      // A spell that raises AC helps someone: it goes on the people picked under Heal / buff.
-      const buff = s.ac > 0, who = buff ? chosenTargets(c, "heal") : set;
-      const label = s.condition || s.name;
-      if (buff && !healing) { modeOf.set(c.id, "heal"); renderDetail(); }
-      if (!who.size) { toast("Pick who gets " + label + (buff ? " (you can pick " + c.name + ")" : "") + ", then click it again.", "error"); return; }
-      const names = [...who].map((id) => byId(id).name).join(", ");
-      run("POST", "/api/encounters/" + EID + "/conditions", { targets: [...who], name: label, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition ? s.name : "" },
-        () => toast(label + (s.ac ? " (" + signed(s.ac) + " AC)" : "") + " on " + names + ".", "ok"));
-    };
+    // Click the spell, then click who it's on (see castSection).
+    const cast = (s, amount) => { casting = { by: c.id, spell: s, amount: amount ?? null, done: new Set() }; renderDetail(); };
     const spellRows = window.Dice && (c.spells || []).length ? h("div", { class: "hit-attacks hit-spells" },
       h("div", { class: "lbl" }, "Spells", sc ? h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" }, " · save DC " + sc.dc + " · attack " + signed(sc.attack)) : null),
       c.spells.map((s) => {
@@ -452,10 +478,11 @@
             Dice.roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack", encounter_id: EID }, e).then(after("hit")) }, "Attack" + (sc ? " " + signed(sc.attack) : "")) : null,
           s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => rollSpell(e, false).then(after("dmg")) }, "Dmg " + s.dice) : null,
           s.effect === "damage" && s.dice && s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => rollSpell(e, true).then(after("dmg")) }, "Crit") : null,
-          s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: (e) => rollSpell(e, false).then(after("heal")) }, icon("heart", "sm"), " Heal " + s.dice) : null,
+          s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", title: "Roll the healing, then tap who gets it",
+            onclick: (e) => rollSpell(e, false).then((r) => { if (r) cast(s, Math.max(0, r.total)); }) }, icon("heart", "sm"), " Cast · heal " + s.dice) : null,
           saveTag,
-          s.condition || s.ac ? h("button", { type: "button", class: "btn btn-sm" + (s.ac > 0 ? " btn-heal" : ""), title: "Put " + (s.condition || s.name) + " on everyone picked above", onclick: () => putOn(s) },
-            icon(s.ac > 0 ? "shield-plus" : "zap", "sm"), " " + (s.condition || s.name) + (s.ac ? " " + signed(s.ac) + " AC" : "") + (s.rounds ? " · " + s.rounds + " rds" : "")) : null);
+          (s.condition || s.ac) && s.effect !== "heal" ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(s) ? " btn-heal" : ""), title: "Then tap who it's on", onclick: () => cast(s) },
+            icon(L.spellHelps(s) ? "shield-plus" : "zap", "sm"), " Cast · " + L.spellWhat(s)) : null);
       })) : null;
 
     const la = lastAttack.get(c.id);
@@ -478,7 +505,7 @@
           icon(healing ? "heart" : "swords", "sm"), label),
         healing ? null : h("button", { type: "button", class: "btn", disabled: !set.size, title: "Half damage, rounded down — for targets that made their save (Shift+Enter)", onclick: () => deal(true) }, "Half (saved)")),
       h("div", { class: "faint", style: "font-size:.82rem;margin-top:6px" },
-        healing ? (set.size ? "Roll healing above or type it, then heal. HP won't go over max. AC spells go on whoever is picked here." : "Click who " + c.name + " is healing or helping.")
+        healing ? (set.size ? "Roll healing above or type it, then heal. HP won't go over max." : "Click who " + c.name + " is healing or helping.")
           : set.size ? "Roll damage above or type it, then deal it. Pick more than one target for area spells." : "Click who " + c.name + " is attacking."));
   }
   // Damage rolls in the dice history can be applied — but only when the DM clicks.

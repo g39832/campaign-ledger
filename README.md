@@ -144,6 +144,10 @@ Your friends join from their own device and see the shared map, the turn order, 
 * Spend or get back spell slots (tap the diamonds)
 * Mark death saves at 0 HP
 * Spend hit dice
+* **Cast healing and buff spells on the party:** tap **Cast** on a spell (Cure Wounds, Bless, Shield of Faith…), then tap who gets it, either in the list or their token on the map. Tap more people for spells that reach several. Healing is rolled by the server. Spells that work against people (Bane, Hold Person) stay with the DM.
+* **Disengage** in a fight: they're Disengaged until their turn ends and can drag their token away, even if you've locked token movement.
+
+**Casting on the combat screen** works the same way: click **Cast** on a spell, then click who it's on. Healing spells roll first and then ask who gets it. Help spells list your side first; spells like Bane list the other side first. **Disengage** is a quick button under Conditions.
 
 During a fight, their changes appear in your combat log with their name, and Undo HP works on them. You can turn each of these off in **Settings → What players can change**. The server enforces it, and they can never change max HP or anyone else's character.
 

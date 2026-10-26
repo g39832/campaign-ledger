@@ -821,28 +821,35 @@ def api_condition_targets(eid):
         rounds = _int(data, "rounds", 1, 1000) if data.get("rounds") not in (None, "") else None
         ac = _int(data, "ac", -10, 30) if data.get("ac") not in (None, "", 0) else 0
         caster = ctx.combatant(int(data["caster_id"])) if data.get("caster_id") is not None else None
-        added, skipped = [], []
-        for cid in dict.fromkeys(targets):
-            c = ctx.combatant(cid)
-            if any(x["name"].lower() == name.lower() and not x.get("expired") for x in c["conditions"]):
-                skipped.append(c["name"])
-                continue
-            tick_on = caster["id"] if caster else cid
-            cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": str(data.get("note", ""))[:500],
-                    "rounds_left": rounds, "tick": "start" if caster else "end", "tick_on": tick_on, "encounter_id": eid,
-                    "auto_expire": False, "expired": False, "applied_round": ctx.enc["round"]}
-            if ac:
-                cond["ac"] = ac
-            ctx.set_vitals(c, conditions=c["conditions"] + [cond])
-            added.append(c["name"])
-        if added:
-            rds = f" for {rounds} round{'s' if rounds != 1 else ''}" if rounds else ""
-            ctx.log("condition", ", ".join(added) + (" has " if len(added) == 1 else " have ") + name
-                    + (f" ({ac:+d} AC)" if ac else "") + rds
-                    + (f" ({caster['name']})" if caster else "") + (f" — {data['note']}" if data.get("note") else ""))
-        if skipped:
-            ctx.log("condition", ", ".join(skipped) + (" was" if len(skipped) == 1 else " were") + f" already {name}")
+        add_conditions(ctx, targets, name, rounds, ac, caster, str(data.get("note", ""))[:500])
     return mutate(eid, fn, data.get("op_id"))
+
+
+def add_conditions(ctx, targets, name, rounds=None, ac=0, caster=None, note="", auto_expire=False):
+    """Put one effect on several combatants. With a caster, the rounds count down
+    at the start of the caster's turn, like a spell's duration. Anyone who already
+    has it is skipped. Returns (added names, skipped names)."""
+    added, skipped = [], []
+    for cid in dict.fromkeys(targets):
+        c = ctx.combatant(cid)
+        if any(x["name"].lower() == name.lower() and not x.get("expired") for x in c["conditions"]):
+            skipped.append(c["name"])
+            continue
+        cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": note,
+                "rounds_left": rounds, "tick": "start" if caster else "end", "tick_on": caster["id"] if caster else cid,
+                "encounter_id": ctx.enc["id"], "auto_expire": auto_expire, "expired": False, "applied_round": ctx.enc["round"]}
+        if ac:
+            cond["ac"] = ac
+        ctx.set_vitals(c, conditions=c["conditions"] + [cond])
+        added.append(c["name"])
+    if added:
+        rds = f" for {rounds} round{'s' if rounds != 1 else ''}" if rounds else ""
+        ctx.log("condition", ", ".join(added) + (" has " if len(added) == 1 else " have ") + name
+                + (f" ({ac:+d} AC)" if ac else "") + rds
+                + (f" ({caster['name']})" if caster else "") + (f" — {note}" if note else ""))
+    if skipped:
+        ctx.log("condition", ", ".join(skipped) + (" was" if len(skipped) == 1 else " were") + f" already {name}")
+    return added, skipped
 
 
 @bp.post("/combatants/<int:cid>/conditions")

@@ -10,6 +10,7 @@
     ["nature", "Nature"], ["perception", "Perception"], ["performance", "Performance"], ["persuasion", "Persuasion"], ["religion", "Religion"],
     ["sleight_of_hand", "Sleight of Hand"], ["stealth", "Stealth"], ["survival", "Survival"]];
   let S = null, stamp = "", mapStamp = "";
+  let casting = null; // { spell, done: Set of character ids } while the player picks who a spell is for
 
   try { const t = localStorage.getItem("player-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
   $("#theme-toggle-p").addEventListener("click", () => {
@@ -21,8 +22,8 @@
   const view = new MapView($("#stage"), {
     role: "player",
     imageUrl: (m) => m.image_url,
-    canMove: (t) => t.movable,
-    onSelect: () => {},
+    canMove: (t) => t.movable && !casting,
+    onSelect: (t) => { if (casting && t && t.character_id) castOn(t.character_id); }, // tap a token to cast on them
     onPing: async (x, y) => {
       try { const d = await api("POST", "/api/play/ping", { x, y }); view.setPings(d.pings); if (window.FX) FX.sound("ping"); }
       catch (e) { toast(e.message, "error"); }
@@ -112,6 +113,53 @@
     return out;
   }
 
+  // ---- casting a healing or buff spell on someone in the party ------------------------------
+  const castable = (s) => (s.effect === "heal" && s.dice) || ((s.condition || s.ac > 0) && L.spellHelps(s));
+  function startCast(s) {
+    casting = { spell: s, done: new Set() };
+    render();
+    const box = $("#cast-box");
+    if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  let castBusy = false;
+  async function castOn(charId) {
+    if (!casting || castBusy || casting.done.has(charId)) return;
+    const who = S.party.find((p) => p.id === charId);
+    if (!who) { toast("You can only cast this on people in your party.", "error"); return; }
+    castBusy = true;
+    const s = casting.spell;
+    try {
+      const d = await api("POST", "/api/play/cast", { spell: s.index, targets: [charId], op_id: L.uid() });
+      if (casting) casting.done.add(charId);
+      if (d.roll && window.Dice) { Dice.addHistory([d.roll]); Dice.animate(d.roll); }
+      const healed = d.roll ? " healed for " + d.roll.total : "";
+      toast(s.name + ": " + who.name + healed + (d.added.length ? (healed ? ", " : " has ") + d.effect : d.effect && d.skipped.length ? " (already has " + d.effect + ")" : "") + ".", "ok");
+      if (window.FX) { FX.float($("#party"), s.effect === "heal" ? "+" + (d.roll ? d.roll.total : "") : "✦", s.effect === "heal" ? "heal" : "ac"); FX.sound(s.effect === "heal" ? "heal" : "ac"); }
+    } catch (e) { toast(e.message, "error"); }
+    castBusy = false;
+    load(true);
+  }
+  function castBox() {
+    const mine = S.character;
+    const people = S.party.map((p) => ({ id: p.id, ally: true, done: casting.done.has(p.id),
+      name: p.id === (mine && mine.id) ? p.name + " (you)" : p.name, info: p.current_hp + "/" + p.max_hp + " HP" }));
+    return h("div", { id: "cast-box" }, L.castPicker({ spell: casting.spell, people, busy: castBusy,
+      onPick: (p) => castOn(p.id), onDone: () => { casting = null; render(); } }),
+      S.map ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; render(); } });
+
+  async function disengage() {
+    const d = await me("disengage", {});
+    if (!d) return;
+    casting = null;
+    toast("Disengaged: drag your token away. No opportunity attacks until your turn ends.", "ok");
+    if (window.FX) { FX.float($("#me"), "Disengage", "ac"); FX.sound("ac"); }
+    setPTool("select");
+    const mine = S && S.mapTokens.find((t) => t.own);
+    if (mine) { view.selectedId = mine.id; view.draw(); }
+  }
+
   function render() {
     const a = document.activeElement, keep = a && a.dataset && a.dataset.keep;
     const m = S.map;
@@ -120,7 +168,9 @@
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
       if (ms !== mapStamp && !view.drag) { mapStamp = ms; view.setData(m, S.mapTokens); }
       const mine = S.mapTokens.find((t) => t.own);
-      if (view.tool === "select") $("#hint").textContent = (mine ? (mine.movable ? "Drag your token to move. " : "The DM has locked movement. ") : "Drag to look around. ") + "Double-tap to ping.";
+      if (casting) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it.";
+      else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
+      else if (view.tool === "select") $("#hint").textContent = (mine ? (mine.movable ? "Drag your token to move. " : "The DM has locked movement. ") : "Drag to look around. ") + "Double-tap to ping.";
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
@@ -150,6 +200,8 @@
         h("div", { class: "row", style: "margin-bottom:10px" },
           h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "initiative" }, ev) }, icon("dice-5", "sm"), " Initiative " + signed(d.initiative)),
           c.current_hp === 0 ? h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: (ev) => roll({ type: "death" }, ev) }, "Death save") : null,
+          c.in_fight ? h("button", { type: "button", class: "btn btn-sm" + (c.disengaged ? " is-armed" : ""), disabled: c.disengaged,
+            title: "Move away this turn without opportunity attacks", onclick: disengage }, icon("compass", "sm"), c.disengaged ? " Disengaged — move away" : " Disengage") : null,
           d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Spell attack " + signed(d.spell.attack)) : null),
         h("div", { class: "stats" }, ABIL.map(([k, label]) => h("button", { type: "button", class: "stat", title: "Roll a " + label + " check", onclick: (ev) => roll({ type: "ability", key: k }, ev) },
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
@@ -157,12 +209,18 @@
           h("b", { class: "grow" }, a.name || "Attack"),
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "attack", key: a.index }, ev) }, "Hit " + a.bonus) : null,
           a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) }, a.heal ? "Heal" : "Dmg") : null))] : null,
-        (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"), ...c.spells.map((s) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
+        (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
+          casting ? castBox() : null,
+          ...c.spells.map((s) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, s.name),
           s.effect === "damage" && s.hit === "attack" && d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Attack " + signed(d.spell.attack)) : null,
-          (s.effect === "damage" || s.effect === "heal") && s.dice ? h("button", { type: "button", class: "btn btn-sm" + (s.effect === "heal" ? " btn-heal" : ""), onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, s.effect === "heal" ? "Heal" : "Dmg") : null,
+          s.effect === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
           s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
-          s.condition || s.ac ? h("span", { class: "tag" }, (s.condition || s.name) + (s.ac ? " " + signed(s.ac) + " AC" : "") + (s.rounds ? " · " + s.rounds + " rds" : "")) : null))] : null,
+          castable(s) && c.can.cast_spells !== false
+            ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.spell.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
+              onclick: () => startCast(s) }, icon(s.effect === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + L.spellWhat(s))
+            : s.effect === "heal" && s.dice ? h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Heal")
+            : s.condition || s.ac ? h("span", { class: "tag" }, L.spellWhat(s)) : null))] : null,
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
         h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),

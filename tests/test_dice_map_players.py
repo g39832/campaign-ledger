@@ -387,6 +387,30 @@ def test_player_token_moves_are_checked(api, battlemap):
     pa.post(f"/api/play/tokens/{aria['id']}/move", {"x": 4, "y": 4}, 403)
 
 
+def test_disengage_lets_a_player_move_away_until_their_turn_ends(api, battlemap):
+    mid, camp, pa, eid = battlemap["mid"], battlemap["camp"], battlemap["pa"], battlemap["eid"]
+    aria = tok(api.get(f"/api/maps/{mid}"), "Aria")
+    api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
+    api.patch(f"/api/maps/{mid}", {"changes": {"players_can_move": {"from": True, "to": False}}})
+    pa.post("/api/play/me/disengage", {}, 400)  # no fight running yet
+    api.post(f"/api/encounters/{eid}/start")
+    me = pa.post("/api/play/me/disengage", {})["character"]
+    assert me["disengaged"] and me["in_fight"] and "Disengaged" in me["conditions"]
+    st = pa.get("/api/play/state")
+    assert next(t for t in st["map"]["tokens"] if t["own"])["movable"], "locked movement opens up while disengaged"
+    pa.post(f"/api/play/tokens/{aria['id']}/move", {"x": 5, "y": 5})
+    enc = api.get(f"/api/encounters/{eid}")
+    aria_cb = next(c for c in enc["combatants"] if c["name"] == "Aria")
+    # play on until Aria's turn has ended: Disengaged drops off by itself
+    for _ in range(len(enc["combatants"]) + 1):
+        was_aria = api.get(f"/api/encounters/{eid}")["encounter"]["current_id"] == aria_cb["id"]
+        api.post(f"/api/encounters/{eid}/next")
+        if was_aria:
+            break
+    assert not pa.get("/api/play/state")["character"]["disengaged"]
+    pa.post(f"/api/play/tokens/{aria['id']}/move", {"x": 6, "y": 6}, 403)
+
+
 def test_dice_do_not_modify_map(api, battlemap):
     before = api.get(f"/api/maps/{battlemap['mid']}")
     api.post("/api/rolls", {"expression": "8d6", "campaign_id": battlemap["camp"]["id"]}, 201)

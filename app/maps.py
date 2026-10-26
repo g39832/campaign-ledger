@@ -125,6 +125,11 @@ def dm_state(map_id):
             "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id)}
 
 
+def _disengaged(conn, char_id):
+    from .play import is_disengaged
+    return is_disengaged(conn, char_id)
+
+
 def player_view(conn, map_id, player):
     """Everything a player may see of a map — and nothing else."""
     m = map_dict(_map_row(conn, map_id))
@@ -141,10 +146,10 @@ def player_view(conn, map_id, player):
         is_party = t["kind"] in ("pc", "npc") and t["character_id"]
         out = {k: t[k] for k in ("id", "kind", "x", "y", "size", "color", "display", "is_current", "portrait")}
         out["status"] = t["status"] if t["status"] in ("dead", "defeated", "unconscious", "fled") else None
-        out["movable"] = own and bool(m["players_can_move"])
+        out["movable"] = own and (bool(m["players_can_move"]) or _disengaged(conn, t["character_id"]))
         out["own"] = own
         if is_party:
-            out.update(hp=t["hp"], max_hp=t["max_hp"], conditions=t["conditions"])
+            out.update(hp=t["hp"], max_hp=t["max_hp"], conditions=t["conditions"], character_id=t["character_id"])
         elif t["hp"] is not None and t["max_hp"]:
             out["health"] = "down" if t["hp"] <= 0 else ("bloodied" if t["hp"] * 2 <= t["max_hp"] else "")
         tokens.append(out)

@@ -14,7 +14,7 @@ from . import fields as F
 from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
-from .rules import ac_bonus, derived, is_healing, spell_info
+from .rules import ac_bonus, derived, is_healing, spell_helps, spell_info
 
 bp = Blueprint("play", __name__)
 
@@ -148,8 +148,12 @@ def _own_character(conn, char_id):
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a)}
                       for i, a in enumerate(c["attacks"] or [])]
-    out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or []) if spell_info(s)["effect"]]
+    out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
+                     if spell_info(s)["effect"] or spell_info(s)["ac"] or spell_info(s)["condition"]]
     out["derived"] = d
+    out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
+    out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
+                                   "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign
     from .rules import parse_hit_dice
     out["can"] = get_campaign(c["campaign_id"])["settings"]["players"]
@@ -226,7 +230,7 @@ def api_move(token_id):
         if (m["campaign_id"] != ident["campaign_id"] or camp["live_map_id"] != m["id"] or not owner
                 or owner != ident["character_id"] or t["hidden"]):
             raise F.ApiError("You can only move your own character's token", status=403)
-        if not m["players_can_move"]:
+        if not m["players_can_move"] and not is_disengaged(conn, owner):
             raise F.ApiError("The DM has locked token movement", status=403)
         md = map_dict(m)
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
@@ -347,6 +351,100 @@ def api_me_hit_die():
         roll_id = spend_hit_die(conn, ident, char_id, data.get("sides"), data.get("op_id"))
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
     return jsonify({"roll": roll_dict(row, ident), "character": _own_character(get_db(), char_id)})
+
+
+DISENGAGED = "Disengaged"
+
+
+def is_disengaged(conn, char_id):
+    """Took the Disengage action this turn: they may move away (even when the DM
+    has locked token movement) without provoking opportunity attacks."""
+    row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone() if char_id else None
+    return bool(row) and any(x.get("name") == DISENGAGED and not x.get("expired") for x in json.loads(row["conditions"] or "[]"))
+
+
+@bp.post("/api/play/me/disengage")
+def api_me_disengage():
+    """The Disengage action: Disengaged until the end of their own turn, then it
+    drops off by itself."""
+    from .combat import Ctx, add_conditions
+    from .rest import active_combatant
+    ident, char_id = _own(None)
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("Disengage is for fights, and there's no fight running")
+        ctx = Ctx(conn, cb["encounter_id"])
+        add_conditions(ctx, [cb["id"]], DISENGAGED, rounds=1, note="No opportunity attacks while moving this turn", auto_expire=True)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/cast")
+def api_me_cast():
+    """A player casts one of their healing or buff spells on people in the party
+    (themselves included). {spell: index on the sheet, targets: [character ids]}.
+    Healing is rolled here, once, and every target gets that much."""
+    from . import dice
+    from .rest import change_character_hp, put_effect
+    from .rolls import build_check, roll_dict, save_roll
+    ident, char_id = _own("cast_spells")
+    data = request.get_json(silent=True) or {}
+    targets = data.get("targets")
+    if not isinstance(targets, list) or not targets or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        raise F.ApiError("Pick who the spell is for")
+    targets = list(dict.fromkeys(targets))
+    op_id = str(data.get("op_id") or "")[:80] or None
+    conn = get_db()
+    if op_id:
+        old = conn.execute("SELECT * FROM rolls WHERE op_id = ?", (op_id,)).fetchone()
+        if old:
+            return jsonify({"roll": roll_dict(old, ident), "character": _own_character(conn, char_id), "repeat": True})
+    me = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
+    try:
+        index = int(data.get("spell"))
+        spell = spell_info((me.get("spells") or [])[index])
+    except (TypeError, ValueError, IndexError):
+        raise F.ApiError("That spell isn't on your sheet any more")
+    heals = spell["effect"] == "heal" and bool(spell["dice"])
+    effect = spell["condition"] or (spell["name"] if spell["ac"] > 0 else "")
+    if not spell_helps(spell):
+        effect = ""
+    if not heals and not effect:
+        raise F.ApiError(f"{spell['name']} doesn't heal or boost anyone. Ask the DM to apply it.")
+    marks = ",".join("?" * len(targets))
+    rows = conn.execute(f"SELECT id, name FROM characters WHERE id IN ({marks}) AND campaign_id = ? AND archived = 0 AND kind = 'pc'",
+                        (*targets, ident["campaign_id"])).fetchall()
+    if len(rows) != len(targets):
+        raise F.ApiError("You can only cast this on people in your party", status=403)
+    names = {r["id"]: r["name"] for r in rows}
+    who = ", ".join(names[t] for t in targets)
+    roll_id, got, skipped = None, [], []
+    with tx() as conn:
+        if heals:
+            expr, label, _kind, subject, ids = build_check(conn, {"type": "spell", "key": index, "character_id": char_id})
+            try:
+                result = dice.roll(expr)
+            except dice.DiceError as e:
+                raise F.ApiError(str(e))
+            amount = max(0, result["total"])
+            roll_id = save_roll(conn, ident, ident["campaign_id"], result, label=label, kind="heal", subject=subject, ids=ids,
+                                op_id=op_id, outcome=f"Heals {who} for {amount}")
+            for t in targets:
+                change_character_hp(conn, t, {"op": "heal", "amount": amount}, by=f"{spell['name']}, {me['name']}")
+        if effect:
+            for t in targets:
+                done = put_effect(conn, t, effect, spell["rounds"], spell["ac"], spell["name"] if spell["condition"] else "", char_id)
+                (got if done else skipped).append(names[t])
+    conn = get_db()
+    out = {"character": _own_character(conn, char_id), "spell": spell["name"], "effect": effect,
+           "targets": [names[t] for t in targets], "added": got, "skipped": skipped}
+    if roll_id:
+        out["roll"] = roll_dict(conn.execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone(), ident)
+    return jsonify(out)
 
 
 # ---- DM: managing who's at the table ---------------------------------------------------

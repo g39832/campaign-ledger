@@ -737,6 +737,28 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .target-chip.is-heal.is-on { background: var(--hp-high); border-color: var(--hp-high); color: #10140c; }
 .target-chip.is-heal.is-on .num { color: rgba(16, 20, 12, .8); }
 .hit-verdict .hits { color: var(--ok); font-weight: 700; }
+
+/* ---------- casting: tap the spell, then tap who ---------- */
+.cast-picker { border: 2px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; background: var(--surface, var(--bg)); margin: 6px 0 10px; }
+.cast-picker.is-heal, .cast-picker.is-help { border-color: var(--hp-high); }
+.cast-picker.is-harm { border-color: var(--danger); }
+.cast-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 1.02rem; }
+.cast-head .ico { align-self: center; }
+.cast-what { color: var(--text-2, var(--text)); font-size: .9rem; overflow-wrap: anywhere; }
+.cast-ask { margin: 6px 0 8px; font-weight: 700; }
+.cast-group + .cast-group { margin-top: 8px; }
+.cast-group .lbl { margin-bottom: 4px; }
+.cast-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cast-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line-strong, var(--line)); border-radius: 999px; background: var(--raised, transparent); color: var(--text); font: inherit; cursor: pointer; max-width: 100%; text-align: left; }
+.cast-chip b { overflow-wrap: anywhere; }
+.cast-chip .num { font-size: .8rem; color: var(--text-3); }
+.cast-chip:hover:not(:disabled) { border-color: var(--accent); }
+.cast-picker.is-heal .cast-chip.is-ally:hover:not(:disabled), .cast-picker.is-help .cast-chip.is-ally:hover:not(:disabled) { border-color: var(--hp-high); }
+.cast-chip.is-done { background: var(--hp-high); border-color: var(--hp-high); color: #10140c; cursor: default; }
+.cast-picker.is-harm .cast-chip.is-done { background: var(--danger); border-color: var(--danger); color: #fff; }
+.cast-chip.is-done .num { color: inherit; opacity: .8; }
+.cast-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.is-armed { outline: 2px solid var(--hp-high); outline-offset: 2px; }
 .hit-verdict .misses { color: var(--text-3); }
 
 /* ---------- notes: always easy to spot ---------- */

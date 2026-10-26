@@ -5,6 +5,8 @@ first, falling unconscious at 0, waking up when healed) are the same as in
 combat. When the character is in a running encounter, the change goes through
 that encounter instead, so it is logged there and the DM's Undo HP covers it.
 """
+import uuid
+
 from flask import Blueprint, jsonify, request
 
 from . import dice
@@ -51,6 +53,32 @@ def change_character_hp(conn, char_id, data, by=None):
         conn.execute(f"UPDATE characters SET {sets}, updated_at = ? WHERE id = ?",
                      [v[k] for k in VITALS] + [now_iso(), char_id])
         _touch_encounters(conn, char_id)
+
+
+def put_effect(conn, char_id, name, rounds=None, ac=0, note="", caster_char_id=None):
+    """Put an effect (Bless, Shield of Faith +2 AC...) on a character. Inside a
+    running encounter it goes through that encounter, so it is logged there and
+    counts down on the caster's turn. Returns False if they already have it."""
+    from .combat import add_conditions
+    cb = active_combatant(conn, char_id)
+    if cb:
+        ctx = Ctx(conn, cb["encounter_id"])
+        caster = conn.execute("SELECT id FROM combatants WHERE encounter_id = ? AND character_id = ?",
+                              (cb["encounter_id"], caster_char_id)).fetchone() if caster_char_id else None
+        added, _ = add_conditions(ctx, [cb["id"]], name, rounds, ac, ctx.combatant(caster["id"]) if caster else None, note)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+        return bool(added)
+    row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone()
+    conds = F.from_db(F.CHARACTER["conditions"], row["conditions"]) or []
+    if any(x.get("name", "").lower() == name.lower() and not x.get("expired") for x in conds):
+        return False
+    cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": note, "rounds_left": rounds, "expired": False}
+    if ac:
+        cond["ac"] = ac
+    conn.execute("UPDATE characters SET conditions = ?, updated_at = ? WHERE id = ?",
+                 (F.to_db(F.CHARACTER["conditions"], conds + [cond]), now_iso(), char_id))
+    _touch_encounters(conn, char_id)
+    return True
 
 
 def spend_hit_die(conn, viewer, char_id, sides=None, op_id=None):

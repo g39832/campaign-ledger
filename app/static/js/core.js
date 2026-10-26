@@ -75,6 +75,46 @@
   function isHealing(row) {
     return /\b(heal|heals|healing|cure|cures)\b/i.test([row && row.name, row && row.damage, row && row.notes].filter(Boolean).join(" "));
   }
+  // Does a spell help whoever it's cast on (heal, +AC, Bless...) or work against them (Hold Person)?
+  // Effect spells with no save are help; a few spells don't follow that.
+  const HELP_EXCEPTIONS = { sleep: false, sanctuary: true };
+  function spellHelps(s) {
+    const k = String(s.name || "").toLowerCase();
+    if (k in HELP_EXCEPTIONS) return HELP_EXCEPTIONS[k];
+    return s.effect === "heal" || s.ac > 0 || (s.effect === "effect" && !s.hit);
+  }
+  // What a spell does to the person it lands on, in a few words.
+  function spellWhat(s, amount) {
+    const bits = [];
+    if (s.effect === "heal") bits.push(amount != null ? "heals " + amount : "heals " + s.dice);
+    if (s.condition) bits.push(s.condition);
+    if (s.ac) bits.push(signed(s.ac) + " AC");
+    if (s.rounds && (s.condition || s.ac)) bits.push(s.rounds >= 100 ? Math.round(s.rounds / 10) + " min" : s.rounds + " rds");
+    return bits.join(" · ");
+  }
+  /* "Who gets it?" — tap the spell, then tap a person. Each tap casts on that one
+     person right away; tap more people for spells like Bless or Mass Healing Word.
+     people: [{ id, name, info, ally, done }]. */
+  function castPicker({ spell, amount, people, onPick, onDone, busy }) {
+    const helps = spellHelps(spell);
+    const chip = (p) => h("button", { type: "button", class: "cast-chip" + (p.done ? " is-done" : "") + (p.ally ? " is-ally" : " is-foe"),
+      disabled: p.done || busy, "aria-label": (p.done ? "Already cast on " : "Cast on ") + p.name, onclick: () => onPick(p) },
+      p.done ? icon("check", "sm") : null, h("b", null, p.name), p.info ? h("span", { class: "num" }, p.info) : null);
+    const groups = [["Your side", people.filter((p) => p.ally)], ["Other side", people.filter((p) => !p.ally)]];
+    if (!helps) groups.reverse();
+    const done = people.filter((p) => p.done).length;
+    return h("div", { class: "cast-picker" + (spell.effect === "heal" ? " is-heal" : helps ? " is-help" : " is-harm"), role: "group", "aria-label": "Pick who " + spell.name + " is cast on" },
+      h("div", { class: "cast-head" },
+        icon(spell.effect === "heal" ? "heart" : helps ? "shield-plus" : "zap", "sm"),
+        h("b", null, spell.name), h("span", { class: "cast-what" }, spellWhat(spell, amount))),
+      h("p", { class: "cast-ask" }, done ? "Cast on " + done + ". Tap anyone else it reaches, or Done." : "Who gets it? Tap them."),
+      groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
+        groups.filter(([, l]) => l.length).length > 1 ? h("div", { class: "lbl" }, label) : null,
+        h("div", { class: "cast-chips" }, list.map(chip)))),
+      people.length ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { type: "button", class: "btn btn-sm" + (done ? " btn-primary" : ""), onclick: onDone }, done ? "Done" : "Cancel")));
+  }
   function icon(name, cls) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
@@ -444,5 +484,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

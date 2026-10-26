@@ -64,6 +64,7 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "edit_hp": True,      # players may apply damage/healing/temp HP to their own character
         "spend_slots": True,  # players may spend and regain their own spell slots
         "hit_dice": True,     # players may spend hit dice (short rest healing)
+        "cast_spells": True,  # players may cast their healing and buff spells on the party
     },
 }
 
@@ -475,6 +476,19 @@ def spell_info(spell):
             "effect": effect, "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
             "condition": str(spell.get("condition") or "").strip()[:60],
             "rounds": rounds if rounds and 0 < rounds <= 1000 else None}
+
+
+HELP_EXCEPTIONS = {"sleep": False, "sanctuary": True}
+
+
+def spell_helps(sp):
+    """Does a spell help whoever it lands on (healing, +AC, Bless) rather than work
+    against them (Bane, Hold Person)? Effect spells with no save are help; a few
+    spells don't follow that. Same rule as L.spellHelps in core.js."""
+    key = sp["name"].lower()
+    if key in HELP_EXCEPTIONS:
+        return HELP_EXCEPTIONS[key]
+    return sp["effect"] == "heal" or sp["ac"] > 0 or (sp["effect"] == "effect" and not sp["hit"])
 
 
 def spell_expression(dice_text, spell_mod):
