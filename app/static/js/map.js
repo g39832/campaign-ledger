@@ -343,9 +343,10 @@
   function actionsFor(c) {
     const out = [], rule = toHitRule();
     if (c.linked) {
-      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit && a.extra_moves ? out.push({ name: a.name, instant: true, noUse: true, icon: "zap",
-        cooldown: a.cooldown || 0, cdName: a.name, info: "+" + a.extra_moves + " extra moves this turn",
-        run: () => act("POST", "/api/combatants/" + c.id + "/surge", { index: i }, () => { enc = null; say(c.id, c.name + " uses " + a.name + ": " + a.extra_moves + " extra moves this turn.", "hit"); refresh(true); },
+      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit && (a.extra_moves || a.stance > 1) ? out.push({ name: a.name, instant: true, noUse: true, icon: "zap",
+        cooldown: a.cooldown || 0, cdName: a.name,
+        info: [a.extra_moves ? "+" + a.extra_moves + " extra moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") : ""].filter(Boolean).join(", ") + " this turn",
+        run: () => act("POST", "/api/combatants/" + c.id + "/surge", { index: i }, () => { enc = null; say(c.id, c.name + " uses " + a.name + ".", "hit"); refresh(true); },
           { onError: (e) => toast(e.message, "error") }) })
         : !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
@@ -673,7 +674,7 @@
       h("div", { class: "fight-hp" }, h("span", { class: "hpbar", "data-level": pct <= 25 ? "low" : pct <= 50 ? "mid" : "high" }, h("span", { class: "hpbar-fill", style: "width:" + pct + "%" })),
         h("span", { class: "num" }, c.hp + " / " + c.max_hp + " HP" + (c.temp_hp ? " +" + c.temp_hp + " temp" : ""))),
       (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")
-        + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left" : "")))) : null,
+        + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left" : "") + (x.dmg_mult > 1 ? " · damage ×" + x.dmg_mult : "")))) : null,
       castBox, aiming, res,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),

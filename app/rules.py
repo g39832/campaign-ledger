@@ -639,6 +639,17 @@ def roll_mods(conditions, key="roll_mod"):
     return out
 
 
+def effect_mult(conditions):
+    """Damage multiplier from effects on the attacker (Reckless: 2). 1 = normal."""
+    m = 1
+    for x in active_effects(conditions):
+        try:
+            m *= max(1, int(x.get("dmg_mult") or 1))
+        except (TypeError, ValueError):
+            pass
+    return m
+
+
 def with_mods(expr, mods):
     return expr + "".join(m for m, _ in mods)
 

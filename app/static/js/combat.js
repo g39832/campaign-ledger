@@ -159,7 +159,7 @@
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
             c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
-            x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left"
+            x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.dmg_mult > 1 && !x.expired ? " · damage ×" + x.dmg_mult : "") + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left"
               : x.rounds_left != null ? " · " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
           (c.notes || "").trim() ? h("div", { class: "c-note", title: c.notes }, icon("scroll-text", "sm"), h("span", null, c.notes.trim())) : null),
         h("div", { class: "c-hp" },
@@ -409,7 +409,7 @@
       // no dice: "+2 ac to target" is cast like a buff; anything else is just shown
       ? { name: a.name, note: a.ac || a.extra_moves ? "" : a.notes, cooldown: a.cooldown || 0,
         // Action Surge: extra moves for the rest of this turn
-        surge: a.extra_moves ? () => run("POST", "/api/combatants/" + c.id + "/surge", { index: i }) : null, surgeN: a.extra_moves || 0,
+        surge: a.extra_moves || a.stance > 1 ? () => run("POST", "/api/combatants/" + c.id + "/surge", { index: i }) : null, surgeN: a.extra_moves || 0, stance: a.stance || 1,
         effect: a.ac ? { name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, rounds: null, hit: "", cooldown: a.cooldown || 0 } : null }
       : ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: a.has_hit,
       // leaves a condition on a hit (Grapple): one button rolls the hit, the damage and puts it on
@@ -521,8 +521,8 @@
         if (r && r.result && r.result.natural === 20 && a.dmg && !a.heal) a.dmg(null, true).then(after("dmg"));
       }) }, a.hitLabel) : null,
       a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
-      a.surge ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "Use it on their turn: " + a.surgeN + " extra moves until the turn ends", onclick: a.surge },
-        icon("zap", "sm"), " Use · +" + a.surgeN + " moves") : null,
+      a.surge ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On themselves, for the rest of their turn", onclick: a.surge },
+        icon("zap", "sm"), " Use · " + [a.surgeN ? "+" + a.surgeN + " moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : ""].filter(Boolean).join(", ")) : null,
       a.effect ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(a.effect) ? " btn-heal" : a.effectFirst ? " btn-dmg" : ""),
         title: a.effectFirst ? "Rolls to hit against their AC; on a hit it deals the damage" + (a.effect.dmg_mult > 1 ? " ×" + a.effect.dmg_mult : "") + (a.effect.condition ? " and they're " + a.effect.condition : "") : "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
         icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), a.effectFirst ? " Use · " + [a.effect.condition, a.effect.dmg_mult > 1 ? (a.effect.dmg_mult == 2 ? "double damage" : "×" + a.effect.dmg_mult + " damage") : ""].filter(Boolean).join(", ")

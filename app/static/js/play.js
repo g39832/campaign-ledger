@@ -238,8 +238,13 @@
           : h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
           h("b", { class: "grow" }, a.name || "Attack"),
           a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
-          a.extra_moves ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: a.extra_moves + " extra moves for the rest of your turn",
-            onclick: () => me("surge", { index: a.index }).then((d) => { if (d) { toast(a.name + ": " + a.extra_moves + " extra moves this turn!", "ok"); if (window.FX) { FX.banner(a.name + "!", a.extra_moves + " extra moves", "crit"); FX.sound("crit"); } } }) },
+          a.extra_moves || a.stance > 1 ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On yourself, for the rest of your turn",
+            onclick: () => me("surge", { index: a.index }).then((d) => {
+              if (!d) return;
+              const what = [a.extra_moves ? a.extra_moves + " extra moves" : "", a.stance > 1 ? "damage ×" + a.stance : ""].filter(Boolean).join(" and ");
+              toast(a.name + ": " + what + " this turn!", "ok");
+              if (window.FX) { FX.banner(a.name + "!", what, "crit"); FX.sound("crit"); }
+            }) },
             icon("zap", "sm"), " " + (a.name || "Action Surge")) : null,
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: attackThen({ type: "attack", key: a.index }, a.damage && !a.heal ? { type: "damage", key: a.index } : null) }, "Hit " + a.bonus) : null,
           a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) },

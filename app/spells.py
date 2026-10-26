@@ -29,7 +29,7 @@ from . import fields as F
 from . import spell_book
 from .auth import current_identity
 from .db import claim_op, get_db, now_iso, tx
-from .rules import (ABILITIES, ABILITY_NAMES, ability_mod, active_effects, attack_mode, damage_multiplier, derived,
+from .rules import (ABILITIES, ABILITY_NAMES, ability_mod, active_effects, attack_mode, damage_multiplier, derived, effect_mult,
                     roll_mods, save_mode, spell_expression, spell_helps, spell_info, spell_lasts, with_mods)
 
 bp = Blueprint("spells", __name__, url_prefix="/api")
@@ -581,9 +581,10 @@ def cast(ctx, caster_id, data, viewer=None):
             if half:
                 amount //= 2
             note = ""
-            if sp["dmg_mult"] > 1:
-                amount *= sp["dmg_mult"]
-                note = f", ×{sp['dmg_mult']}" if sp["dmg_mult"] != 2 else ", doubled"
+            mult = sp["dmg_mult"] * effect_mult(caster["conditions"])
+            if mult > 1:
+                amount *= mult
+                note = f", ×{mult}" if mult != 2 else ", doubled"
             if not t["linked"]:
                 mult, word = damage_multiplier(t["statblock"], sp["damage_type"])
                 if mult != 1:

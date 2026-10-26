@@ -42,6 +42,13 @@ def dmg_mult(row):
         return 1
 
 
+def stance_mult(row):
+    """A row with Damage × and no damage dice is a stance (Reckless): using it doubles
+    your own damage for the rest of the turn. Returns the multiplier, or 1."""
+    from . import dice
+    return dmg_mult(row) if not dice.damage_expression(str(row.get("damage") or "")) else 1
+
+
 def attack_cast(a, d):
     """A sheet attack that leaves a condition on a hit (Grapple: damage and Grappled) is
     used like a spell, so the hit, the damage and the condition all happen at once.
@@ -49,7 +56,7 @@ def attack_cast(a, d):
     from . import dice
     from .rules import DAMAGE_TYPES
     cond = str(a.get("condition") or "").strip()[:60]
-    mult = dmg_mult(a)
+    mult = dmg_mult(a) if stance_mult(a) == 1 else 1
     if not cond and mult == 1:
         return None
     text = str(a.get("damage") or "")
@@ -100,7 +107,7 @@ def _combatant_dict(r):
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
                            "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
-                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a),
+                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
                            "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
@@ -680,10 +687,10 @@ def surge(ctx, cid, index, by_player=False):
         row = rows[int(index)]
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That move isn't on the sheet any more")
-    n = extra_moves(row)
+    n, mult = extra_moves(row), stance_mult(row)
     name = (row.get("name") or SURGE).strip() or SURGE
-    if not n:
-        raise F.ApiError(f"{name} doesn't give extra moves — set Extra moves on the sheet")
+    if not n and mult == 1:
+        raise F.ApiError(f"{name} isn't used on yourself — set Extra moves (or Damage × with no dice) on the sheet")
     if ctx.enc["status"] != "active":
         raise F.ApiError(f"{name} is for a running fight")
     if by_player and ctx.enc["current_id"] != cid:
@@ -691,13 +698,21 @@ def surge(ctx, cid, index, by_player=False):
     left = cooldown_left(c["conditions"], name, ctx.enc["id"])
     if left:
         raise F.ApiError(f"{name} is recharging — ready after {max(1, left - 1)} more of {c['name']}'s turns")
-    if any(x.get("extra_moves") is not None and not x.get("expired") for x in c["conditions"]):
+    if n and any(x.get("extra_moves") is not None and not x.get("expired") for x in c["conditions"]):
         raise F.ApiError(f"{c['name']} already has extra moves this turn")
-    cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": f"{n} extra move{'s' if n != 1 else ''} this turn",
+    if any(x.get("name") == name and not x.get("expired") and not x.get("cooldown") for x in c["conditions"]):
+        raise F.ApiError(f"{c['name']} is already {name}")
+    what = [f"{n} extra move{'s' if n != 1 else ''}" if n else "", f"damage {'doubled' if mult == 2 else '×' + str(mult)}" if mult > 1 else ""]
+    what = " and ".join(w for w in what if w) + " this turn"
+    cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": what[0].upper() + what[1:],
             "rounds_left": 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
-            "expired": False, "applied_round": ctx.enc["round"], "extra_moves": n, "extra_total": n}
+            "expired": False, "applied_round": ctx.enc["round"]}
+    if n:
+        cond.update(extra_moves=n, extra_total=n)
+    if mult > 1:
+        cond["dmg_mult"] = mult
     ctx.set_vitals(c, conditions=c["conditions"] + [cond])
-    ctx.log("condition", f"{c['name']} uses {name}: {n} extra move{'s' if n != 1 else ''} this turn")
+    ctx.log("condition", f"{c['name']} uses {name}: {what}")
     turns = parse_cooldown(row)
     if turns:
         start_cooldown(ctx, cid, name, turns)

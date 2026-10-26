@@ -155,8 +155,11 @@ def with_effects(conn, ids, check_type, expr, label, mode):
 
 
 def _row_mult(conn, check):
-    from .combat import dmg_mult
-    if check.get("type") != "damage":
+    """The damage multiplier for this roll: the sheet row's Damage × (an attack that
+    doubles itself), times any stance on the roller (Reckless)."""
+    from .combat import dmg_mult, stance_mult
+    from .rules import effect_mult
+    if check.get("type") not in ("damage", "spell"):
         return 1
     char_id = check.get("character_id")
     if not char_id and check.get("combatant_id"):
@@ -164,11 +167,17 @@ def _row_mult(conn, check):
         char_id = row["character_id"] if row else None
     if not char_id:
         return 1
-    row = conn.execute("SELECT attacks FROM characters WHERE id = ?", (int(char_id),)).fetchone()
-    try:
-        return dmg_mult(json.loads(row["attacks"] or "[]")[int(check.get("key"))])
-    except (TypeError, ValueError, IndexError):
+    row = conn.execute("SELECT attacks, conditions FROM characters WHERE id = ?", (int(char_id),)).fetchone()
+    if row is None:
         return 1
+    mult = effect_mult(json.loads(row["conditions"] or "[]"))
+    if check.get("type") == "damage":
+        try:
+            r = json.loads(row["attacks"] or "[]")[int(check.get("key"))]
+            mult *= dmg_mult(r) if stance_mult(r) == 1 else 1
+        except (TypeError, ValueError, IndexError):
+            pass
+    return mult
 
 
 def _is_a_move(conn, check, ids):
@@ -327,7 +336,7 @@ def api_roll():
     except dice.DiceError as e:
         raise F.ApiError(str(e))
     mult = _row_mult(conn, check) if check and kind == "damage" else 1
-    if mult > 1:  # Reckless attack: the rolled damage is doubled
+    if mult > 1:  # Reckless: the rolled damage is doubled
         result["multiplier"], result["total"] = mult, result["total"] * mult
         label = f"{label} — {'doubled' if mult == 2 else '×' + str(mult)}"
     if data.get("crit") and kind == "damage":
