@@ -378,7 +378,10 @@
   function attacksFor(c) {
     const roll = (req, e) => Dice.roll(Object.assign({ encounter_id: EID }, req), e);
     const rule = toHitRule();
-    if (c.linked) return (c.attacks || []).map((a, i) => ({ name: a.name, heal: !!a.heal,
+    if (c.linked) return (c.attacks || []).map((a, i) => !a.has_dmg && !a.has_hit
+      // no dice: "+2 ac to target" goes on through the cast picker; anything else is just shown
+      ? { name: a.name, note: a.ac ? "" : a.notes, effect: a.ac ? { name: a.name, effect: "effect", condition: a.name, ac: a.ac, rounds: null, hit: "" } : null }
+      : ({ name: a.name, heal: !!a.heal,
       hit: a.has_hit && !a.heal ? (e) => roll({ check: { type: "attack", key: i, combatant_id: c.id } }, e)
         : rule && !a.heal ? (e) => roll({ expression: "1d20", label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: a.has_hit ? "Hit" : "Hit +0",
@@ -483,6 +486,7 @@
       a.effect ? h("button", { type: "button", class: "btn btn-sm", title: "Then tap who it's on" + (toHitRule() ? "; each one rolls to hit" : ""), onclick: () => cast(a.effect) },
         icon("zap", "sm"), " Cast · " + L.spellWhat(a.effect)) : null,
       a.spell ? h("span", { class: "tag" }, "spell") : null,
+      a.note ? h("span", { class: "faint", style: "font-size:.85rem;overflow-wrap:anywhere" }, a.note) : null,
       a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then(after(a.heal ? "heal" : "dmg")) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
       a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;

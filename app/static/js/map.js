@@ -294,7 +294,10 @@
   function actionsFor(c) {
     const out = [], rule = toHitRule();
     if (c.linked) {
-      (c.attacks || []).forEach((a, i) => out.push({ name: a.name || "Attack", heal: !!a.heal, single: true, icon: a.heal ? "heart" : "swords",
+      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit ? (a.ac
+        // no dice: "+2 ac to target" works like a buff spell; anything else is just a note
+        ? out.push({ name: a.name, many: true, icon: a.ac > 0 ? "shield-plus" : "zap", info: signed(a.ac) + " AC", effect: { name: a.name, condition: a.name, ac: a.ac, rounds: null } })
+        : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: true, icon: a.heal ? "heart" : "swords",
         info: a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage",
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
@@ -386,7 +389,7 @@
     const cur = aim, c = fighter(cur.by), a = cur.act;
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
     if (!t) return;
-    if (!target) { toast("That token isn't in this fight. Only tokens from the map's encounter can be hit.", "error"); return; }
+    if (!target) { toast((t.display || "That token") + " isn't a fighter, just a marker on the map. Heroes and monsters in the fight can be targeted.", "error"); return; }
     if (a.single) {
       aim = null; setTool(view.tool);
       let crit = false, how = "";
@@ -471,7 +474,8 @@
           icon(x.icon, "sm"), h("b", null, x.name), x.info ? h("span", { class: "faint" }, x.info) : null)))
         : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet."
           : "No attacks or spells written for " + c.name + " yet. Write some below."),
-      c.linked ? null : L.attackNotes((c.statblock || {}).attacks).concat(L.attackNotes((c.statblock || {}).spells)).map((n) => h("div", { class: "fight-note" }, n)),
+      (c.linked ? (c.attacks || []).filter((x) => !x.has_dmg && !x.has_hit && !x.ac).map((x) => x.name + (x.notes ? ": " + x.notes : ""))
+        : L.attackNotes((c.statblock || {}).attacks).concat(L.attackNotes((c.statblock || {}).spells))).map((n) => h("div", { class: "fight-note" }, n)),
       c.linked || a ? null : L.monsterEditor(c, () => { enc = null; refresh(true); renderSelected(); }),
       a ? null : h("div", { class: "hp-ctl fight-hpctl" }, amt,
         h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => hp("damage") }, "Damage"),

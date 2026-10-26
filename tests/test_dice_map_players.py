@@ -593,7 +593,7 @@ def test_hit_one_or_many_targets(api):
     eid = api.encounter(camp["id"], "Rats")["encounter"]["id"]
     st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Rat", "max_hp": 10, "count": 3}})
     by = {c["name"]: c for c in st["combatants"]}
-    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True, "heal": False}], "sheet attacks reach combat"
+    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True, "heal": False, "notes": "", "ac": 0}], "sheet attacks reach combat"
     url = f"/api/encounters/{eid}/damage"
     st = api.post(url, {"targets": [by["Rat 1"]["id"]], "amount": 7, "attacker_id": by["Hero"]["id"], "op_id": "a1"})
     hp = {c["name"]: c["hp"] for c in st["combatants"]}

@@ -8,6 +8,7 @@ the creature's stat block taken when they were added.
 """
 import json
 import random
+import re
 import uuid
 
 from flask import Blueprint, jsonify, request
@@ -20,6 +21,15 @@ from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, derived, init
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
 LINKED_FIELDS = {"ac", "status", "death_successes", "death_failures"}
+AC_NOTE = re.compile(r"([+-]\s*\d+)\s*(?:to\s+)?AC\b", re.I)
+
+
+def _ac_in(row):
+    """A sheet row like 'Shield of faith — +2 ac to target' raises AC: 2. Rows with dice don't count."""
+    if str(row.get("damage") or "").strip():
+        return 0
+    m = AC_NOTE.search(" ".join(str(row.get(k) or "") for k in ("name", "notes", "bonus")))
+    return max(-10, min(30, int(m.group(1).replace(" ", "")))) if m else 0
 VITAL_KEYS = ("hp", "max_hp", "temp_hp", "status", "death_successes", "death_failures")
 rng = random.SystemRandom()
 
@@ -54,7 +64,8 @@ def _combatant_dict(r):
                  exhaustion=r["ch_exhaustion"],
                  # Attack names (in sheet order) so combat can offer the sheet's Hit / Dmg rolls.
                  attacks=[{"name": (a.get("name") or "Attack").strip() or "Attack", "has_hit": bool(str(a.get("bonus") or "").strip()),
-                           "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a)}
+                           "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
+                           "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a)}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],

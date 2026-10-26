@@ -180,6 +180,15 @@ def damage_expression(text):
     return m.group(1).replace(" ", "") if m else None
 
 
+D20_PREFIX = re.compile(r"^\s*1?\s*d\s*20\b", re.I)
+
+
 def attack_bonus(text):
-    m = BONUS.match(text or "")
+    """'+5' -> 5. People also write the whole roll: '1d20' is +0 and '1d20+2' is +2."""
+    text = text or ""
+    if D20_PREFIX.match(text):
+        rest = D20_PREFIX.sub("", text).strip()
+        m = BONUS.match(rest)
+        return int(m.group(1).replace(" ", "")) if m else 0
+    m = BONUS.match(text)
     return int(m.group(1).replace(" ", "")) if m else None

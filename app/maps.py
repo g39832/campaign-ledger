@@ -116,8 +116,55 @@ def encounter_summary(conn, enc_id):
     return dict(enc) | {"order": [dict(o) for o in order]}
 
 
+def _unlinked_party(conn, map_id):
+    return conn.execute(
+        "SELECT t.id, t.character_id FROM map_tokens t JOIN maps m ON m.id = t.map_id "
+        "JOIN encounters e ON e.id = m.encounter_id AND e.status != 'ended' "
+        "WHERE t.map_id = ? AND t.character_id IS NOT NULL AND t.combatant_id IS NULL", (map_id,)).fetchall()
+
+
+def link_party(conn, map_id):
+    """Heroes standing on a map are in its fight. A character's token joins the
+    map's encounter (if they aren't in it yet) and points at their combatant, so
+    they can be attacked, healed and buffed from the map. The token keeps its
+    character, so it stays on the map even if the fight is deleted later.
+    Returns the names that joined the fight."""
+    from .combat import Ctx, _next_sort
+    from .rules import derived
+    rows = _unlinked_party(conn, map_id)
+    if not rows:
+        return []
+    eid = conn.execute("SELECT encounter_id FROM maps WHERE id = ?", (map_id,)).fetchone()["encounter_id"]
+    ctx, added = Ctx(conn, eid), []
+    for t in rows:
+        cb = conn.execute("SELECT id FROM combatants WHERE encounter_id = ? AND character_id = ?", (eid, t["character_id"])).fetchone()
+        if cb is None:
+            ch = conn.execute("SELECT * FROM characters WHERE id = ? AND campaign_id = ?", (t["character_id"], ctx.enc["campaign_id"])).fetchone()
+            if ch is None:
+                continue
+            chd = F.decode_row(ch, F.CHARACTER)
+            cur = conn.execute(
+                """INSERT INTO combatants (uid, encounter_id, character_id, kind, name, init_mod, init_roll,
+                   sort_order, max_hp, current_hp, ac, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (new_uid(), eid, ch["id"], ch["kind"], ch["name"], derived(chd)["initiative"], ch["initiative_roll"],
+                 _next_sort(ctx), ch["max_hp"], ch["current_hp"], ch["ac"], now_iso()))
+            cb_id = cur.lastrowid
+            added.append(ch["name"])
+        else:
+            cb_id = cb["id"]
+        conn.execute("UPDATE map_tokens SET combatant_id = ?, updated_at = ? WHERE id = ?", (cb_id, now_iso(), t["id"]))
+    if added:
+        ctx.log("roster", f"{', '.join(added)} joined the fight from the battle map")
+    conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
+    _bump(conn, map_id)
+    return added
+
+
 def dm_state(map_id):
     conn = get_db()
+    if _unlinked_party(conn, map_id):  # maps made before heroes were linked automatically
+        with tx() as c2:
+            link_party(c2, map_id)
     m = map_dict(_map_row(conn, map_id))
     enc = encounter_summary(conn, m["encounter_id"])
     live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (m["campaign_id"],)).fetchone()["live_map_id"]
@@ -337,6 +384,8 @@ def api_patch(map_id):
         if isinstance(changes, dict) and "name" in changes and not str(changes["name"].get("to", "")).strip():
             raise F.ApiError("Name can't be empty")
         row, updates = F.cas_patch(conn, "maps", F.MAP, map_id, changes)
+        if "encounter_id" in updates:
+            link_party(conn, map_id)
         if "cols" in updates or "rows" in updates:
             bits = resize_bitmap(before["revealed"], before["cols"], before["rows"], row["cols"], row["rows"])
             conn.execute("UPDATE maps SET revealed = ? WHERE id = ?", (bits, map_id))
@@ -733,6 +782,7 @@ def api_add_monsters(map_id):
             _resort(ctx)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
         new = [c for c in ctx.combatants() if c["id"] not in before]
+        link_party(conn, map_id)
         taken = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (map_id,))}
         size = {"Large": 2, "Huge": 3, "Gargantuan": 4}.get(str(block.get("creature_type") or "").split(" ")[0], 1)
         spots = _open_spots(m, taken, x, y, len(new))

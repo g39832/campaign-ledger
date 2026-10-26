@@ -187,3 +187,64 @@ def test_hidden_monsters_ambush_then_show(app, api, camp):
     api.post(f"/api/maps/{mid}/tokens", {"kind": "trap", "label": "Pit", "x": 1, "y": 1, "hidden": True}, 201)
     api.post(f"/api/maps/{mid}/reveal", {})
     assert "Pit" not in names(p.get("/api/play/state"))
+
+
+def test_heroes_on_a_map_join_its_fight(api, camp):
+    """Bug: heroes placed on a map weren't in the fight that adding monsters made,
+    so monsters couldn't attack them from the map ("isn't in this fight")."""
+    lux = api.character(camp["id"], name="Lux", max_hp=20, ac=14)
+    yam = api.character(camp["id"], name="Yamato", max_hp=25, ac=13)
+    mid = api.post(f"/api/campaigns/{camp['id']}/maps", {"preset": "tavern"}, 201)["map"]["id"]
+    for ch, x in ((lux, 1), (yam, 2)):
+        api.post(f"/api/maps/{mid}/tokens", {"character_id": ch["id"], "kind": "pc", "x": x, "y": 1}, 201)
+    d = api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 2, "x": 10, "y": 6}, 201)
+    enc = api.get(f"/api/encounters/{d['map']['encounter_id']}")
+    assert {"Lux", "Yamato", "Goblin 1", "Goblin 2"} <= {c["name"] for c in enc["combatants"]}
+    heroes = [t for t in d["tokens"] if t["character_id"]]
+    assert len(heroes) == 2 and all(t["combatant_id"] for t in heroes), "hero tokens point at their combatant"
+    assert any("joined the fight from the battle map" in e["message"] for e in enc["log"])
+    # a hero added to the map later joins too
+    gn = api.character(camp["id"], name="Gnocchi", max_hp=18)
+    st = api.post(f"/api/maps/{mid}/tokens", {"character_id": gn["id"], "kind": "pc", "x": 3, "y": 1}, 201)
+    assert next(t for t in st["tokens"] if t["display"] == "Gnocchi")["combatant_id"]
+    # nobody is added twice, and deleting the fight leaves the heroes on the map
+    api.get(f"/api/maps/{mid}")
+    enc = api.get(f"/api/encounters/{d['map']['encounter_id']}")
+    assert sorted(c["name"] for c in enc["combatants"] if c["kind"] == "pc") == ["Gnocchi", "Lux", "Yamato"]
+    api.delete(f"/api/encounters/{enc['encounter']['id']}")
+    left = api.get(f"/api/maps/{mid}")["tokens"]
+    assert sorted(t["display"] for t in left if t["character_id"]) == ["Gnocchi", "Lux", "Yamato"]
+
+
+def test_maps_made_before_the_fix_heal_themselves(api, camp, app):
+    lux = api.character(camp["id"], name="Lux", max_hp=20)
+    eid = api.encounter(camp["id"], "Tavern common room")["encounter"]["id"]
+    api.post(f"/api/encounters/{eid}/combatants", {"quick": {"name": "Mad mushroom", "max_hp": 10, "count": 1}})
+    mid = api.post(f"/api/campaigns/{camp['id']}/maps", {"name": "Old map"}, 201)["map"]["id"]
+    api.post(f"/api/maps/{mid}/tokens", {"character_id": lux["id"], "kind": "pc", "x": 1, "y": 1}, 201)
+    with app.app_context():  # how the old version left things: linked map, hero token not in the fight
+        from app.db import get_db
+        db = get_db()
+        db.execute("UPDATE maps SET encounter_id = ? WHERE id = ?", (eid, mid))
+        db.commit()
+    st = api.get(f"/api/maps/{mid}")
+    assert next(t for t in st["tokens"] if t["display"] == "Lux")["combatant_id"]
+    assert "Lux" in {c["name"] for c in api.get(f"/api/encounters/{eid}")["combatants"]}
+
+
+def test_sheet_rows_people_actually_write(api, camp):
+    """'1d20' in the bonus box means roll a d20 (+0), not +1; a no-dice row with
+    '+2 ac to target' is a buff; other no-dice rows are just notes."""
+    from app import dice
+    assert [dice.attack_bonus(b) for b in ("1d20", "1d20+2", "d20+3", "+5", "0", "")] == [0, 2, 3, 5, 0, None]
+    lux = api.character(camp["id"], name="Lux", max_hp=13, ac=8)
+    lux = api.set_char(lux, attacks=[{"name": "Entangle", "bonus": "1d20", "damage": "1d20", "notes": "Makes prone"},
+                                     {"name": "Sheild of faith", "bonus": "", "damage": "", "notes": "+2 ac to target"},
+                                     {"name": "Mold earth", "bonus": "", "damage": "", "notes": "Shape dirt"}])
+    r = api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": lux["id"]}}, 201)["roll"]
+    assert r["expression"] == "1d20", "no stray +1"
+    eid = api.encounter(camp["id"])["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [lux["id"]]})
+    atk = {a["name"]: a for a in st["combatants"][0]["attacks"]}
+    assert atk["Sheild of faith"]["ac"] == 2 and atk["Mold earth"]["ac"] == 0 and atk["Entangle"]["ac"] == 0
+    assert atk["Mold earth"]["notes"] == "Shape dirt"
