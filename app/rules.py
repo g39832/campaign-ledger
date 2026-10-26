@@ -537,10 +537,12 @@ def parse_cooldown(row):
     return max(0, min(20, int(m.group(1) or m.group(2)))) if m else 0
 
 
-def cooldown_left(conditions, name):
-    """Rounds left on a move's cooldown (0 = ready)."""
+def cooldown_left(conditions, name, encounter_id=None):
+    """Rounds left on a move's cooldown (0 = ready). With encounter_id, only a
+    cooldown from that fight counts."""
     for x in conditions or []:
-        if isinstance(x, dict) and x.get("cooldown") == name and not x.get("expired") and (x.get("rounds_left") or 0) > 0:
+        if isinstance(x, dict) and x.get("cooldown") == name and not x.get("expired") and (x.get("rounds_left") or 0) > 0 \
+                and (encounter_id is None or x.get("encounter_id") == encounter_id):
             return x["rounds_left"]
     return 0
 

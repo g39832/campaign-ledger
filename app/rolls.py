@@ -156,7 +156,7 @@ def _player_turn_rules(conn, viewer, check):
     if not turns or not uses:
         return None
     name = (row.get("name") or "Attack").strip() or "Attack"
-    left = cooldown_left(ch.get("conditions"), name)
+    left = cooldown_left(ch.get("conditions"), name, cb["encounter_id"])
     if left:
         raise F.ApiError(f"{name} is recharging — ready after {max(1, left - 1)} more of your turns", status=400)
     return cb["id"], name, turns

@@ -9,7 +9,7 @@
 <div class="combat-bar" id="bar">
   <div style="min-width:0;display:flex;flex-direction:column">
     <span class="status-label" id="enc-status" style="align-self:flex-start"></span>
-    <input class="input enc-name" id="enc-name" aria-label="Encounter name">
+    <textarea class="input enc-name" id="enc-name" rows="1" aria-label="Encounter name"></textarea>
   </div>
   <div class="round-box"><span class="lbl">Round</span><span class="n" id="round">0</span></div>
   <div class="turn-now"><span class="lbl">Now acting</span><span class="who" id="now">—</span></div>
@@ -78,4 +78,4 @@
 <script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=43"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=48"></script>{% endblock %}

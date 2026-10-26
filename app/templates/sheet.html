@@ -11,18 +11,18 @@
     </label>
     <div style="min-width:0">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input class="sheet-name grow" data-f="name" aria-label="Character name" style="flex:1 1 260px">
+        <textarea class="sheet-name grow one-line" rows="1" data-f="name" aria-label="Character name" style="flex:1 1 260px"></textarea>
         <select data-f="kind" aria-label="Character type" style="width:auto"><option value="pc">Player character</option><option value="npc">NPC</option></select>
         <button class="btn btn-sm btn-quiet" type="button" id="archive-btn">{{ icon("archive", "sm") }} {{ "Restore" if char.archived else "Archive" }}</button>
       </div>
       {% if char.archived %}<div class="warn-box" style="margin:8px 0 0">This character is archived. They're hidden from lists and the party, but nothing has been deleted.</div>{% endif %}
       <div class="sheet-ident">
-        <label class="uline"><input data-f="class_name" placeholder="—"><span>Class</span></label>
-        <label class="uline"><input data-f="subclass" placeholder="—"><span>Subclass</span></label>
+        <label class="uline"><textarea class="one-line" rows="1" data-f="class_name" placeholder="—"></textarea><span>Class</span></label>
+        <label class="uline"><textarea class="one-line" rows="1" data-f="subclass" placeholder="—"></textarea><span>Subclass</span></label>
         <label class="uline"><input data-f="level" type="number" min="1" max="30"><span>Level</span></label>
-        <label class="uline"><input data-f="race" placeholder="—"><span>Species</span></label>
-        <label class="uline"><input data-f="background" placeholder="—"><span>Background</span></label>
-        <label class="uline"><input data-f="player_name" placeholder="—"><span>Player</span></label>
+        <label class="uline"><textarea class="one-line" rows="1" data-f="race" placeholder="—"></textarea><span>Species</span></label>
+        <label class="uline"><textarea class="one-line" rows="1" data-f="background" placeholder="—"></textarea><span>Background</span></label>
+        <label class="uline"><textarea class="one-line" rows="1" data-f="player_name" placeholder="—"></textarea><span>Player</span></label>
         <label class="uline"><input data-f="alignment" list="alignments" placeholder="—"><span>Alignment</span></label>
         <label class="uline"><input data-f="xp" type="number" min="0"><span>Experience</span></label>
         <label class="uline"><input data-f="speed" placeholder="30 ft."><span>Speed</span></label>
@@ -200,5 +200,5 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/spellbook.js') }}?v=43"></script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=43"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/spellbook.js') }}?v=48"></script>
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=48"></script>{% endblock %}

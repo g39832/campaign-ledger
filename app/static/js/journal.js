@@ -102,13 +102,13 @@
     }
     const model = { title: e.title, kind: e.kind, session_number: e.session_number, session_date: e.session_date, status: e.status, tags: e.tags, pinned: e.pinned, body: e.body };
     binder = new Binder({ url: "/api/journal/" + e.id, model, onSaved: syncListItem, onRemote: () => {} });
-    const title = h("input", { class: "input j-title", "aria-label": "Title", maxlength: 300 });
+    const title = L.wrapText({ class: "input j-title", "aria-label": "Title", maxlength: 300 });
     const kindSel = h("select", { style: "width:auto" }, Object.entries(KINDS).map(([k, l]) => h("option", { value: k }, l)));
     const num = h("input", { type: "number", min: 0, style: "width:8ch" });
     const date = h("input", { type: "date" });
     const status = h("input", { type: "text", list: "status-opts", style: "width:16ch", placeholder: "—" });
     const statusList = h("datalist", { id: "status-opts" });
-    const tags = h("input", { type: "text", placeholder: "comma, separated", style: "width:24ch" });
+    const tags = L.wrapText({ placeholder: "comma, separated", "aria-label": "Tags", style: "min-width:24ch;max-width:100%" });
     const pinned = h("input", { type: "checkbox" });
     const body = h("textarea", { class: "j-body", placeholder: e.kind === "session" ? "What happened this session? Who did they meet, what did they decide, what's still unresolved?" : "Write it down…" });
     binder.bind(title, "title");

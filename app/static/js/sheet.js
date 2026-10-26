@@ -55,6 +55,7 @@
   }
 
   // ---- simple fields ------------------------------------------------------------
+  $$("textarea.one-line").forEach((el) => L.wrapUp(el));
   $$("[data-f]").forEach((el) => {
     const f = el.dataset.f;
     const isInt = el.type === "number" || f === "exhaustion";

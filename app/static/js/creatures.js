@@ -39,7 +39,8 @@
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
     } });
-    const inp = (field, attrs) => b.bind(h(attrs && attrs.rows ? "textarea" : "input", Object.assign({ type: attrs && attrs.type ? attrs.type : "text" }, attrs || {})), field, { int: attrs && attrs.type === "number" });
+    const inp = (field, attrs) => b.bind(attrs && attrs.wrap ? L.wrapText(Object.assign({}, attrs, { wrap: null }))
+      : h(attrs && attrs.rows ? "textarea" : "input", Object.assign({ type: attrs && attrs.type ? attrs.type : "text" }, attrs || {})), field, { int: attrs && attrs.type === "number" });
     const prop = (label, field, attrs) => h("label", { class: "field" }, h("span", null, label), inp(field, attrs));
     const modOut = {};
     const abil = ABS.map((a) => {
@@ -72,7 +73,7 @@
       encs.length ? null : h("a", { href: "/combat#new", style: "font-size:.9rem" }, "Create an encounter"));
     armed(del, () => act("DELETE", "/api/creatures/" + c.id, {}, () => { list = list.filter((x) => x.id !== c.id); open(list[0] ? list[0].id : null); }), "Delete? Existing enemies stay as they are");
     box.replaceChildren(h("div", { class: "sb-edit" },
-      inp("name", { class: "input sb-name", "aria-label": "Name", maxlength: 200 }),
+      inp("name", { class: "input sb-name", "aria-label": "Name", maxlength: 200, wrap: true }),
       inp("creature_type", { class: "input sb-type", placeholder: "Medium humanoid (goblinoid), neutral evil", "aria-label": "Type" }),
       h("hr"),
       h("div", { class: "sb-props" },

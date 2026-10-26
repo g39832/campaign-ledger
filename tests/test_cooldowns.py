@@ -71,3 +71,22 @@ def test_dm_starts_a_cooldown_from_the_map_or_combat(api, fight):
     assert cd["rounds_left"] == 3 and cd["auto_expire"] and cd["tick_on"] == ogre["id"]
     api.post(f"/api/combatants/{ogre['id']}/cooldown", {"name": "Boulder toss", "turns": 2}, 400)
     assert any("Ogre used Boulder toss" in e["message"] for e in st["log"])
+
+
+def test_ending_a_fight_clears_its_cooldowns(api, fight):
+    """Bug: a move still recharging when the fight ended stayed locked in the next fight."""
+    eid, p, yid = fight["eid"], fight["p"], fight["yam"]["id"]
+    api.post(f"/api/encounters/{eid}/start")
+    attack(p, yid, 0)
+    assert p.get("/api/play/state")["character"]["attacks"][0]["recharging"]
+    api.post(f"/api/encounters/{eid}/end")
+    ch = api.get(f"/api/characters/{yid}")["character"]
+    assert not any(x.get("cooldown") for x in ch["conditions"]), "the recharging effect is gone"
+    camp_id = ch["campaign_id"]
+    e2 = api.encounter(camp_id, "Rematch")["encounter"]["id"]
+    api.post(f"/api/encounters/{e2}/combatants", {"characters": [yid], "quick": {"name": "Troll", "max_hp": 80, "count": 1}})
+    st = api.get(f"/api/encounters/{e2}")
+    y = next(c for c in st["combatants"] if c["name"] == "Yamato")
+    api.patch(f"/api/combatants/{y['id']}", {"changes": {"init_roll": {"from": None, "to": 25}}})
+    api.post(f"/api/encounters/{e2}/start")
+    attack(p, yid, 0)  # ready again in the new fight

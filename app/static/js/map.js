@@ -71,7 +71,9 @@
 
   // ---- top bar -------------------------------------------------------------------
   const nameBinder = new Binder({ url: "/api/maps/" + MID, model: { name: S.map.name }, extract: (d) => { setTimeout(() => apply(d), 0); return d.map; } });
+  L.wrapUp($("#map-name"));
   nameBinder.bind($("#map-name"), "name");
+  setTimeout(() => L.grow($("#map-name")), 0);
   function renderTop() {
     $("#live-flag").textContent = S.live ? "Players can see this map" : "";
     $("span", $("#live-btn")).textContent = S.live ? "Stop showing to players" : "Show to players";
@@ -289,7 +291,7 @@
     const t = S.tokens.find((x) => x.id === selectedToken);
     // typing in the panel (token notes, label, a monster's attacks): wait until they're done
     const ae = document.activeElement;
-    if (t && box.contains(ae) && ae.matches("textarea, input[type=text], select")) { selPending = true; return; }
+    if (t && box.contains(ae) && ae.matches("textarea, input[type=text]")) { selPending = true; return; }
     selPending = false;
     box.hidden = !t;
     if (!t) return;
@@ -483,7 +485,7 @@
     act("POST", "/api/combatants/" + c.id + "/cooldown", { name: a.cdName, turns: a.cooldown }, () => { enc = null; refresh(true); },
       { onError: (e) => toast(e.message, "error") });
   }
-  const cdLeft = (c, name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0); return x ? x.rounds_left : 0; };
+  const cdLeft = (c, name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0 && k.encounter_id === EID()); return x ? x.rounds_left : 0; };
   let offTurnArmed = null; // "combatant:move" armed by a first click when it isn't their turn
 
   async function arm(c, a) {

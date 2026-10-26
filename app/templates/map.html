@@ -6,7 +6,7 @@
   <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.maps') }}">{{ icon("chevron-left", "sm") }} Maps</a>
   {{ fight_switch(page_fight, "map") }}
   <div class="turnbar" id="turnbar" hidden></div>
-  <input class="input enc-name grow" id="map-name" aria-label="Map name" style="font:700 1.25rem var(--caps);background:transparent;border-color:transparent;max-width:420px">
+  <textarea class="input enc-name grow" id="map-name" rows="1" aria-label="Map name" style="font:700 1.25rem var(--caps);background:transparent;border-color:transparent;max-width:420px;min-width:8ch"></textarea>
   <span id="live-flag" class="live-flag"></span>
   <span class="grow"></span>
   <button type="button" class="btn btn-sm" id="live-btn">{{ icon("eye-off", "sm") }} <span>Show to players</span></button>
@@ -138,6 +138,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=43"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=43"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=48"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=48"></script>
 {% endblock %}

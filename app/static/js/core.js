@@ -43,6 +43,19 @@
     el.style.height = "auto";
     el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
   }
+  // The same for a textarea that's already in the page (e.g. a fight's or a map's name).
+  function wrapUp(el) {
+    if (!el) return el;
+    el.classList.add("wrap-input");
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+    el.addEventListener("input", () => {
+      if (/[\r\n]/.test(el.value)) { const at = el.selectionStart; el.value = el.value.replace(/[\r\n]+/g, " "); el.setSelectionRange(at, at); }
+      grow(el);
+    }, true);
+    if (growObserver) growObserver.observe(el);
+    requestAnimationFrame(() => grow(el));
+    return el;
+  }
   function wrapText(attrs) {
     const a = Object.assign({}, attrs);
     a.class = ((a.class || "") + " wrap-input").trim();
@@ -497,6 +510,7 @@
           this.baseline[f] = v;
           this.model[f] = JSON.parse(JSON.stringify(v));
           this.onRemote(f, v);
+          if (el && el.classList && el.classList.contains("wrap-input")) requestAnimationFrame(() => grow(el));
         }
       }
     }
@@ -505,7 +519,10 @@
       opts = opts || {};
       const kind = el.type === "checkbox" ? "bool" : (el.type === "number" || opts.int) ? "int" : "text";
       this.inputs.set(field, el);
-      const write = (v) => { if (kind === "bool") el.checked = !!v; else el.value = v === null || v === undefined ? "" : v; };
+      const write = (v) => {
+        if (kind === "bool") el.checked = !!v; else el.value = v === null || v === undefined ? "" : v;
+        if (el.classList && el.classList.contains("wrap-input")) requestAnimationFrame(() => grow(el));
+      };
       write(this.model[field]);
       const read = () => {
         if (kind === "bool") return el.checked;
@@ -586,5 +603,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

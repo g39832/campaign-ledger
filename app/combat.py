@@ -328,6 +328,11 @@ def api_end(eid):
         if ctx.enc["status"] == "ended":
             raise F.ApiError("This encounter has already ended")
         ctx.save_enc(status="ended", ended_at=now_iso())
+        # moves recharging in this fight are ready for the next one
+        for c in ctx.combatants():
+            keep = [x for x in c["conditions"] if not (x.get("cooldown") and x.get("encounter_id") == ctx.enc["id"])]
+            if len(keep) != len(c["conditions"]):
+                ctx.set_vitals(c, conditions=keep)
         ctx.log("system", f"Encounter ended after {ctx.enc['round']} round{'s' if ctx.enc['round'] != 1 else ''}")
     return mutate(eid, fn, _body().get("op_id"))
 
@@ -587,7 +592,7 @@ def api_cooldown(cid):
     turns = _int(data, "turns", 1, 20)
 
     def fn(ctx):
-        if cooldown_left(ctx.combatant(cid)["conditions"], name) and not data.get("force"):
+        if cooldown_left(ctx.combatant(cid)["conditions"], name, ctx.enc["id"]) and not data.get("force"):
             raise F.ApiError(f"{name} is still recharging")
         start_cooldown(ctx, cid, name, turns)
     return mutate(eid, fn, data.get("op_id"))

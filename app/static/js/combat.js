@@ -62,6 +62,7 @@
     url: "/api/encounters/" + EID, model: { name: S.encounter.name },
     extract: (d) => { setTimeout(() => apply(d), 0); return d.encounter; },
   });
+  L.wrapUp($("#enc-name"));
   nameBinder.bind($("#enc-name"), "name");
 
   function renderBar() {
@@ -72,6 +73,7 @@
     if (document.activeElement !== $("#enc-name") && !nameBinder.pending.size) {
       nameBinder.baseline.name = nameBinder.model.name = e.name;
       $("#enc-name").value = e.name;
+      L.grow($("#enc-name"));
     }
     $("#round").textContent = e.round || "—";
     const cur = current();
@@ -496,7 +498,7 @@
       else { modeOf.set(c.id, "damage"); lastAttack.set(c.id, { label: r.label, total: r.total, natural: r.result && r.result.natural }); }
       renderDetail();
     };
-    const cdLeft = (name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0); return x ? x.rounds_left : 0; };
+    const cdLeft = (name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0 && k.encounter_id === EID); return x ? x.rounds_left : 0; };
     const isTurnNow = S.encounter.status === "active" && S.encounter.current_id === c.id;
     const used = (a) => { if (a.cooldown && S.encounter.status === "active") run("POST", "/api/combatants/" + c.id + "/cooldown", { name: a.name, turns: a.cooldown }); };
     const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => cdLeft(a.name) ? h("div", { class: "roll-row", style: "align-items:center" },
