@@ -60,6 +60,7 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "auto_sort": True,
         "skip_statuses": ["dead", "defeated", "fled"],
         "roll_to_hit": True,
+        "auto_concentration": True,  # a concentrating caster who takes damage rolls the Constitution save automatically
         "ally_death_save_bonus": 2,  # house rule: a downed hero with an ally standing next to them adds this to death saves  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
     },
     "players": {
@@ -456,42 +457,191 @@ def is_healing(attack):
     return bool(_HEAL_WORDS.search(text))
 
 
-SPELL_EFFECTS = ("", "damage", "heal", "effect")  # "" = just notes, nothing to roll
+SPELL_EFFECTS = ("", "damage", "heal", "buff", "debuff", "effect")  # "" = just notes; "effect" = older rows (buff or debuff)
+SPELL_KINDS = ("damage", "heal", "buff", "debuff")
+DAMAGE_TYPES = ("acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison",
+                "psychic", "radiant", "slashing", "thunder")
+# advantage a lasting effect gives: on the bearer's own attacks, or on attacks made against the bearer
+SPELL_ADV = ("", "attacks_adv", "attacks_dis", "attacked_adv", "attacked_dis")
+ONGOING_KINDS = ("damage", "heal", "temp")
+HELP_EXCEPTIONS = {"sleep": False, "sanctuary": True}
+DICE_TEXT = re.compile(r"^[-+]?\s*(?:\d*d\d+|\d+|mod)(?:\s*[-+]\s*(?:\d*d\d+|\d+|mod))*$", re.I)
+
+
+def _dice_text(v):
+    """A short dice field ('1d4', '-1d4', '2d8+mod', '5'). Anything else is dropped."""
+    v = str(v if v is not None else "").strip()[:40]
+    return v if v and DICE_TEXT.match(v) else ""
+
+
+def _num(v, lo, hi, default=None):
+    if v is None or v == "" or isinstance(v, bool):
+        return default
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, n))
+
+
+def _flag(spell, key, default):
+    v = spell.get(key)
+    return default if v is None or v == "" else bool(v)
 
 
 def spell_info(spell):
-    """Normalise one spell row from the sheet. Rows written before spells could roll
-    have only prepared/level/name/notes; they come back as plain notes."""
+    """Normalise one spell row from the sheet (or the spell book). Rows written before
+    spells could do anything have only prepared/level/name/notes; they come back as
+    plain notes. Rows from before buffs and debuffs were separate say "effect"; they
+    become a buff or a debuff by the old rule (no save = it helps)."""
     if not isinstance(spell, dict):
         spell = {}
+    name = (str(spell.get("name") or "").strip() or "Spell")[:80]
+    notes = str(spell.get("notes") or "")
     effect = spell.get("effect") if spell.get("effect") in SPELL_EFFECTS else ""
     hit = spell.get("hit") if spell.get("hit") in ("attack", *ABILITIES) else ""
-    try:
-        rounds = int(spell.get("rounds")) if spell.get("rounds") not in (None, "") else None
-    except (TypeError, ValueError):
-        rounds = None
-    try:
-        ac = max(-10, min(30, int(spell.get("ac") or 0)))
-    except (TypeError, ValueError):
-        ac = 0
-    return {"name": (str(spell.get("name") or "").strip() or "Spell")[:80], "level": spell.get("level"), "ac": ac,
-            "area": parse_area(spell.get("area") or spell.get("notes")),
-            "effect": effect, "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
-            "condition": str(spell.get("condition") or "").strip()[:60],
-            "rounds": rounds if rounds and 0 < rounds <= 1000 else None}
+    rounds = _num(spell.get("rounds"), 1, 100000)
+    ac = _num(spell.get("ac"), -10, 30, 0)
+    level = _num(spell.get("level"), 0, 9, 0)
+    kind = effect
+    if effect == "effect":
+        helps = HELP_EXCEPTIONS.get(name.lower(), ac > 0 or not hit)
+        kind = "buff" if helps else "debuff"
+    return {
+        "name": name, "level": level, "kind": kind, "effect": effect, "ac": ac,
+        "area": parse_area(spell.get("area") or notes),
+        "dice": str(spell.get("dice") or "").strip()[:60], "hit": hit,
+        "damage_type": spell.get("damage_type") if spell.get("damage_type") in DAMAGE_TYPES else "",
+        # a save for half: most levelled damage spells; cantrips do nothing on a save
+        "save_half": _flag(spell, "save_half", kind == "damage" and hit in ABILITIES and level > 0),
+        "upcast": _dice_text(spell.get("upcast")),
+        "condition": str(spell.get("condition") or "").strip()[:60],
+        "rounds": rounds,
+        "concentration": _flag(spell, "concentration", bool(re.search(r"\bconcentration\b", notes, re.I))),
+        "temp_hp": _dice_text(spell.get("temp_hp")),
+        "max_hp": _num(spell.get("max_hp"), 0, 100, 0),
+        "roll_mod": _dice_text(spell.get("roll_mod")),
+        "dmg_mod": _dice_text(spell.get("dmg_mod")),
+        "adv": spell.get("adv") if spell.get("adv") in SPELL_ADV else "",
+        "ongoing": _dice_text(spell.get("ongoing")),
+        "ongoing_kind": spell.get("ongoing_kind") if spell.get("ongoing_kind") in ONGOING_KINDS else "damage",
+        "ongoing_type": spell.get("ongoing_type") if spell.get("ongoing_type") in DAMAGE_TYPES else "",
+        "ongoing_save": _flag(spell, "ongoing_save", False),
+        "repeat_save": _flag(spell, "repeat_save", False),
+        "targets": _num(spell.get("targets"), 1, 50),
+        "cooldown": parse_cooldown(spell),
+        "notes": notes.strip()[:300],
+    }
 
 
-HELP_EXCEPTIONS = {"sleep": False, "sanctuary": True}
+def spell_lasts(sp):
+    """Does the spell leave something on whoever it lands on (a condition, AC, a roll
+    bonus, damage every turn...)? Then it becomes an effect on them."""
+    return bool(sp["condition"] or sp["ac"] or sp["roll_mod"] or sp["dmg_mod"] or sp["adv"]
+                or sp["ongoing"] or sp["max_hp"])
+
+
+def spell_does_something(sp):
+    """Worth a Cast button in a fight (rows that are only notes aren't)."""
+    return bool(sp["kind"])
 
 
 def spell_helps(sp):
     """Does a spell help whoever it lands on (healing, +AC, Bless) rather than work
-    against them (Bane, Hold Person)? Effect spells with no save are help; a few
-    spells don't follow that. Same rule as L.spellHelps in core.js."""
-    key = sp["name"].lower()
-    if key in HELP_EXCEPTIONS:
-        return HELP_EXCEPTIONS[key]
-    return sp["effect"] == "heal" or sp["ac"] > 0 or (sp["effect"] == "effect" and not sp["hit"])
+    against them (Bane, Hold Person)? Same rule as L.spellHelps in core.js."""
+    return sp["kind"] in ("heal", "buff")
+
+
+# ---- what conditions do to rolls ------------------------------------------------------
+# 5e: attacking while blinded, frightened, poisoned, prone or restrained has disadvantage;
+# attacks against someone blinded, paralyzed, restrained, stunned, unconscious... have advantage.
+ATTACKER_DIS = {"blinded", "frightened", "poisoned", "prone", "restrained"}
+ATTACKER_ADV = {"invisible"}
+TARGET_ADV = {"blinded", "paralyzed", "petrified", "restrained", "stunned", "unconscious"}
+TARGET_DIS = {"invisible"}
+AUTO_FAIL_STR_DEX = {"paralyzed", "petrified", "stunned", "unconscious"}
+
+
+def active_effects(conditions):
+    return [x for x in (conditions or []) if isinstance(x, dict) and not x.get("expired")]
+
+
+def _names(conditions):
+    return {str(x.get("name") or "").strip().lower() for x in active_effects(conditions)}
+
+
+def attack_mode(attacker_conds, target_conds=None, melee=False):
+    """('advantage' | 'disadvantage' | 'normal', [reasons]) for an attack. Advantage and
+    disadvantage cancel out, like the rules say."""
+    adv, dis = [], []
+    for n in sorted(_names(attacker_conds)):
+        if n in ATTACKER_DIS:
+            dis.append(n.capitalize())
+        if n in ATTACKER_ADV:
+            adv.append(n.capitalize())
+    for x in active_effects(attacker_conds):
+        if x.get("adv") == "attacks_adv":
+            adv.append(x["name"])
+        elif x.get("adv") == "attacks_dis":
+            dis.append(x["name"])
+    if target_conds is not None:
+        names = _names(target_conds)
+        for n in sorted(names):
+            if n in TARGET_ADV:
+                adv.append("target " + n)
+            if n in TARGET_DIS:
+                dis.append("target " + n)
+        if "prone" in names:
+            (adv if melee else dis).append("target prone")
+        for x in active_effects(target_conds):
+            if x.get("adv") == "attacked_adv":
+                adv.append("target " + x["name"])
+            elif x.get("adv") == "attacked_dis":
+                dis.append("target " + x["name"])
+    if adv and not dis:
+        return "advantage", adv
+    if dis and not adv:
+        return "disadvantage", dis
+    return "normal", adv + dis
+
+
+def save_mode(conditions, ability):
+    """('auto_fail' | 'disadvantage' | 'normal', reason) for a saving throw."""
+    names = _names(conditions)
+    if ability in ("str", "dex"):
+        for n in sorted(AUTO_FAIL_STR_DEX):
+            if n in names:
+                return "auto_fail", n.capitalize()
+    if ability == "dex" and "restrained" in names:
+        return "disadvantage", "Restrained"
+    return "normal", ""
+
+
+def roll_mods(conditions, key="roll_mod"):
+    """Dice that effects add to rolls: Bless '+1d4' and Bane '-1d4' on attacks and saves
+    (roll_mod), Divine Favor '+1d4' on damage (dmg_mod). Returns [(text, effect name)]."""
+    out = []
+    for x in active_effects(conditions):
+        v = str(x.get(key) or "").strip().replace(" ", "")
+        if v:
+            out.append((v if v[0] in "+-" else "+" + v, x.get("name") or "effect"))
+    return out
+
+
+def with_mods(expr, mods):
+    return expr + "".join(m for m, _ in mods)
+
+
+def damage_multiplier(statblock, damage_type):
+    """(multiplier, word) from a stat block's immunities / resistances / vulnerabilities.
+    Spells are magical, so 'nonmagical' B/P/S resistance doesn't count."""
+    if not damage_type or not isinstance(statblock, dict):
+        return 1, ""
+    for key, mult, word in (("immunities", 0, "immune"), ("resistances", 0.5, "resists"), ("vulnerabilities", 2, "vulnerable")):
+        for part in re.split(r"[;\n]", str(statblock.get(key) or "")):
+            if re.search(rf"\b{damage_type}\b", part, re.I) and not re.search(r"nonmagical|non-magical", part, re.I):
+                return mult, word
+    return 1, ""
 
 
 AREA_KINDS = {"cone": "cone", "line": "line", "cube": "square", "square": "square",

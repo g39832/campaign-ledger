@@ -56,6 +56,10 @@
         <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.roll_to_hit"> On</label></div>
       </div>
       <div class="setting">
+        <div><b>Concentration saves</b></div><div class="desc">When a caster who's concentrating takes damage, roll their Constitution save (DC 10 or half the damage) automatically. A failed save ends the spell on everyone. Off: the log just reminds you to call for it.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.auto_concentration"> Automatic</label></div>
+      </div>
+      <div class="setting">
         <div><b>Death saves: ally bonus</b></div><div class="desc">A hero at 0 HP adds this to death saving throws while a hero who's still standing is right next to them on the battle map. 0 turns it off.</div>
         <div class="ctl"><input type="number" min="0" max="10" data-set="combat.ally_death_save_bonus" style="width:7ch"></div>
       </div>
@@ -162,5 +166,5 @@
 })();
 </script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=48"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=49"></script>
 {% endblock %}

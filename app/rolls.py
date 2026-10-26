@@ -126,6 +126,34 @@ def build_check(conn, check):
     raise F.ApiError("Unknown roll type")
 
 
+def with_effects(conn, ids, check_type, expr, label, mode):
+    """What the roller's effects add: Bless +1d4 / Bane -1d4 on attacks and saves,
+    Divine Favor on damage, and disadvantage on attacks while poisoned, frightened..."""
+    from .rules import attack_mode, roll_mods, save_mode, with_mods
+    if check_type not in ("attack", "spell_attack", "save", "damage", "spell"):
+        return expr, label, mode
+    if ids.get("character_id"):
+        row = conn.execute("SELECT conditions FROM characters WHERE id = ?", (ids["character_id"],)).fetchone()
+    elif ids.get("combatant_id"):
+        row = conn.execute("SELECT conditions FROM combatants WHERE id = ?", (ids["combatant_id"],)).fetchone()
+    else:
+        return expr, label, mode
+    conds = json.loads(row["conditions"] or "[]") if row else []
+    if check_type in ("damage", "spell"):
+        mods = roll_mods(conds, "dmg_mod") if check_type == "damage" else []
+    else:
+        mods = roll_mods(conds)
+    if mods and len(with_mods(expr, mods)) <= dice.MAX_LENGTH:
+        expr = with_mods(expr, mods)
+        label = f"{label} ({', '.join(f'{n} {m}' for m, n in mods)})"
+    if check_type in ("attack", "spell_attack"):
+        auto, why = attack_mode(conds)
+        if auto != "normal":
+            mode = auto if mode == "normal" else ("normal" if mode != auto else mode)
+            label = f"{label} — {auto} ({', '.join(why)})"
+    return expr, label, mode
+
+
 def _player_turn_rules(conn, viewer, check):
     """In a running fight a player attacks only on their own turn, and a move that's
     recharging can't be used. Returns (combatant id, move, turns) when this roll uses
@@ -233,6 +261,7 @@ def api_roll():
                 raise F.ApiError("Players can only roll for their own character", status=403)
         expr, label, kind, subject, got = build_check(conn, check)
         ids.update(got)
+        expr, label, mode = with_effects(conn, got, check.get("type"), expr, label, mode)
         used = _player_turn_rules(conn, viewer, check) if viewer["role"] == "player" else None
         if data.get("label"):
             label = str(data["label"])[:120]

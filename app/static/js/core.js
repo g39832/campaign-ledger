@@ -88,45 +88,167 @@
   function isHealing(row) {
     return /\b(heal|heals|healing|cure|cures)\b/i.test([row && row.name, row && row.damage, row && row.notes].filter(Boolean).join(" "));
   }
-  // Does a spell help whoever it's cast on (heal, +AC, Bless...) or work against them (Hold Person)?
-  // Effect spells with no save are help; a few spells don't follow that.
+  // ---- spells -----------------------------------------------------------------------------
+  // Same rules as rules.spell_info / spell_helps on the server. Older sheet rows say "effect";
+  // they're a buff when they need no save (or raise AC), otherwise a debuff.
   const HELP_EXCEPTIONS = { sleep: false, sanctuary: true };
-  function spellHelps(s) {
-    const k = String(s.name || "").toLowerCase();
-    if (k in HELP_EXCEPTIONS) return HELP_EXCEPTIONS[k];
-    return s.effect === "heal" || s.ac > 0 || (s.effect === "effect" && !s.hit);
+  function spellKind(s) {
+    if (!s) return "";
+    if (s.kind) return s.kind;
+    if (s.effect === "effect") {
+      const k = String(s.name || "").toLowerCase();
+      return (k in HELP_EXCEPTIONS ? HELP_EXCEPTIONS[k] : (Number(s.ac) > 0 || !s.hit)) ? "buff" : "debuff";
+    }
+    return s.effect || "";
   }
-  // What a spell does to the person it lands on, in a few words.
+  const spellHelps = (s) => ["heal", "buff"].includes(spellKind(s));
+  const KIND_WORD = { damage: "Damage", heal: "Healing", buff: "Buff", debuff: "Debuff" };
+  const KIND_ICON = { damage: "wand-sparkles", heal: "heart", buff: "shield-plus", debuff: "zap" };
+  const ADV_WORD = { attacks_adv: "advantage on its attacks", attacks_dis: "disadvantage on its attacks",
+    attacked_adv: "attacks against it have advantage", attacked_dis: "attacks against it have disadvantage" };
+  const ABIL_SHORT = { str: "Str", dex: "Dex", con: "Con", int: "Int", wis: "Wis", cha: "Cha" };
+  function duration(r) {
+    if (!r) return "";
+    if (r >= 4800 && r % 600 === 0) return (r / 600) + " hr";
+    if (r >= 600 && r % 600 === 0) return (r / 600) + " hr";
+    if (r >= 10 && r % 10 === 0) return (r / 10) + " min";
+    return r + (r === 1 ? " round" : " rounds");
+  }
+  // What a spell does to whoever it lands on, in a few words.
   function spellWhat(s, amount) {
-    const bits = [];
-    if (s.effect === "heal") bits.push(amount != null ? "heals " + amount : "heals " + s.dice);
+    const k = spellKind(s), bits = [];
+    if (k === "damage" && s.dice) bits.push((amount != null ? amount : s.dice) + (s.damage_type ? " " + s.damage_type : "") + " damage");
+    if (k === "heal" && s.dice) bits.push("heals " + (amount != null ? amount : s.dice));
+    if (s.temp_hp) bits.push(s.temp_hp + " temp HP");
     if (s.condition) bits.push(s.condition);
-    if (s.ac) bits.push(signed(s.ac) + " AC");
-    if (s.rounds && (s.condition || s.ac)) bits.push(s.rounds >= 100 ? Math.round(s.rounds / 10) + " min" : s.rounds + " rds");
+    if (Number(s.ac)) bits.push(signed(Number(s.ac)) + " AC");
+    if (s.roll_mod) bits.push((/^[-+]/.test(s.roll_mod) ? s.roll_mod : "+" + s.roll_mod) + " to attacks & saves");
+    if (s.dmg_mod) bits.push((/^[-+]/.test(s.dmg_mod) ? s.dmg_mod : "+" + s.dmg_mod) + " damage on hits");
+    if (s.adv) bits.push(ADV_WORD[s.adv]);
+    if (Number(s.max_hp)) bits.push("+" + s.max_hp + " max HP");
+    if (s.ongoing) bits.push((s.ongoing_kind === "heal" ? "heals " + s.ongoing : s.ongoing_kind === "temp" ? s.ongoing + " temp HP" : s.ongoing + " " + (s.ongoing_type || s.damage_type || "") + " damage").replace("  ", " ") + " each turn");
+    if (s.repeat_save && s.hit && s.hit !== "attack") bits.push(ABIL_SHORT[s.hit] + " save each turn to end it");
+    if (s.rounds && (s.condition || Number(s.ac) || s.roll_mod || s.dmg_mod || s.adv || s.ongoing || Number(s.max_hp))) bits.push(duration(s.rounds));
     return bits.join(" · ");
   }
-  /* "Who gets it?" — tap the spell, then tap a person. Each tap casts on that one
-     person right away; tap more people for spells like Bless or Mass Healing Word.
-     people: [{ id, name, info, ally, done }]. */
-  function castPicker({ spell, amount, people, onPick, onDone, busy }) {
-    const helps = spellHelps(spell);
-    const chip = (p) => h("button", { type: "button", class: "cast-chip" + (p.done ? " is-done" : "") + (p.ally ? " is-ally" : " is-foe"),
-      disabled: p.done || busy, "aria-label": (p.done ? "Already cast on " : "Cast on ") + p.name, onclick: () => onPick(p) },
-      p.done ? icon("check", "sm") : null, h("b", null, p.name), p.info ? h("span", { class: "num" }, p.info) : null);
-    const groups = [["Your side", people.filter((p) => p.ally)], ["Other side", people.filter((p) => !p.ally)]];
+  // How it lands: "spell attack +7", "Dex save DC 15", or nothing for spells that just work.
+  function spellLands(s, sc, rule) {
+    if (spellHelps(s)) return "";
+    const atk = sc && sc.attack != null ? " " + signed(sc.attack) : s.attack_bonus != null ? " " + signed(Number(s.attack_bonus)) : "";
+    if (s.hit === "attack" || (rule && s.hit)) return "spell attack" + atk + (s.hit !== "attack" ? " (house rule)" : "");
+    if (s.hit) return ABIL_SHORT[s.hit] + " save" + (s.dc ? " DC " + s.dc : sc && sc.dc ? " DC " + sc.dc : "") + (spellKind(s) === "damage" ? (s.save_half === false || (s.save_half == null && !s.level) ? "" : ", half on a save") : "");
+    return spellKind(s) === "damage" ? "always hits" : "no save";
+  }
+  const levelWord = (s) => !Number(s.level) ? "Cantrip" : "Level " + s.level;
+  // The spell list the server sent (sheet, combat, map). bookSpell("Hold person DC 13") -> Hold Person.
+  function bookSpell(name) {
+    const list = (window.SPELL_BOOK && window.SPELL_BOOK.spells) || [];
+    const key = String(name || "").trim().toLowerCase();
+    let hit = list.find((s) => s.name.toLowerCase() === key);
+    if (!hit) hit = list.slice().sort((a, b) => b.name.length - a.name.length).find((s) => [" ", ":", "("].some((c) => key.startsWith(s.name.toLowerCase() + c)));
+    return hit || null;
+  }
+  // Fill in what a spell row leaves out, close enough to the server's spell_info for showing it.
+  function spellView(s) {
+    const v = Object.assign({ level: 0, dice: "", hit: "", condition: "", rounds: null, ac: 0 }, s);
+    v.kind = spellKind(s);
+    v.level = Number(v.level) || 0;
+    if (v.concentration == null) v.concentration = /\bconcentration\b/i.test(v.notes || "");
+    if (!v.area) v.area = parseArea(v.notes || "");
+    else if (typeof v.area === "string") v.area = parseArea(v.area);
+    return v;
+  }
+  /* A monster's Spells box -> spells to cast. A line naming a book spell ("Fireball",
+     "Hold person DC 13", "Cure wounds 2d8+3") gets the book's details, with the line's own
+     dice, +to hit and DC on top. Other lines are read like attacks:
+       "Fire bolt +5 2d10" · "Healing word heal 1d4+2" · "Web: Restrained 10 rounds" */
+  function monsterSpells(text) {
+    const out = [];
+    String(text || "").split(/\n+/).forEach((raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      const p = parseAttack(line) || {};
+      const book = bookSpell(line);
+      const dc = /\bDC\s*(\d+)/i.exec(line);
+      let spec;
+      if (book) {
+        spec = Object.assign({}, book);
+        if (p.dmg && p.dmg !== book.dice) spec.dice = p.dmg;
+        if (p.hit) { spec.hit = "attack"; spec.attack_bonus = Number(p.hit); }
+      } else if (p.dmg || p.condition) {
+        const kind = p.heal ? "heal" : p.dmg ? "damage" : "debuff";
+        spec = { name: p.name, effect: kind, dice: p.dmg || "", hit: kind === "heal" ? "" : "attack", condition: p.condition || "", rounds: p.rounds || null,
+          notes: line };
+        if (p.hit) spec.attack_bonus = Number(p.hit);
+      } else return;
+      if (dc) spec.dc = Number(dc[1]);
+      if (p.cooldown) spec.cooldown = p.cooldown;
+      out.push(spellView(spec));
+    });
+    return out;
+  }
+
+  /* The one way to cast, on every screen: tap who it's on (tap again to take them off), pick
+     the slot for a levelled spell, then Cast. The server rolls everything and applies it.
+     people: [{ id, name, info, ally }] · chosen: Set of ids · slots: { "1": {max, used} } or null
+     result: the server's cast result, shown underneath with an Undo for the HP. */
+  function castPanel(o) {
+    const s = o.spell, k = spellKind(s), helps = spellHelps(s), max = s.targets || null;
+    const chip = (p) => {
+      const on = o.chosen.has(p.id);
+      return h("button", { type: "button", class: "cast-chip" + (on ? " is-done" : "") + (p.ally ? " is-ally" : " is-foe"), "aria-pressed": on ? "true" : "false",
+        disabled: o.busy || (!on && max && o.chosen.size >= max), "aria-label": (on ? "Take off " : "Cast on ") + p.name, onclick: () => o.onToggle(p) },
+        on ? icon("check", "sm") : null, h("b", null, p.name), p.info ? h("span", { class: "num" }, p.info) : null);
+    };
+    const groups = [["Your side", o.people.filter((p) => p.ally)], ["Other side", o.people.filter((p) => !p.ally)]];
     if (!helps) groups.reverse();
-    const done = people.filter((p) => p.done).length;
-    return h("div", { class: "cast-picker" + (spell.effect === "heal" ? " is-heal" : helps ? " is-help" : " is-harm"), role: "group", "aria-label": "Pick who " + spell.name + " is cast on" },
-      h("div", { class: "cast-head" },
-        icon(spell.effect === "heal" ? "heart" : helps ? "shield-plus" : "zap", "sm"),
-        h("b", null, spell.name), h("span", { class: "cast-what" }, spellWhat(spell, amount))),
-      h("p", { class: "cast-ask" }, done ? "Cast on " + done + ". Tap anyone else it reaches, or Done." : "Who gets it? Tap them."),
-      groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
+    const lvls = s.level && o.slots ? Object.keys(o.slots).map(Number).filter((n) => n >= s.level).sort((a, b) => a - b) : [];
+    const slotPick = s.level ? h("div", { class: "cast-slot row" },
+      lvls.length ? h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Spell slot"),
+        h("select", { "aria-label": "Spell slot level", disabled: o.free, onchange: (e) => o.onSlot(Number(e.target.value)) },
+          lvls.map((n) => { const v = o.slots[n] || o.slots[String(n)], left = v.max - v.used;
+            return h("option", { value: n, selected: n === (o.slot || s.level) }, "Level " + n + " — " + left + " left" + (n > s.level ? " (upcast)" : "")); }))) : null,
+      !lvls.length ? h("label", { class: "field", style: "flex:0 0 auto" }, h("span", null, "Cast at level"),
+        h("select", { "aria-label": "Cast at level", onchange: (e) => o.onSlot(Number(e.target.value)) },
+          [1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => n >= s.level).map((n) => h("option", { value: n, selected: n === (o.slot || s.level) }, "Level " + n + (n > s.level ? " (upcast)" : ""))))) : null,
+      o.allowFree && lvls.length ? h("label", { class: "check", style: "font-size:.9rem" }, h("input", { type: "checkbox", checked: !!o.free, onchange: (e) => o.onFree(e.target.checked) }), "Don't use a slot") : null) : null;
+    const n = o.chosen.size;
+    const res = o.result;
+    return h("div", { class: "cast-picker is-" + (k === "heal" ? "heal" : helps ? "help" : "harm"), role: "group", "aria-label": "Cast " + s.name },
+      h("div", { class: "cast-head" }, icon(KIND_ICON[k] || "zap", "sm"), h("b", null, s.name),
+        h("span", { class: "tag" }, levelWord(s)), s.concentration ? h("span", { class: "tag", title: "Concentration: casting another concentration spell ends it, and damage can break it" }, "Concentration") : null,
+        h("span", { class: "cast-what" }, [spellWhat(s), o.lands].filter(Boolean).join(" · "))),
+      s.notes ? h("p", { class: "faint cast-notes" }, s.notes) : null,
+      res ? castResult(res, o.onUndo) : null,
+      res ? null : h("p", { class: "cast-ask" }, n ? "Casting on " + n + (max ? " of up to " + max : "") + ". Tap anyone else it reaches, then Cast." : max === 1 ? "Who is it on? Tap them." : "Who does it reach? Tap each one" + (max ? " (up to " + max + ")" : "") + "."),
+      res ? null : groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
         groups.filter(([, l]) => l.length).length > 1 ? h("div", { class: "lbl" }, label) : null,
         h("div", { class: "cast-chips" }, list.map(chip)))),
-      people.length ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
-      h("div", { class: "row", style: "margin-top:10px" },
-        h("button", { type: "button", class: "btn btn-sm" + (done ? " btn-primary" : ""), onclick: onDone }, done ? "Done" : "Cancel")));
+      res || o.people.length ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
+      res ? null : slotPick,
+      h("div", { class: "row", style: "margin-top:10px;gap:8px" },
+        res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration), onclick: o.onCast },
+          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : " Cast" + (n ? " on " + n : "")),
+        h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
+  }
+  const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
+  function castResult(r, onUndo) {
+    return h("div", { class: "cast-result", role: "status" },
+      h("div", { class: "cast-res-head" }, h("b", null, r.caster + " cast " + r.spell), r.spent ? h("span", { class: "tag" }, "level " + r.slot + " slot used") : null),
+      r.targets.length ? h("ul", { class: "cast-res-list" }, r.targets.map((t) => h("li", { class: HOW_CLASS[t.how] || "" }, t.text))) : h("p", { class: "faint", style: "margin:4px 0" }, "Concentrating on it."),
+      onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
+  }
+  /* Send a cast to the server: { caster_id, spell | book, targets, slot, free }. done(response)
+     after it lands (null if it didn't). Out of slots: the toast offers to cast it without one. */
+  function castSpell(eid, body, done) {
+    act("POST", "/api/encounters/" + eid + "/cast", body, (d) => {
+      done(d);
+      if (d && d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
+    }, { onError: (err) => {
+      done(null);
+      toast(err.message, "error", err.data && err.data.needs_free
+        ? { ms: 12000, action: { label: "Cast without a slot", run: () => castSpell(eid, Object.assign({}, body, { free: true, op_id: uid() }), done) } } : undefined);
+    } });
   }
   /* One stat-block line -> something to roll. Understands the book style and quick shorthand:
        "Scimitar. Melee Weapon Attack: +4 to hit ... Hit: 5 (1d6 + 2)" -> { name, hit: "+4", dmg: "1d6+2" }
@@ -603,5 +725,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

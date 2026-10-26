@@ -818,6 +818,32 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .cast-picker.is-harm .cast-chip.is-done { background: var(--danger); border-color: var(--danger); color: #fff; }
 .cast-chip.is-done .num { color: inherit; opacity: .8; }
 .cast-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* spells in a fight: one row per spell, the cast panel, and what happened */
+.spell-row { display: flex; align-items: center; gap: 8px; padding: 6px 0 6px 10px; border-left: 3px solid var(--line-strong, var(--line)); margin: 4px 0; }
+.spell-row.does-damage { border-left-color: var(--accent); }
+.spell-row.does-heal { border-left-color: var(--hp-high); }
+.spell-row.does-buff { border-left-color: var(--brass); }
+.spell-row.does-debuff { border-left-color: var(--danger); }
+.spell-row .sr-main { flex: 1 1 auto; min-width: 0; }
+.spell-row .sr-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.spell-row .sr-name b { overflow-wrap: anywhere; }
+.spell-row .sr-what { font-size: .84rem; overflow-wrap: anywhere; }
+.spell-row > .btn, .spell-row > .tag { flex: 0 0 auto; }
+.sr-slots { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+.tag.is-off { opacity: .55; text-decoration: line-through; }
+.cast-notes { margin: 4px 0 0; font-size: .85rem; overflow-wrap: anywhere; }
+.cast-slot { align-items: flex-end; gap: 10px; margin-top: 10px; }
+.cast-result { margin: 10px 0 2px; padding: 8px 10px; border-radius: 6px; background: var(--brass-soft); }
+.cast-res-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.cast-res-list { margin: 6px 0 4px; padding-left: 18px; }
+.cast-res-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.cast-res-list li.hits { color: var(--text); }
+.cast-res-list li.misses { color: var(--text-3); }
+.spell-card.does-buff { border-left-color: var(--brass); }
+.spell-card.does-debuff { border-left-color: var(--danger); }
+.spell-more { grid-column: 1 / -1; }
+.spell-more > summary { cursor: pointer; font-size: .8rem; }
+.spell-more .spell-fields { margin-top: 6px; }
 .btn.is-armed { outline: 2px solid var(--hp-high); outline-offset: 2px; }
 .hit-verdict .misses { color: var(--text-3); }
 

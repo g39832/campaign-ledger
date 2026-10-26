@@ -251,11 +251,13 @@
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
     rowActions: (i, row) => L.isHealing(row)
       ? h("span", { class: "roll-row" },
-        h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "damage:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"))
+        h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "damage:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "It's really a spell: move it to Spells (everything on the row comes along)", onclick: () => moveToSpells(i) }, icon("wand-sparkles", "sm"), " To spells"))
       : h("span", { class: "roll-row" },
         h("button", { type: "button", class: "btn btn-sm", "data-roll": "attack:" + i, title: "Roll to hit (shift = advantage)" }, "Hit"),
         h("button", { type: "button", class: "btn btn-sm", "data-roll": "damage:" + i, title: "Roll damage" }, "Dmg"),
-        h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "damage:" + i, "data-crit": "1", title: "Critical hit: double the damage dice" }, "Crit")),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "damage:" + i, "data-crit": "1", title: "Critical hit: double the damage dice" }, "Crit"),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "It's really a spell: move it to Spells (everything on the row comes along)", onclick: () => moveToSpells(i) }, icon("wand-sparkles", "sm"), " To spells")),
   });
 
   function eqWeight() {
@@ -269,10 +271,14 @@
     { key: "notes", label: "Notes" },
   ], { qty: 1, name: "", weight: null, notes: "" }, { addLabel: "Add item", empty: "Pack is empty.", after: eqWeight });
 
-  // ---- spells: each one can just be notes, or deal damage, heal, or put an effect on someone ----
-  const SPELL_DOES = [["", "Just notes"], ["damage", "Damage"], ["heal", "Healing"], ["effect", "Effect / condition"]];
+  // ---- spells: notes, or damage, healing, a buff or a debuff, with everything it leaves behind ----
+  const SPELL_DOES = [["", "Just notes"], ["damage", "Damage"], ["heal", "Healing"], ["buff", "Buff (helps)"], ["debuff", "Debuff (hinders)"]];
   const SPELL_ABIL = [["str", "Strength"], ["dex", "Dexterity"], ["con", "Constitution"], ["int", "Intelligence"], ["wis", "Wisdom"], ["cha", "Charisma"]];
-  const SPELL_HIT = [["", "No roll to land"], ["attack", "Spell attack roll"]].concat(SPELL_ABIL.map(([k, l]) => [k, l + " save"]));
+  const SPELL_HIT = [["", "No roll — it just lands"], ["attack", "Spell attack roll"]].concat(SPELL_ABIL.map(([k, l]) => [k, l + " save"]));
+  const DAMAGE_TYPES = ["", "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+  const ADV_PICK = [["", "No advantage change"], ["attacks_adv", "Its attacks have advantage"], ["attacks_dis", "Its attacks have disadvantage"],
+    ["attacked_adv", "Attacks against it have advantage"], ["attacked_dis", "Attacks against it have disadvantage"]];
+  const ONGOING_PICK = [["damage", "damage"], ["heal", "healing"], ["temp", "temp HP"]];
   const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null, ac: null };
   function renderSpells() {
     const box = $("#spells");
@@ -285,42 +291,75 @@
     };
     const sp = derived().spell;
     // Short fields (dice, condition with its suggestion list) stay inputs; names and notes wrap.
-    const text = (i, key, attrs) => (attrs && attrs.list) || key === "dice"
-      ? h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs))
+    const text = (i, key, attrs) => (attrs && attrs.list) || attrs && attrs.short
+      ? h("input", Object.assign({ type: "text", value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs, { short: null }))
       : L.wrapText(Object.assign({ value: list[i][key] ?? "", oninput: (e) => set(i, key, e.target.value) }, attrs));
-    const pick = (i, key, options, attrs) => h("select", Object.assign({ onchange: (e) => set(i, key, e.target.value, true) }, attrs),
-      options.map(([v, l]) => h("option", { value: v, selected: (list[i][key] || "") === v }, l)));
+    const pick = (i, key, options, attrs, value) => h("select", Object.assign({ onchange: (e) => set(i, key, e.target.value, true) }, attrs),
+      options.map(([v, l]) => h("option", { value: v, selected: (value ?? (list[i][key] || "")) === v }, l)));
+    const num = (i, key, attrs) => h("input", Object.assign({ type: "number", value: list[i][key] ?? "",
+      oninput: (e) => set(i, key, e.target.value === "" ? null : Number(e.target.value)), onchange: () => renderSpells() }, attrs));
+    const chk = (i, key, label, on, title) => h("label", { class: "check", style: "font-size:.88rem", title: title || null },
+      h("input", { type: "checkbox", checked: on, onchange: (e) => set(i, key, e.target.checked, true) }), label);
+    const field = (label, el, cls) => h("label", { class: "field" + (cls ? " " + cls : "") }, h("span", null, label), el);
     const cards = list.map((s, i) => {
-      const does = s.effect || "";
+      const v = L.spellView(s), does = v.kind;
       const rolls = [];
       if (does === "damage" && s.hit === "attack") rolls.push(h("button", { type: "button", class: "btn btn-sm", "data-roll": "spell_attack", title: "Roll a spell attack" }, "Attack" + (sp ? " " + signed(sp.atk) : "")));
       if (does === "damage" && s.dice) rolls.push(h("button", { type: "button", class: "btn btn-sm", "data-roll": "spell:" + i, title: "Roll damage" }, "Dmg"),
         s.hit === "attack" ? h("button", { type: "button", class: "btn btn-sm btn-quiet", "data-roll": "spell:" + i, "data-crit": "1", title: "Critical: double the dice" }, "Crit") : null);
       if (does === "heal" && s.dice) rolls.push(h("button", { type: "button", class: "btn btn-sm btn-heal", "data-roll": "spell:" + i, title: "Roll healing" }, icon("heart", "sm"), " Heal"));
       const save = s.hit && s.hit !== "attack" ? h("span", { class: "tag" }, (SPELL_ABIL.find(([k]) => k === s.hit) || [, ""])[1] + " save" + (sp ? " · DC " + sp.dc : "")) : null;
-      const cond = s.condition || (does === "effect" && Number(s.ac)) ? h("span", { class: "tag" + (Number(s.ac) > 0 ? " ac-tag" : "") },
-        (s.condition || s.name) + (Number(s.ac) ? " " + signed(Number(s.ac)) + " AC" : "") + (s.rounds ? " · " + s.rounds + " rds" : "")) : null;
+      const what = L.spellWhat(v);
+      const summary = what && does !== "damage" && does !== "heal" ? h("span", { class: "tag" + (Number(s.ac) > 0 ? " ac-tag" : "") }, what) : null;
       const del = h("button", { type: "button", class: "icon-btn sm", "aria-label": "Remove spell", title: "Remove",
         onclick: () => { const l = clone(model.spells); l.splice(i, 1); b.set("spells", l, true); renderSpells(); } }, icon("trash-2", "sm"));
+      const back = s.from_attack ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Put it back in Attacks exactly as it was",
+        onclick: () => {
+          const l = clone(model.spells); const [row] = l.splice(i, 1);
+          b.set("spells", l, true); b.set("attacks", (clone(model.attacks) || []).concat([row.from_attack]), true);
+          renderSpells(); renderAttacks(); toast(row.name + " is back in Attacks.", "ok");
+        } }, icon("undo-2", "sm"), " Back to attacks") : null;
+      const harmful = does === "damage" || does === "debuff";
+      const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
+      // the rarer effects, folded away until needed (open when one is set)
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
+        h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
+        h("div", { class: "spell-fields" },
+          does !== "damage" ? field("AC change", num(i, "ac", { min: -10, max: 30, placeholder: "e.g. +2", title: "Temporary AC while it lasts: +2 Shield of Faith, +5 Shield, −2 Slow" })) : null,
+          does !== "heal" ? field(does === "debuff" ? "Penalty to attacks & saves" : "Bonus to attacks & saves", text(i, "roll_mod", { short: true, placeholder: does === "debuff" ? "-1d4" : "1d4", title: "Bless: 1d4 · Bane: -1d4" })) : null,
+          does === "buff" ? field("Extra damage on hits", text(i, "dmg_mod", { short: true, placeholder: "1d4", title: "Divine Favor: 1d4" })) : null,
+          does !== "heal" ? field("Advantage", pick(i, "adv", ADV_PICK)) : null,
+          does === "buff" || does === "heal" ? field("Temp HP", text(i, "temp_hp", { short: true, placeholder: "1d4+4", title: "False Life: 1d4+4" })) : null,
+          does === "buff" ? field("More max HP", num(i, "max_hp", { min: 0, max: 100, placeholder: "e.g. 5", title: "Aid: 5. It goes away again when the effect ends." })) : null,
+          field("Every turn", h("div", { class: "row", style: "gap:4px;flex-wrap:nowrap" },
+            text(i, "ongoing", { short: true, placeholder: "2d10", title: "Rolled at the start of the target's turn while it lasts (Moonbeam 2d10, Heroism mod, Regenerate 1)", style: "flex:1 1 60px;min-width:0" }),
+            pick(i, "ongoing_kind", ONGOING_PICK, { style: "flex:0 1 auto;width:auto" }, s.ongoing_kind || (does === "heal" ? "heal" : "damage")))),
+          s.ongoing && (s.ongoing_kind || "damage") === "damage" && s.hit && s.hit !== "attack" ? chk(i, "ongoing_save", "They save each turn for half", !!s.ongoing_save) : null,
+          harmful && s.hit && s.hit !== "attack" && lasting ? chk(i, "repeat_save", "Save at the end of each turn to end it", !!s.repeat_save, "Hold Person: a Wisdom save at the end of each of its turns") : null,
+          does === "damage" && s.hit && s.hit !== "attack" ? chk(i, "save_half", "Half damage on a save", v.save_half != null ? !!v.save_half : Number(s.level) > 0) : null,
+          does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
+          field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
+          field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
+          field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") },
         h("div", { class: "spell-top" },
           text(i, "name", { placeholder: "Spell name", "aria-label": "Spell name", class: "spell-name" }),
-          h("div", { class: "spell-rolls roll-row" }, rolls, save, cond),
-          del),
+          h("div", { class: "spell-rolls roll-row" }, rolls, save, summary, v.concentration ? h("span", { class: "tag" }, "Concentration") : null),
+          back, del),
         h("div", { class: "spell-fields" },
-          h("label", { class: "field" }, h("span", null, "Does"), pick(i, "effect", SPELL_DOES)),
-          does === "damage" || does === "heal" ? h("label", { class: "field" }, h("span", null, does === "heal" ? "Healing dice" : "Damage dice"),
-            text(i, "dice", { placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => renderSpells() })) : null,
-          does === "damage" || does === "effect" ? h("label", { class: "field" }, h("span", null, "Lands by"), pick(i, "hit", SPELL_HIT)) : null,
-          does === "effect" || does === "damage" ? h("label", { class: "field" }, h("span", null, does === "effect" ? "Condition / effect" : "Also applies (optional)"),
-            text(i, "condition", { placeholder: does === "effect" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => renderSpells() })) : null,
-          does === "effect" ? h("label", { class: "field" }, h("span", null, "AC change"),
-            h("input", { type: "number", min: -10, max: 30, value: s.ac ?? "", placeholder: "e.g. +2", title: "Temporary AC while it lasts: +2 Shield of Faith, +5 Shield, +3 Mage Armor-ish",
-              oninput: (e) => set(i, "ac", e.target.value === "" ? null : Number(e.target.value)), onchange: () => renderSpells() })) : null,
-          (s.condition || Number(s.ac)) && (does === "effect" || does === "damage") ? h("label", { class: "field" }, h("span", null, "Rounds"),
-            h("input", { type: "number", min: 1, max: 1000, value: s.rounds ?? "", placeholder: "—", title: "How many rounds it lasts (1 minute = 10)",
-              oninput: (e) => set(i, "rounds", e.target.value === "" ? null : Number(e.target.value)) })) : null,
-          h("label", { class: "field spell-notes" }, h("span", null, "Time · range · notes"), text(i, "notes", { placeholder: "1 action · 120 ft" }))));
+          field("Does", pick(i, "effect", SPELL_DOES, null, does)),
+          field("Level", pick(i, "level", [["0", "Cantrip"]].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), "Level " + n])), null, String(Number(s.level) || 0))),
+          does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
+            text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => renderSpells() })) : null,
+          does === "damage" ? field("Damage type", pick(i, "damage_type", DAMAGE_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]))) : null,
+          harmful ? field("Lands by", pick(i, "hit", SPELL_HIT)) : null,
+          does && does !== "heal" ? field(does === "damage" ? "Also leaves (optional)" : "Condition / effect",
+            text(i, "condition", { placeholder: does === "buff" ? "Blessed" : does === "debuff" ? "Frightened" : "e.g. Prone", list: "spell-conds", onchange: () => renderSpells() })) : null,
+          does && does !== "heal" || s.ongoing ? field("Rounds", num(i, "rounds", { min: 1, max: 100000, placeholder: "—", title: "How many rounds it lasts (1 minute = 10, 1 hour = 600)" })) : null,
+          does ? chk(i, "concentration", "Concentration", !!v.concentration, "Casting another concentration spell ends it, and taking damage can break it") : null,
+          more,
+          field("Time · range · notes", text(i, "notes", { placeholder: "1 action · 120 ft" }), "spell-notes")));
     });
     box.replaceChildren(
       list.length ? h("div", { class: "spell-list" }, cards) : h("p", { class: "faint", style: "margin:4px 0" }, "No spells yet."),
@@ -336,20 +375,52 @@
           if (!panel.hidden) { renderSpellBook(); $("#sb-q").focus(); }
         } }, icon("book-open", "sm"), " Add from spell list")));
     if (!$("#spell-book").hidden) renderSpellBook();
+    L.restoreOpen(box);
+  }
+
+  /* An attack row that's really a spell (Mend 1d8 heal, Shield of faith +2 AC, Entangle: makes
+     prone) moves to Spells with its best guess at what it does. Everything on the row comes
+     along, and "Back to attacks" puts it back exactly as it was. */
+  const COND_WORDS = ["Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated", "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
+  function attackToSpell(row) {
+    const all = [row.name, row.bonus, row.damage, row.notes].filter(Boolean).join(" ");
+    const dice = (String(row.damage || "").match(/\d*d\d+(?:\s*[+-]\s*\d+)?/i) || [""])[0].replace(/\s/g, "");
+    const type = DAMAGE_TYPES.find((t) => t && new RegExp("\\b" + t + "\\b", "i").test(all)) || "";
+    const ac = /([+-]\s*\d+)\s*(?:to\s+)?ac\b/i.exec(all);
+    const cond = COND_WORDS.find((w) => new RegExp("\\b" + w.replace(/ed$/, "") + "(?:e|ed)?\\b", "i").test(all)) || "";
+    const notes = [row.notes, row.bonus && !/^\s*(?:1?d20)?\s*[+-]?\s*\d*\s*$/i.test(row.bonus) ? "Atk/DC " + row.bonus : ""].filter(Boolean).join(" · ");
+    const s = Object.assign({}, SPELL_BLANK, { name: (row.name || "Spell").trim(), notes, level: 0, area: row.area || "", cooldown: row.cooldown ?? null,
+      from_attack: Object.assign({}, row) });
+    if (L.isHealing(row) && dice) Object.assign(s, { effect: "heal", dice });
+    else if (dice) Object.assign(s, { effect: "damage", dice, damage_type: type, hit: String(row.bonus || "").trim() ? "attack" : "", condition: cond });
+    else if (ac) Object.assign(s, { effect: Number(ac[1].replace(/\s/g, "")) > 0 ? "buff" : "debuff", condition: s.name, ac: Number(ac[1].replace(/\s/g, "")) });
+    else if (cond) Object.assign(s, { effect: "debuff", condition: cond, hit: "attack" });
+    return s;
+  }
+  function moveToSpells(i) {
+    const rows = clone(model.attacks) || [];
+    const [row] = rows.splice(i, 1);
+    if (!row) return;
+    const s = attackToSpell(row);
+    b.set("attacks", rows, true);
+    b.set("spells", (clone(model.spells) || []).concat([s]), true);
+    renderAttacks(); renderSpells();
+    toast(s.name + " moved to Spells" + (s.effect ? " as " + ({ damage: "a damage", heal: "a healing", buff: "a buff", debuff: "a debuff" })[s.effect] + " spell" : "") + ". Check what it does there.", "ok", { ms: 7000 });
   }
 
   // ---- the spell list: common spells ready to add ---------------------------------------
   const BOOK = (window.SPELL_BOOK && window.SPELL_BOOK.spells) || [];
-  const KIND_LABEL = { damage: "Damage", heal: "Healing", effect: "Effect" };
+  const KIND_LABEL = { damage: "Damage", heal: "Healing", buff: "Buff", debuff: "Debuff" };
   function bookSummary(s) {
-    const bits = [KIND_LABEL[s.effect]];
-    if (s.dice) bits.push(s.dice);
+    const bits = [KIND_LABEL[s.effect], L.levelWord(s)];
+    if (s.dice) bits.push(s.dice + (s.damage_type ? " " + s.damage_type : ""));
     if (s.hit === "attack") bits.push("spell attack");
     else if (s.hit) bits.push(s.hit.toUpperCase() + " save");
-    if (s.condition && s.condition !== s.name) bits.push(s.condition);
-    if (s.ac) bits.push(signed(s.ac) + " AC");
-    if (s.rounds) bits.push(s.rounds + (s.rounds === 1 ? " round" : " rounds"));
-    return bits.join(" · ");
+    const what = L.spellWhat(s).replace(/^[^·]*damage · |^heals [^·]* · ?/, "");
+    if (what && s.effect !== "damage" && s.effect !== "heal") bits.push(what);
+    else if (s.condition && s.condition !== s.name) bits.push(s.condition);
+    if (s.concentration) bits.push("concentration");
+    return bits.filter(Boolean).join(" · ");
   }
   function renderSpellBook() {
     const q = $("#sb-q").value.trim().toLowerCase(), kind = $("#sb-kind").value;

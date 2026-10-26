@@ -87,6 +87,16 @@ Options:
 
 Conditions are left for you to decide.
 
+## Spells
+
+Every spell on a sheet is one of four kinds: **Damage**, **Healing**, **Buff** (helps whoever it lands on) or **Debuff** (works against them). Set its level, dice (`mod` = your spellcasting modifier), damage type, how it lands (spell attack or a save), the condition it leaves, how many rounds it lasts and whether it needs concentration. Under **More effects**: AC change, a bonus or penalty to attacks and saves (Bless `1d4`, Bane `-1d4`), extra damage on hits, advantage, temp HP, more max HP, dice every turn (Moonbeam, Heroism), a save each turn to end it (Hold Person), half on a save, upcast dice, how many it reaches, an area and a cooldown. **Add from spell list** has 75 ready-made spells from the SRD with all of this filled in.
+
+An attack row that's really a spell has a **To spells** button: it moves to Spells with its best guess at what it does, keeping everything on the row (**Back to attacks** puts it back exactly as it was).
+
+To cast in a fight (Combat screen, battle map, or a player's own screen for heals and buffs): press **Cast**, tap who it reaches, pick the slot, **Cast on N**. The server does the rest in one go: spends the slot (upcasting adds dice), drops the caster's old concentration, rolls to hit against AC or each target's save against your DC (with the roll-to-hit house rule on, harmful spells roll against AC), rolls damage once for an area (per target for attack spells; a natural 20 doubles the dice), halves it on a save, applies monster resistances, immunities and vulnerabilities, heals, gives temp HP, and puts the effect on them. Effects count down on the caster's turn and remove themselves. While they last they change rolls: Bless and Bane on attacks and saves, advantage and disadvantage from Faerie Fire, Blur, Poisoned, Paralyzed and the other conditions, and Paralyzed/Stunned creatures fail Strength and Dexterity saves. A concentrating caster who takes damage rolls the Constitution save automatically (Settings → Combat); failing it, dropping to 0 HP, or casting another concentration spell ends the spell on everyone. Every roll lands in the dice tray, every result in the combat log, and Undo HP works on the damage and healing.
+
+Monsters cast from their Spells box: a line that names a spell from the list ("Fireball", "Hold person DC 13") gets its details, and the DM can cast any listed spell for a monster on the fly. Their DC and attack come from "spell save DC 13, +5 to hit" in their traits.
+
 ## Dice
 
 Open the dice tray with the **Dice** button in the top bar, or press **D**.

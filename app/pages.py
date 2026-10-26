@@ -1,6 +1,6 @@
 from flask import Blueprint, abort, redirect, render_template, url_for
 
-from . import fields as F
+from . import fields as F, spell_book
 from .campaigns import active_campaign, get_campaign, list_campaigns
 from .characters import get_character, list_characters
 from .combat import encounter_state, list_encounters
@@ -24,6 +24,7 @@ def _globals():
         "CONDITIONS": CONDITIONS,
         "JOURNAL_KINDS": F.JOURNAL_KINDS,
         "ac_bonus": ac_bonus,
+        "SPELL_BOOK": spell_book.book(),
     }
 
 

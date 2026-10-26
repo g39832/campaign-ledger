@@ -14,7 +14,7 @@ from . import fields as F
 from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, clamp_position, map_dict, player_view, fog_image
-from .rules import ac_bonus, cooldown_left, derived, is_healing, parse_cooldown, spell_helps, spell_info
+from .rules import ac_bonus, cooldown_left, derived, is_healing, parse_cooldown, spell_does_something, spell_helps, spell_info, spell_lasts
 
 bp = Blueprint("play", __name__)
 
@@ -155,7 +155,7 @@ def _own_character(conn, char_id):
         a["recharging"] = cooldown_left(c["conditions"], (a["name"] or "Attack").strip() or "Attack", fight["eid"]) if fight else 0
     out["my_turn"] = None if fight is None else fight["current_id"] == fight["cb_id"]
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
-                     if spell_info(s)["effect"] or spell_info(s)["ac"] or spell_info(s)["condition"]]
+                     if spell_does_something(spell_info(s))]
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -406,11 +406,14 @@ def api_me_disengage():
 @bp.post("/api/play/cast")
 def api_me_cast():
     """A player casts one of their healing or buff spells on people in the party
-    (themselves included). {spell: index on the sheet, targets: [character ids]}.
-    Healing is rolled here, once, and every target gets that much."""
-    from . import dice
-    from .rest import change_character_hp, put_effect
-    from .rolls import build_check, roll_dict, save_roll
+    (themselves included). {spell: index on the sheet, targets: [character ids], slot}.
+    In a running fight it goes through the spell engine, like the DM's casts: the slot,
+    concentration, temp HP and effects that count down on the caster's turn. Outside a
+    fight the healing, temp HP and effect go straight onto the sheets."""
+    from .combat import Ctx
+    from .rest import active_combatant
+    from .rolls import roll_dict
+    from .spells import cast as engine_cast
     ident, char_id = _own("cast_spells")
     data = request.get_json(silent=True) or {}
     targets = data.get("targets")
@@ -419,21 +422,13 @@ def api_me_cast():
     targets = list(dict.fromkeys(targets))
     op_id = str(data.get("op_id") or "")[:80] or None
     conn = get_db()
-    if op_id:
-        old = conn.execute("SELECT * FROM rolls WHERE op_id = ?", (op_id,)).fetchone()
-        if old:
-            return jsonify({"roll": roll_dict(old, ident), "character": _own_character(conn, char_id), "repeat": True})
     me = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
     try:
         index = int(data.get("spell"))
         spell = spell_info((me.get("spells") or [])[index])
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That spell isn't on your sheet any more")
-    heals = spell["effect"] == "heal" and bool(spell["dice"])
-    effect = spell["condition"] or (spell["name"] if spell["ac"] > 0 else "")
     if not spell_helps(spell):
-        effect = ""
-    if not heals and not effect:
         raise F.ApiError(f"{spell['name']} doesn't heal or boost anyone. Ask the DM to apply it.")
     marks = ",".join("?" * len(targets))
     rows = conn.execute(f"SELECT id, name FROM characters WHERE id IN ({marks}) AND campaign_id = ? AND archived = 0 AND kind = 'pc'",
@@ -441,30 +436,105 @@ def api_me_cast():
     if len(rows) != len(targets):
         raise F.ApiError("You can only cast this on people in your party", status=403)
     names = {r["id"]: r["name"] for r in rows}
-    who = ", ".join(names[t] for t in targets)
-    roll_id, got, skipped = None, [], []
+    effect = (spell["condition"] or spell["name"]) if spell_lasts(spell) else ""
     with tx() as conn:
-        if heals:
-            expr, label, _kind, subject, ids = build_check(conn, {"type": "spell", "key": index, "character_id": char_id})
-            try:
-                result = dice.roll(expr)
-            except dice.DiceError as e:
-                raise F.ApiError(str(e))
-            amount = max(0, result["total"])
-            roll_id = save_roll(conn, ident, ident["campaign_id"], result, label=label, kind="heal", subject=subject, ids=ids,
-                                op_id=op_id, outcome=f"Heals {who} for {amount}")
+        from .db import claim_op
+        if not claim_op(conn, op_id):
+            return jsonify({"character": _own_character(conn, char_id), "repeat": True})
+        mine = active_combatant(conn, char_id)
+        cbs = {}
+        if mine:
             for t in targets:
-                change_character_hp(conn, t, {"op": "heal", "amount": amount}, by=f"{spell['name']}, {me['name']}")
-        if effect:
-            for t in targets:
-                done = put_effect(conn, t, effect, spell["rounds"], spell["ac"], spell["name"] if spell["condition"] else "", char_id)
-                (got if done else skipped).append(names[t])
+                row = conn.execute("SELECT id FROM combatants WHERE encounter_id = ? AND character_id = ?", (mine["encounter_id"], t)).fetchone()
+                if row:
+                    cbs[t] = row["id"]
+        if mine and len(cbs) == len(targets):
+            ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
+            result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [cbs[t] for t in targets], "slot": data.get("slot")}, ident)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
+        else:
+            result = _cast_outside_a_fight(conn, ident, me, spell, targets, names, data.get("slot"))
     conn = get_db()
-    out = {"character": _own_character(conn, char_id), "spell": spell["name"], "effect": effect,
-           "targets": [names[t] for t in targets], "added": got, "skipped": skipped}
-    if roll_id:
-        out["roll"] = roll_dict(conn.execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone(), ident)
+    rolls = [roll_dict(r, ident) for r in conn.execute(
+        f"SELECT * FROM rolls WHERE id IN ({','.join('?' * len(result['rolls'])) or 'NULL'}) ORDER BY id", result["rolls"]).fetchall()]
+    result["rolls"] = rolls
+    by_name = {t["name"]: t for t in result["targets"]}
+    out = {"character": _own_character(conn, char_id), "spell": spell["name"], "effect": effect, "cast": result,
+           "targets": [names[t] for t in targets],
+           "added": [n for n in (names[t] for t in targets) if by_name.get(n, {}).get("effect_how") in ("added", "refreshed")],
+           "skipped": [n for n in (names[t] for t in targets) if by_name.get(n, {}).get("effect_how") == "already"]}
+    heal = next((r for r in rolls if r["kind"] == "heal"), None)
+    if heal:
+        out["roll"] = heal
     return jsonify(out)
+
+
+def _cast_outside_a_fight(conn, ident, me, sp, targets, names, slot):
+    """Healing, temp HP and the effect, straight onto the party's sheets."""
+    from . import dice
+    from .rest import change_character_hp, put_effect
+    from .rolls import save_roll
+    from .spells import spell_dice
+    d = derived(me)
+    mod = d["mods"][d["spell"]["ability"]] if d["spell"] else None
+    level = sp["level"]
+    try:
+        slot = int(slot) if slot not in (None, "") else level
+    except (TypeError, ValueError):
+        raise F.ApiError("Slot level must be a number")
+    if level and not level <= slot <= 9:
+        raise F.ApiError(f"{sp['name']} is a level {level} spell — cast it with a slot of level {level} or higher")
+    slots = me.get("spell_slots") or {}
+    spent = False
+    if level and any(isinstance(v, dict) and (v.get("max") or 0) > 0 for v in slots.values()):
+        cur = dict(slots.get(str(slot)) or {})
+        if (cur.get("max") or 0) - (cur.get("used") or 0) <= 0:
+            raise F.ApiError(f"You have no level {slot} slots left")
+        cur["used"] = (cur.get("used") or 0) + 1
+        slots = dict(slots, **{str(slot): cur})
+        conn.execute("UPDATE characters SET spell_slots = ?, updated_at = ? WHERE id = ?", (json.dumps(slots), now_iso(), me["id"]))
+        spent = True
+    who = ", ".join(names[t] for t in targets)
+    ids = {"character_id": me["id"]}
+    roll_ids, results = [], {t: [] for t in targets}
+
+    def roll(text, label, kind, outcome):
+        try:
+            r = dice.roll(spell_dice(sp, text, mod, slot)) if not spell_dice(sp, text, mod, slot).lstrip("-").isdigit() else None
+        except dice.DiceError as e:
+            raise F.ApiError(f"{sp['name']}: {e}")
+        if r is None:
+            n = int(spell_dice(sp, text, mod, slot))
+            r = {"terms": [{"type": "mod", "value": n}], "modifier": n, "total": n, "natural": None, "expression": str(n), "mode": "normal"}
+        r = dict(r, applied=True)
+        roll_ids.append(save_roll(conn, ident, ident["campaign_id"], r, label=label, kind=kind, subject=me["name"], ids=ids,
+                                  outcome=outcome(max(0, r["total"]))))
+        return max(0, r["total"])
+
+    by = f"{sp['name']}, {me['name']}"
+    if sp["kind"] == "heal" and sp["dice"]:
+        amount = roll(sp["dice"], f"{sp['name']} healing", "heal", lambda n: f"Heals {who} for {n}")
+        for t in targets:
+            change_character_hp(conn, t, {"op": "heal", "amount": amount}, by=by)
+            results[t].append(f"heals {amount}")
+    if sp["temp_hp"]:
+        amount = roll(sp["temp_hp"], f"{sp['name']} temp HP", "heal", lambda n: f"{n} temp HP for {who}")
+        for t in targets:
+            change_character_hp(conn, t, {"op": "temp", "amount": amount}, by=by)
+            results[t].append(f"{amount} temp HP")
+    how = {}
+    if spell_lasts(sp):
+        name = sp["condition"] or sp["name"]
+        extra = {k: sp[k] for k in ("roll_mod", "dmg_mod", "adv", "max_hp") if sp[k]}
+        for t in targets:
+            done = put_effect(conn, t, name, sp["rounds"], sp["ac"], sp["name"] if sp["condition"] else "", me["id"], extra=extra)
+            how[t] = "added" if done else "already"
+            results[t].append(name if done else f"already {name}")
+    lines = [{"name": names[t], "how": "auto", "amount": None, "effect_how": how.get(t),
+              "text": names[t] + (" — " + ", ".join(results[t]) if results[t] else "")} for t in targets]
+    summary = f"{me['name']} casts {sp['name']}" + (f" with a level {slot} slot" if spent else "") + ": " + "; ".join(x["text"] for x in lines)
+    return {"spell": sp["name"], "kind": sp["kind"], "caster": me["name"], "slot": slot if level else 0, "spent": spent,
+            "lands": "auto", "targets": lines, "summary": summary, "rolls": roll_ids, "concentration": False}
 
 
 # ---- DM: managing who's at the table ---------------------------------------------------

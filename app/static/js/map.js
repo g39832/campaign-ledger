@@ -344,41 +344,51 @@
     const out = [], rule = toHitRule();
     if (c.linked) {
       (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit ? (a.ac
-        // no dice: "+2 ac to target" works like a buff spell; anything else is just a note
-        ? out.push({ name: a.name, many: true, icon: a.ac > 0 ? "shield-plus" : "zap", info: signed(a.ac) + " AC", effect: { name: a.name, condition: a.name, ac: a.ac, rounds: null } })
+        // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
+        ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0 }), null))
         : null) : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
         cooldown: a.cooldown || 0, cdName: a.name,
         info: (a.area ? areaText(a.area) + " · " : "") + (a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage"),
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
-      const sc = c.spellcasting;
-      (c.spells || []).forEach((s) => {
-        const rollSpell = (crit) => roll({ check: { type: "spell", key: s.index, combatant_id: c.id }, crit });
-        const spellAtk = sc ? () => roll({ check: { type: "spell_attack", combatant_id: c.id }, label: s.name + " attack" })
-          : () => roll({ expression: "1d20", label: s.name + " attack", kind: "attack", subject: c.name });
-        const atkInfo = "spell attack " + (sc ? signed(sc.attack) : "+0");
-        const what = L.spellWhat(s);
-        if (s.effect === "damage" && s.hit === "attack" && s.dice)
-          out.push({ name: s.name, single: true, icon: "wand-sparkles", info: atkInfo + " · " + s.dice, toHit: spellAtk, dmg: rollSpell });
-        else if (s.effect === "damage" && s.dice)
-          out.push({ name: s.name, many: true, icon: "wand-sparkles", roll: () => rollSpell(false), crit: () => rollSpell(true), dmg: rollSpell, aimArea: s.area,
-            info: (s.area ? areaText(s.area) + " · " : "") + (rule ? atkInfo + " · " : s.hit ? s.hit.toUpperCase() + " save" + (sc ? " DC " + sc.dc : "") + " · " : "") + s.dice,
-            toHit: rule ? spellAtk : null, save: !rule && !!s.hit });
-        else if (s.effect === "heal" && s.dice)
-          out.push({ name: s.name, many: true, heal: true, icon: "heart", info: "heals " + s.dice, roll: () => rollSpell(false) });
-        else if (s.condition || s.ac) {
-          const helps = L.spellHelps(s);
-          out.push({ name: s.name, many: true, icon: helps ? "shield-plus" : "zap", info: (s.area ? areaText(s.area) + " · " : "") + (rule && !helps ? atkInfo + " · " : "") + what, effect: s,
-            toHit: rule && !helps ? spellAtk : null, aimArea: s.area });
-        }
-      });
+      (c.spells || []).forEach((s) => out.push(spellAction(c, L.spellView(s), { spell: s.index })));
     } else {
       const sb = c.statblock || {};
       L.attackLines(sb.attacks).forEach((a) => out.push(monsterAction(c, a, false, rule)));
-      L.attackLines(sb.spells).forEach((a) => out.push(monsterAction(c, a, true, rule)));
+      L.monsterSpells(sb.spells).forEach((s) => out.push(spellAction(c, s, null)));
     }
     return out;
+  }
+  // A spell (or a sheet row that works like one): the server casts it on whoever is picked.
+  function spellAction(c, s, body) {
+    const helps = L.spellHelps(s);
+    return { name: s.name, icon: L.KIND_ICON[s.kind] || "zap", heal: helps, cast: { spell: s, body: body || { spell: s } },
+      aimArea: s.area || null, single: s.targets === 1, cooldown: s.cooldown || 0, cdName: s.name,
+      info: [L.levelWord(s), s.area ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, c.spellcasting || (s.dc ? { dc: s.dc } : null), toHitRule())].filter(Boolean).join(" · ") };
+  }
+  /* Cast it: the server spends the slot, rolls to hit or the saves, the damage or healing,
+     and leaves the effect. Then the panel says what happened (with Undo for the HP). */
+  function castNow(c, a, ids) {
+    const slot = aim && aim.cast ? aim.slot : null, free = aim && aim.cast ? aim.free : false;
+    aim = null; view.aim = null; setTool("select"); renderSelected(); view.draw();
+    L.castSpell(EID(), Object.assign({ caster_id: c.id, targets: ids, slot: slot || null, free: !!free }, a.cast.body), (d) => {
+      if (!d || !d.cast) { renderSelected(); return; }
+      enc = d;
+      const r = d.cast, hows = r.targets.map((t) => t.how);
+      const kind = r.kind === "heal" || L.spellHelps(r) ? "heal" : hows.includes("crit") ? "crit" : hows.length && hows.every((x) => x === "miss" || x === "saved") ? "miss" : "hit";
+      say(c.id, r.summary, kind, r.targets.some((t) => t.amount != null));
+      refresh(true);
+    });
+  }
+  // the slot to cast a levelled spell with (heroes who track slots on their sheet)
+  function slotPicker(c, s) {
+    if (!s.level || !c.linked) return null;
+    const slots = c.spell_slots || {}, lvls = Object.keys(slots).map(Number).filter((n) => n >= s.level).sort((x, y) => x - y);
+    if (!lvls.length) return null;
+    return h("label", { class: "field", style: "margin:6px 0" }, h("span", null, "Spell slot"),
+      h("select", { onchange: (e) => { aim.slot = Number(e.target.value); } }, lvls.map((n) => h("option", { value: n, selected: n === (aim.slot || s.level) },
+        "Level " + n + " — " + (slots[n].max - slots[n].used) + " left" + (n > s.level ? " (upcast)" : "")))));
   }
   // One line of a monster's Attacks or Spells box. Spells can reach several targets.
   function monsterAction(c, a, spell, rule) {
@@ -455,6 +465,7 @@
   async function confirmAim() {
     const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
     if (!targets.length) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
+    if (a.cast) { castNow(c, a, targets.map((x) => x.id)); return; }
     view.aim = null; aim = null; setTool("select"); renderSelected();
     useMove(c, a);
     let amount = null;
@@ -491,7 +502,16 @@
   async function arm(c, a) {
     lastResult = null;
     if (a.instant) { useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
-    if (a.aimArea) { startAim(c, a); return; }
+    if (a.cast && !a.aimArea) {
+      const s = a.cast.spell;
+      aim = { by: c.id, act: a, done: new Set(), cast: true, slot: s.level || null, free: false };
+      if (L.spellHelps(s) && a.single && /\bself\b/i.test(s.notes || "")) { castNow(c, a, [c.id]); return; } // Shield: on yourself, straight away
+      setTool("select");
+      $("#hint").textContent = a.name + ": tap " + (a.single ? "who it's on" : "each one it reaches, then Cast") + " on the map. Esc cancels.";
+      renderSelected();
+      return;
+    }
+    if (a.aimArea) { startAim(c, a); if (a.cast && aim) Object.assign(aim, { cast: true, slot: a.cast.spell.level || null, free: false }); return; }
     aim = { by: c.id, act: a, amount: null, done: new Set(), half: false };
     if (a.roll) { // area / healing spells: roll once, then every tap gets the same amount
       const r = await a.roll();
@@ -508,6 +528,12 @@
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
     if (!t) return;
     if (!target) { toast((t.display || "That token") + " isn't a fighter, just a marker on the map. Heroes and monsters in the fight can be targeted.", "error"); return; }
+    if (cur.cast && !cur.area) {
+      if (a.single) { castNow(c, a, [target.id]); return; }
+      cur.done.has(target.id) ? cur.done.delete(target.id) : cur.done.add(target.id);
+      renderSelected();
+      return;
+    }
     if (a.single) {
       aim = null; setTool(view.tool);
       useMove(c, a);
@@ -571,11 +597,22 @@
     const a = aim && aim.by === c.id ? aim.act : null;
     // aiming: one big instruction instead of the buttons
     const inArea = a && aim.area ? caught(c) : [];
-    const aiming = a && aim.area ? h("div", { class: "fight-aim" },
+    const castBox = a && aim.cast && !aim.area ? L.castPanel({ spell: a.cast.spell, chosen: aim.done, busy: false, result: null,
+      people: enc.combatants.filter((x) => x.id === c.id || !["dead", "defeated", "fled"].includes(x.status) || aim.done.has(x.id))
+        .map((x) => ({ id: x.id, name: x.id === c.id ? x.name + " (self)" : x.name, ally: (x.kind === "enemy") === (c.kind === "enemy"),
+          info: a.cast.spell.kind === "heal" ? x.hp + "/" + x.max_hp + " HP" : "AC " + x.ac })),
+      slots: c.linked && Object.keys(c.spell_slots || {}).length ? c.spell_slots : null, slot: aim.slot, free: aim.free, allowFree: true,
+      lands: L.spellLands(a.cast.spell, c.spellcasting, toHitRule()),
+      onToggle: (p) => { aim.done.has(p.id) ? aim.done.delete(p.id) : aim.done.add(p.id); renderSelected(); },
+      onSlot: (n) => { aim.slot = n; }, onFree: (v) => { aim.free = v; renderSelected(); },
+      onCast: () => castNow(c, a, [...aim.done]), onCancel: stopAim }) : null;
+    const aiming = castBox ? null : a && aim.area ? h("div", { class: "fight-aim" },
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name), h("span", { class: "tag" }, areaText(a.aimArea))),
       h("p", { class: "fa-ask" }, "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
       h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
-      a.toHit ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
+      a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, [L.spellWhat(a.cast.spell), L.spellLands(a.cast.spell, c.spellcasting, toHitRule())].filter(Boolean).join(" · ")) : null,
+      a.cast ? slotPicker(c, a.cast.spell) : null,
+      a.toHit && !a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
       h("div", { class: "row", style: "gap:8px" },
         h("button", { type: "button", class: "btn btn-primary", disabled: !inArea.length, onclick: confirmAim }, icon("check", "sm"), " Confirm" + (inArea.length ? " · " + inArea.length : "")),
         h("button", { type: "button", class: "btn btn-sm", onclick: stopAim }, "Cancel")))
@@ -615,7 +652,7 @@
       h("div", { class: "fight-hp" }, h("span", { class: "hpbar", "data-level": pct <= 25 ? "low" : pct <= 50 ? "mid" : "high" }, h("span", { class: "hpbar-fill", style: "width:" + pct + "%" })),
         h("span", { class: "num" }, c.hp + " / " + c.max_hp + " HP" + (c.temp_hp ? " +" + c.temp_hp + " temp" : ""))),
       (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")))) : null,
-      aiming, res,
+      castBox, aiming, res,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),
         acts.map((x) => {

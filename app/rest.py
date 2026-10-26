@@ -59,7 +59,7 @@ def change_character_hp(conn, char_id, data, by=None):
         _touch_encounters(conn, char_id)
 
 
-def put_effect(conn, char_id, name, rounds=None, ac=0, note="", caster_char_id=None):
+def put_effect(conn, char_id, name, rounds=None, ac=0, note="", caster_char_id=None, extra=None):
     """Put an effect (Bless, Shield of Faith +2 AC...) on a character. Inside a
     running encounter it goes through that encounter, so it is logged there and
     counts down on the caster's turn. Returns False if they already have it."""
@@ -79,8 +79,12 @@ def put_effect(conn, char_id, name, rounds=None, ac=0, note="", caster_char_id=N
     cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": note, "rounds_left": rounds, "expired": False}
     if ac:
         cond["ac"] = ac
-    conn.execute("UPDATE characters SET conditions = ?, updated_at = ? WHERE id = ?",
-                 (F.to_db(F.CHARACTER["conditions"], conds + [cond]), now_iso(), char_id))
+    cond.update(extra or {})
+    sets, vals = "conditions = ?", [F.to_db(F.CHARACTER["conditions"], conds + [cond])]
+    if cond.get("max_hp"):  # Aid: more max HP and the same in current HP; removing it takes them back
+        sets += ", max_hp = max_hp + ?, current_hp = current_hp + ?"
+        vals += [int(cond["max_hp"])] * 2
+    conn.execute(f"UPDATE characters SET {sets}, updated_at = ? WHERE id = ?", (*vals, now_iso(), char_id))
     _touch_encounters(conn, char_id)
     return True
 

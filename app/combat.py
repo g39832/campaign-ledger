@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, cooldown_left, derived, initiative_sort_key, knocked_prone, parse_area, parse_cooldown, roll_d20, is_healing, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, cooldown_left, derived, initiative_sort_key, knocked_prone, parse_area, parse_cooldown, roll_d20, is_healing, spell_does_something, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -95,7 +95,8 @@ def _add_spells(conn, c):
     spell = derived(ch)["spell"]
     c["spellcasting"] = {"dc": spell["dc"], "attack": spell["attack"]} if spell else None
     c["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
-                   if spell_info(s)["effect"]]
+                   if spell_does_something(spell_info(s))]
+    c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0}
 
 
 def encounter_state(enc_id, conn=None, log_limit=400):
@@ -142,8 +143,9 @@ class Ctx:
     """Everything a mutation needs: the connection, the encounter row and
     a helper to write log lines stamped with the current round and turn."""
 
-    def __init__(self, conn, enc_id):
+    def __init__(self, conn, enc_id, viewer=None):
         self.conn = conn
+        self.viewer = viewer  # who rolls the dice an effect makes (None: the DM)
         self.enc = dict(_encounter_row(conn, enc_id))
         self.settings = get_campaign(self.enc["campaign_id"])["settings"]["combat"]
 
@@ -319,6 +321,7 @@ def api_start(eid):
         ctx.log("system", "Combat begins — round 1")
         ctx.log("turn", f"{first['name']}'s turn")
         _tick(ctx, first["id"], "start")
+        on_turn(ctx, first["id"], "start")
     return mutate(eid, fn, _body().get("op_id"))
 
 
@@ -386,6 +389,7 @@ def api_next(eid):
         prev_id = ctx.enc["current_id"]
         chosen, wrapped = _step(ctx, 1)
         if prev_id:
+            on_turn(ctx, prev_id, "end")
             _tick(ctx, prev_id, "end")
         if wrapped:
             ctx.save_enc(round=ctx.enc["round"] + 1, current_id=None)
@@ -393,6 +397,7 @@ def api_next(eid):
         ctx.save_enc(current_id=chosen["id"])
         ctx.log("turn", f"{chosen['name']}'s turn")
         _tick(ctx, chosen["id"], "start")
+        on_turn(ctx, chosen["id"], "start")
     return mutate(eid, fn, _body().get("op_id"))
 
 
@@ -429,7 +434,7 @@ def _tick(ctx, owner_id, phase):
     for c in ctx.combatants():
         conds = c["conditions"]
         changed = False
-        keep = []
+        gone = set()
         for cond in conds:
             if (cond.get("encounter_id") == ctx.enc["id"] and cond.get("tick_on") == owner_id
                     and cond.get("tick") == phase and cond.get("rounds_left") is not None
@@ -440,12 +445,63 @@ def _tick(ctx, owner_id, phase):
                     cond["rounds_left"] = 0
                     if cond.get("auto_expire"):
                         ctx.log("condition", f"{cond['name']} on {c['name']} expired and was removed")
+                        gone.add(cond["id"])
                         continue
                     cond["expired"] = True
                     ctx.log("condition", f"{cond['name']} on {c['name']} has run its duration — DM to confirm removal")
-            keep.append(cond)
         if changed:
-            ctx.set_vitals(c, conditions=keep)
+            ctx.set_vitals(c, conditions=conds)
+            if gone:
+                drop_conditions(ctx, ctx.combatant(c["id"]), gone, quiet=True)
+
+
+def on_turn(ctx, cid, phase):
+    from .spells import on_turn as spell_turn
+    spell_turn(ctx, cid, phase)
+
+
+def drop_conditions(ctx, c, ids, quiet=False, why=""):
+    """Take effects off a combatant: a spell's extra max HP goes again, and ending a
+    caster's Concentrating ends what that spell put on everyone. Returns the removed ones."""
+    gone = [x for x in c["conditions"] if x.get("id") in ids]
+    if not gone:
+        return []
+    v = {"conditions": [x for x in c["conditions"] if x.get("id") not in ids]}
+    extra = sum(int(x.get("max_hp") or 0) for x in gone)
+    if extra:
+        v["max_hp"] = max(0, c["max_hp"] - extra)
+        v["hp"] = min(c["hp"], v["max_hp"]) if v["max_hp"] else c["hp"]
+    ctx.set_vitals(c, **v)
+    if not quiet:
+        for x in gone:
+            ctx.log("condition", f"{x['name']} removed from {c['name']}" + (f" ({why})" if why else ""))
+    for x in gone:
+        if x.get("concentration"):
+            _end_cast(ctx, c, x, "stopped concentrating")
+    return gone
+
+
+def _end_cast(ctx, caster, mark, why):
+    ended = []
+    for o in ctx.combatants():
+        ids = {x["id"] for x in o["conditions"] if (x.get("source") or {}).get("cast") == mark["concentration"]}
+        if ids:
+            drop_conditions(ctx, o, ids, quiet=True)
+            ended.append(o["name"])
+    ctx.log("spell", f"{caster['name']} loses concentration on {mark.get('spell') or mark.get('note') or 'their spell'} ({why})"
+            + (f" — it ends on {', '.join(ended)}" if ended else ""))
+
+
+def end_concentration(ctx, cid, why):
+    """The caster stops concentrating (a new concentration spell, failed save, 0 HP)."""
+    c = ctx.combatant(cid)
+    marks = [x for x in c["conditions"] if x.get("concentration")]
+    if not marks:
+        return False
+    ctx.set_vitals(c, conditions=[x for x in c["conditions"] if not x.get("concentration")])
+    for m in marks:
+        _end_cast(ctx, ctx.combatant(cid), m, why)
+    return True
 
 
 # ---- combatants -----------------------------------------------------------
@@ -820,6 +876,9 @@ def apply_hp(ctx, cid, data, by=None):
         "INSERT INTO hp_changes (encounter_id, combatant_id, character_id, label, before, after, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
         (ctx.enc["id"], cid, c["character_id"] if c["linked"] else None, label, json.dumps(before), json.dumps(v), now_iso()))
+    if data.get("op") == "damage" and (before["hp"] + before["temp_hp"]) > (v["hp"] + v["temp_hp"]):
+        from .spells import concentration_check
+        concentration_check(ctx, ctx.combatant(cid), int(data.get("amount") or 0))
     return v
 
 
@@ -974,11 +1033,9 @@ def api_remove_condition(cid, cond_id):
 
     def fn(ctx):
         c = ctx.combatant(cid)
-        match = [x for x in c["conditions"] if x.get("id") == cond_id]
-        if not match:
+        if not any(x.get("id") == cond_id for x in c["conditions"]):
             raise F.Conflict("That condition was already removed")
-        ctx.set_vitals(c, conditions=[x for x in c["conditions"] if x.get("id") != cond_id])
-        ctx.log("condition", f"{match[0]['name']} removed from {c['name']}")
+        drop_conditions(ctx, c, {cond_id})
     return mutate(eid, fn, _body().get("op_id"))
 
 

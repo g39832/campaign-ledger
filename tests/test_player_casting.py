@@ -68,7 +68,7 @@ def test_cast_in_a_fight_goes_through_the_encounter(api, party):
     bram = next(c for c in st["combatants"] if c["name"] == "Bram")
     blessed = next(x for x in aria["conditions"] if x["name"] == "Blessed")
     assert blessed["rounds_left"] == 10 and blessed["tick_on"] == bram["id"], "counts down on the caster's turn"
-    assert any("Aria has Blessed" in e["message"] for e in st["log"])
+    assert any(e["message"].startswith("Bram casts Bless: Aria — Blessed") for e in st["log"])
 
 
 def test_cast_is_limited_to_the_party_and_helpful_spells(api, party):

@@ -78,4 +78,5 @@
 <script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=48"></script>{% endblock %}
+{% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
+<script src="{{ url_for('static', filename='js/combat.js') }}?v=49"></script>{% endblock %}

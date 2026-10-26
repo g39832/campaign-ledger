@@ -442,6 +442,16 @@
     },
     // a roll the server made (death saves, hit dice): add it to the history and roll it on screen
     show(roll) { if (!roll) return; this.addHistory([roll]); this.animate(roll); if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true); },
+    // every roll a spell made (attack, damage, each save): into the history, then rolled one after another
+    async showAll(rolls) {
+      rolls = (rolls || []).filter(Boolean);
+      if (!rolls.length || !this.dock) return;
+      this.addHistory(rolls);
+      if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true);
+      for (const r of rolls) {
+        await Promise.race([this.animate(r, { quiet: r !== rolls[0] && r.kind !== "attack" }), new Promise((ok) => setTimeout(ok, (DURATION[prefs.speed] || 0) + 1200))]);
+      }
+    },
     mapOverlayActive() { return !!(this.overlayHost && prefs.overMap); },
     animate(roll, opts) {
       opts = opts || {};

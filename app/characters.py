@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 
@@ -77,7 +78,17 @@ def api_patch(char_id):
     with tx() as conn:
         if isinstance(changes, dict) and "name" in changes and not str(changes["name"].get("to", "")).strip():
             raise F.ApiError("Name can't be empty")
+        before = conn.execute("SELECT conditions FROM characters WHERE id = ?", (char_id,)).fetchone()
         row, updates = F.cas_patch(conn, "characters", F.CHARACTER, char_id, changes)
+        if "conditions" in updates and before is not None and "max_hp" not in updates:
+            # an effect that raised max HP (Aid) was taken off on the sheet: the extra HP goes too
+            now = {x.get("id") for x in row["conditions"] or [] if isinstance(x, dict)}
+            gone = sum(int(x.get("max_hp") or 0) for x in json.loads(before["conditions"] or "[]")
+                       if isinstance(x, dict) and x.get("id") not in now)
+            if gone:
+                conn.execute("UPDATE characters SET max_hp = MAX(0, max_hp - ?) WHERE id = ?", (gone, char_id))
+                row = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
+                updates["max_hp"] = row["max_hp"]
         if "max_hp" in updates and row["current_hp"] > row["max_hp"]:
             conn.execute("UPDATE characters SET current_hp = max_hp WHERE id = ?", (char_id,))
         _touch_encounters(conn, char_id)

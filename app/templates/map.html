@@ -138,6 +138,7 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=48"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=48"></script>
+<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=49"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=49"></script>
 {% endblock %}

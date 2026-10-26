@@ -138,13 +138,13 @@
           <div class="row" style="align-items:center">
             <input type="search" id="sb-q" placeholder="Search spells" aria-label="Search the spell list" style="flex:1 1 160px">
             <select id="sb-kind" aria-label="Kind of spell" style="width:auto">
-              <option value="">All spells</option><option value="damage">Damage</option><option value="heal">Healing</option><option value="effect">Effects &amp; AC</option>
+              <option value="">All spells</option><option value="damage">Damage</option><option value="heal">Healing</option><option value="buff">Buffs</option><option value="debuff">Debuffs</option>
             </select>
           </div>
           <ul class="sb-list" id="sb-list"></ul>
           <p class="faint sb-credit" id="sb-credit"></p>
         </div>
-        <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Baned"><option value="Outlined"><option value="Concentrating"></datalist>
+        <datalist id="spell-conds">{% for c in CONDITIONS %}<option value="{{ c }}">{% endfor %}<option value="Blessed"><option value="Hasted"><option value="Baned"><option value="Outlined"><option value="Concentrating"><option value="Aided"><option value="Shield of Faith"><option value="Slowed"></datalist>
       </section>
       <section class="section">
         <h3 class="rule-head">Features &amp; traits</h3>
@@ -200,5 +200,5 @@
 <script type="application/json" id="boot">{{ char | tojson }}</script>
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/spellbook.js') }}?v=48"></script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=48"></script>{% endblock %}
+{% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=49"></script>{% endblock %}
