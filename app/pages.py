@@ -27,8 +27,28 @@ def _globals():
     }
 
 
-def _shell(section, campaign, **ctx):
-    return dict(section=section, campaign=campaign, campaigns=[c for c in list_campaigns() if not c["archived"]], **ctx)
+def _fight(campaign, enc_id=None):
+    """The fight the Combat and Battle map buttons jump to: the one on screen, or
+    else the running fight most recently worked on. With the map it's on, if any."""
+    if campaign is None:
+        return None
+    conn = get_db()
+    if enc_id:
+        enc = conn.execute("SELECT id, name, status FROM encounters WHERE id = ?", (enc_id,)).fetchone()
+    else:
+        enc = conn.execute("SELECT id, name, status FROM encounters WHERE campaign_id = ? AND status = 'active' "
+                           "ORDER BY updated_at DESC LIMIT 1", (campaign["id"],)).fetchone()
+    if enc is None:
+        return None
+    m = conn.execute("SELECT id FROM maps WHERE encounter_id = ? ORDER BY updated_at DESC LIMIT 1", (enc["id"],)).fetchone()
+    return {"eid": enc["id"], "name": enc["name"], "status": enc["status"], "map_id": m["id"] if m else None}
+
+
+def _shell(section, campaign, fight_id=None, **ctx):
+    # page_fight: the fight on this page (the Combat | Map switch); fight: what the top menu jumps to
+    page_fight = _fight(campaign, fight_id) if fight_id else None
+    return dict(section=section, campaign=campaign, campaigns=[c for c in list_campaigns() if not c["archived"]],
+                page_fight=page_fight, fight=page_fight or _fight(campaign), **ctx)
 
 
 def _require_campaign():
@@ -139,7 +159,7 @@ def combat(enc_id):
         abort(404)
     camp = _switch_to(state["encounter"]["campaign_id"])
     return render_template("combat.html", **_shell(
-        "combat", camp, state=state, characters=list_characters(camp["id"]),
+        "combat", camp, fight_id=enc_id, state=state, characters=list_characters(camp["id"]),
         creatures=list_creatures(camp["id"])))
 
 
@@ -201,7 +221,7 @@ def map_edit(map_id):
     except F.NotFound:
         abort(404)
     camp = _switch_to(state["map"]["campaign_id"])
-    return render_template("map.html", **_shell("map", camp, state=state, characters=list_characters(camp["id"]),
+    return render_template("map.html", **_shell("map", camp, fight_id=state["map"]["encounter_id"], state=state, characters=list_characters(camp["id"]),
                                                 encounters=list_encounters(camp["id"])))
 
 

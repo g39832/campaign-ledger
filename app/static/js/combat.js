@@ -91,9 +91,10 @@
   $("#prev").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/prev", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#start").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/start", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#reopen").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/reopen"));
-  $("#open-map").addEventListener("click", () => act("POST", "/api/encounters/" + EID + "/map", {}, (d) => {
+  const makeMap = () => act("POST", "/api/encounters/" + EID + "/map", {}, (d) => {
     location.href = "/map/" + d.map_id + (d.created ? "?new=1" : "");
-  }));
+  });
+  if ($("#open-map")) $("#open-map").addEventListener("click", makeMap);
   armed($("#end"), () => run("POST", "/api/encounters/" + EID + "/end"), "End combat? Click again");
   $("#undo").addEventListener("click", () => {
     act("POST", "/api/encounters/" + EID + "/undo", {}, apply, {
@@ -113,6 +114,7 @@
     const t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
     if (e.key === "n" || e.key === "N") { if (!$("#next").disabled) { e.preventDefault(); $("#next").click(); } }
+    if (e.key === "m" || e.key === "M") { e.preventDefault(); if ($("#to-map")) location.href = $("#to-map").href; else makeMap(); }
     if (e.key === "p" || e.key === "P") { if (!$("#prev").disabled) { e.preventDefault(); $("#prev").click(); } }
   });
 

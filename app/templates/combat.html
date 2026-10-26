@@ -1,7 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, fight_switch %}
 {% block title %}{{ state.encounter.name }}{% endblock %}
 {% block content %}
+<div class="fight-top">
+  <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.combat_list') }}">{{ icon("chevron-left", "sm") }} All fights</a>
+  {{ fight_switch(page_fight, "combat") }}
+</div>
 <div class="combat-bar" id="bar">
   <div style="min-width:0;display:flex;flex-direction:column">
     <span class="status-label" id="enc-status" style="align-self:flex-start"></span>
@@ -16,7 +20,6 @@
     <button class="btn" type="button" id="start">{{ icon("play", "sm") }} Start combat</button>
     <button class="btn btn-quiet" type="button" id="end">{{ icon("flag", "sm") }} End</button>
     <button class="btn" type="button" id="reopen">{{ icon("rotate-ccw", "sm") }} Reopen</button>
-    <button class="btn btn-quiet" type="button" id="open-map" title="Open this fight on a battle map (one is made for it if needed)">{{ icon("map", "sm") }} Battle map</button>
   </div>
 </div>
 
@@ -75,4 +78,4 @@
 <script type="application/json" id="boot-creatures">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=38"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/combat.js') }}?v=39"></script>{% endblock %}

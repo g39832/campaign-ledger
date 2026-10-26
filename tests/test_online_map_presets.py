@@ -248,3 +248,22 @@ def test_sheet_rows_people_actually_write(api, camp):
     atk = {a["name"]: a for a in st["combatants"][0]["attacks"]}
     assert atk["Sheild of faith"]["ac"] == 2 and atk["Mold earth"]["ac"] == 0 and atk["Entangle"]["ac"] == 0
     assert atk["Mold earth"]["notes"] == "Shape dirt"
+
+
+def test_combat_and_map_are_one_click_apart(api, camp):
+    hero = api.character(camp["id"], name="Aria")
+    eid = api.encounter(camp["id"], "Road")["encounter"]["id"]
+    api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Wolf", "max_hp": 11, "count": 1}})
+    page = api.c.get(f"/combat/{eid}").get_data(as_text=True)
+    assert 'id="open-map"' in page and "Make map" in page, "no map yet: the switch offers to make one"
+    assert 'href="/combat"' in page, "the menu goes to the fight list until a fight is running"
+    mid = api.post(f"/api/encounters/{eid}/map")["map_id"]
+    api.post(f"/api/encounters/{eid}/start")
+    page = api.c.get(f"/combat/{eid}").get_data(as_text=True)
+    assert f'id="to-map" title="This fight on its battle map (M)"' in page and f'href="/map/{mid}"' in page
+    m = api.c.get(f"/map/{mid}").get_data(as_text=True)
+    assert f'href="/combat/{eid}" id="to-combat"' in m
+    home = api.c.get("/").get_data(as_text=True)
+    assert f'href="/combat/{eid}"' in home and f'href="/map/{mid}"' in home, "the top menu jumps into the running fight"
+    other = api.post(f"/api/campaigns/{camp['id']}/maps", {"preset": "cave"}, 201)["map"]["id"]
+    assert 'id="to-combat"' not in api.c.get(f"/map/{other}").get_data(as_text=True), "a map with no fight has no switch"

@@ -401,6 +401,11 @@ textarea.wrap-input { display: block; width: 100%; resize: none; overflow: hidde
 .turn-now { min-width: 0; }
 .turn-now .who { font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; display: block; }
 .combat-bar .controls { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fight-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.fight-switch { flex: 0 0 auto; }
+.fight-switch > a, .fight-switch > span, .fight-switch > button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-weight: 600; }
+.fight-switch > .is-on { cursor: default; }
+.fight-switch > a:hover, .fight-switch > button:hover { background: var(--raised); color: var(--text); }
 .kbd { font: 500 .72rem var(--sans); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; color: var(--text-3); margin-left: 4px; }
 .btn-primary .kbd { color: inherit; border-color: currentColor; opacity: .7; }
 .status-label { font: 500 .8rem var(--caps); letter-spacing: .07em; padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: 2px; color: var(--text-2); }

@@ -15,6 +15,8 @@
     onSelect: (t) => {
       if (aim) { aimAt(t); view.selectedId = selectedToken; view.draw(); return; } // picking a target, not a new token
       selectedToken = t ? t.id : null; renderSelected(); renderTokens();
+      // the Combat screen opens on whoever was picked here
+      if (t && t.combatant_id && S.map.encounter_id) try { localStorage.setItem("combat-sel-" + S.map.encounter_id, t.combatant_id); } catch (e) { /* ignore */ }
     },
     canMove: () => !aim,
     onMove: (t, x, y) => run("POST", "/api/tokens/" + t.id + "/move", { x, y }),
@@ -461,7 +463,6 @@
       : n + " damage to " + target.name + (half ? " (saved, half)" : "") + how) + ".", a.heal ? "heal" : "hit", true));
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aim) stopAim(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aim) stopAim(); });
 
   function fightPanel(t) {
     ensureEnc();
@@ -569,6 +570,18 @@
   // Dice can tumble across the map (an overlay canvas that never touches map data).
   if (window.Dice) { Dice.overlayHost = $("#stage"); $(".dd-overmap").hidden = false; }
   apply(S);
+  // coming from the Combat screen: pick up whoever was selected there
+  try {
+    const cid = S.map.encounter_id && Number(localStorage.getItem("combat-sel-" + S.map.encounter_id));
+    const t = cid && S.tokens.find((x) => x.combatant_id === cid);
+    if (t) { selectedToken = t.id; view.selectedId = t.id; view.draw(); renderSelected(); renderTokens(); }
+  } catch (e) { /* ignore */ }
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = e.target;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+    if ((e.key === "c" || e.key === "C") && $("#to-combat")) { e.preventDefault(); location.href = $("#to-combat").href; }
+  });
   if (new URLSearchParams(location.search).has("new")) {
     toast("Made a battle map for “" + (S.encounter ? S.encounter.name : S.map.name) + "”. The party is on the left edge and enemies on the right; drag them into place.", "ok", { ms: 9000 });
     history.replaceState(null, "", location.pathname);

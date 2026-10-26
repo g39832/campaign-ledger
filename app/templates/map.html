@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% from "_macros.html" import icon %}
+{% from "_macros.html" import icon, fight_switch %}
 {% block title %}{{ state.map.name }}{% endblock %}
 {% block content %}
 <div class="row" style="align-items:center;margin-bottom:10px;gap:10px">
   <a class="btn btn-sm btn-quiet" href="{{ url_for('pages.maps') }}">{{ icon("chevron-left", "sm") }} Maps</a>
+  {{ fight_switch(page_fight, "map") }}
   <input class="input enc-name grow" id="map-name" aria-label="Map name" style="font:700 1.25rem var(--caps);background:transparent;border-color:transparent;max-width:420px">
   <span id="live-flag" class="live-flag"></span>
   <span class="grow"></span>
@@ -136,6 +137,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=38"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=38"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=39"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=39"></script>
 {% endblock %}

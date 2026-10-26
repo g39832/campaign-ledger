@@ -7,6 +7,19 @@
 </span>
 {%- endmacro %}
 
+{# One click between a fight's Combat screen and its battle map (keys C and M). #}
+{% macro fight_switch(fight, here) -%}
+{% if fight %}
+<div class="seg fight-switch" role="group" aria-label="Switch between combat and the battle map">
+  {% if here == "combat" %}<span class="is-on" aria-current="page">{{ icon("swords", "sm") }} Combat</span>
+  {% else %}<a href="/combat/{{ fight.eid }}" id="to-combat" title="This fight on the Combat screen (C)">{{ icon("swords", "sm") }} Combat<span class="kbd">C</span></a>{% endif %}
+  {% if here == "map" %}<span class="is-on" aria-current="page">{{ icon("map", "sm") }} Map</span>
+  {% elif fight.map_id %}<a href="/map/{{ fight.map_id }}" id="to-map" title="This fight on its battle map (M)">{{ icon("map", "sm") }} Map<span class="kbd">M</span></a>
+  {% else %}<button type="button" id="open-map" title="Make a battle map for this fight, with everyone on it (M)">{{ icon("map", "sm") }} Make map<span class="kbd">M</span></button>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
 {% macro signed(n) -%}{{ ("+" ~ n) if n >= 0 else ("−" ~ (n | abs)) }}{%- endmacro %}
 
 {% macro initials(name) -%}{{ (name or "?").split() | map("first") | join("") | upper | truncate(2, True, "") }}{%- endmacro %}
