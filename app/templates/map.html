@@ -70,6 +70,18 @@
 
     <div class="panel" id="selected-panel"></div>
 
+    <div class="panel" id="monster-panel">
+      <h3 class="rule-head">Add monsters</h3>
+      <input type="search" id="mon-q" placeholder="Search: goblin, wolf, dragon…" aria-label="Search monsters">
+      <ul class="mon-list" id="mon-list"><li class="faint">Loading…</li></ul>
+      <div class="row" style="align-items:center;margin-top:8px;gap:8px">
+        <label class="field" style="flex:0 0 90px;margin:0"><span>How many</span><input type="number" id="mon-count" min="1" max="20" value="1"></label>
+        <button type="button" class="btn btn-primary" id="mon-place" disabled style="flex:1 1 auto;align-self:flex-end">{{ icon("map-pin", "sm") }} <span>Pick a monster</span></button>
+      </div>
+      <p class="faint" style="font-size:.84rem;margin:6px 0 0" id="mon-help">They join this map's encounter with full stats, so you can fight them on the Combat screen.</p>
+    </div>
+
+
     <div class="panel">
       <h3 class="rule-head">Map notes <span class="count">only you see these</span></h3>
       <textarea data-m="notes" rows="4" class="note-input" aria-label="Map notes" placeholder="Secrets, traps, what's behind the door…"></textarea>
@@ -122,6 +134,6 @@
 <script type="application/json" id="boot-map">{{ state | tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=24"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=24"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=25"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=25"></script>
 {% endblock %}

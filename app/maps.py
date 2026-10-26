@@ -648,6 +648,96 @@ def api_ping(map_id):
     return jsonify({"pings": recent_pings(map_id)})
 
 
+# ---- monsters straight onto the map ----------------------------------------------------
+
+def _open_spots(m, taken, x, y, n):
+    """The n nearest open squares to (x, y): not a wall, tree, water... and not already taken."""
+    out, seen, ring = [], set(), 0
+    x, y = int(x), int(y)
+    while len(out) < n and ring <= max(m["cols"], m["rows"]):
+        for dy in range(-ring, ring + 1):
+            for dx in range(-ring, ring + 1):
+                if max(abs(dx), abs(dy)) != ring:
+                    continue
+                cx, cy = x + dx, y + dy
+                if (cx, cy) in seen or not (0 <= cx < m["cols"] and 0 <= cy < m["rows"]):
+                    continue
+                seen.add((cx, cy))
+                if m["terrain"].get(f"{cx},{cy}") not in BLOCKING and (cx, cy) not in taken:
+                    out.append((cx, cy))
+                    if len(out) == n:
+                        return out
+        ring += 1
+    return out
+
+
+@bp.post("/maps/<int:map_id>/monsters")
+def api_add_monsters(map_id):
+    """Add enemies from the creature library or the Monster Book to the map's
+    encounter (making one if the map has none) and put their tokens around the
+    square that was clicked."""
+    from .combat import Ctx, _insert_enemy, _instance_names, _resort
+    from .monster_book import BY_NAME
+    data = request.get_json(silent=True) or {}
+    try:
+        count = int(data.get("count", 1))
+    except (TypeError, ValueError):
+        raise F.ApiError("How many must be a number")
+    if not 1 <= count <= 20:
+        raise F.ApiError("Add between 1 and 20 at a time")
+    with tx() as conn:
+        m = map_dict(_map_row(conn, map_id))
+        if data.get("creature_id"):
+            cr = conn.execute("SELECT * FROM creatures WHERE id = ? AND (campaign_id IS NULL OR campaign_id = ?)",
+                              (int(data["creature_id"]), m["campaign_id"])).fetchone()
+            if cr is None:
+                raise F.NotFound("That creature isn't in your library")
+            block, base, creature_id = F.decode_row(cr, F.CREATURE), cr["name"], cr["id"]
+        elif data.get("book") in BY_NAME:
+            block, base, creature_id = F.validate_new(F.CREATURE, BY_NAME[data["book"]]), data["book"], None
+        else:
+            raise F.ApiError("Pick a monster")
+        x, y = data.get("x", m["cols"] - 2), data.get("y", m["rows"] // 2)
+        try:
+            x, y = max(0, min(m["cols"] - 1, int(float(x)))), max(0, min(m["rows"] - 1, int(float(y))))
+        except (TypeError, ValueError):
+            raise F.ApiError("Where should they go?")
+        created = False
+        eid = m["encounter_id"]
+        if not eid:
+            ts = now_iso()
+            eid = F.insert(conn, "encounters", F.ENCOUNTER, {"name": m["name"]},
+                           {"uid": new_uid(), "campaign_id": m["campaign_id"], "created_at": ts, "updated_at": ts})
+            conn.execute("INSERT INTO combat_log (encounter_id, round, kind, message, created_at) VALUES (?, 0, 'system', ?, ?)",
+                         (eid, f"Encounter “{m['name']}” created from the battle map", ts))
+            conn.execute("UPDATE maps SET encounter_id = ? WHERE id = ?", (eid, map_id))
+            created = True
+        ctx = Ctx(conn, eid)
+        before = {c["id"] for c in ctx.combatants()}
+        statblock = {k: block.get(k) for k in F.CREATURE if k != "name"}
+        statblock["base_name"] = base
+        names = _instance_names(ctx, base, count)
+        for n in names:
+            _insert_enemy(ctx, n, statblock, block["max_hp"], block["ac"], block["initiative_mod"], creature_id)
+        ctx.log("roster", f"Added {', '.join(names)} from the battle map")
+        if ctx.settings["auto_sort"]:
+            _resort(ctx)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
+        new = [c for c in ctx.combatants() if c["id"] not in before]
+        taken = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (map_id,))}
+        size = {"Large": 2, "Huge": 3, "Gargantuan": 4}.get(str(block.get("creature_type") or "").split(" ")[0], 1)
+        spots = _open_spots(m, taken, x, y, len(new))
+        ts = now_iso()
+        for i, c in enumerate(new):
+            sx, sy = spots[i] if i < len(spots) else (x, y)
+            sx, sy = min(sx, m["cols"] - size), min(sy, m["rows"] - size)
+            conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
+                         "VALUES (?,?,'enemy',?,?,?,?,0,?,?)", (new_uid(), map_id, c["id"], sx, sy, size, ts, ts))
+            taken.add((sx, sy))
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id) | {"added": names, "encounter_created": created}), 201
+
+
 def _token_map(conn, token_id):
     row = conn.execute("SELECT map_id FROM map_tokens WHERE id = ?", (token_id,)).fetchone()
     if row is None:

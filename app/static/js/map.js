@@ -18,8 +18,11 @@
       if (tool === "paint") run("POST", "/api/maps/" + MID + "/terrain", { cells, value: terrainKind === "erase" ? null : terrainKind });
       else run("POST", "/api/maps/" + MID + "/fog", { cells, reveal: tool === "reveal" });
     },
-    onPlace: (x, y) => run("POST", "/api/maps/" + MID + "/tokens", { kind: "marker", label: "Marker", x, y, hidden: true },
-      () => toast("Marker placed (hidden from players). Rename it or change it to a trap on the right.", "ok")),
+    onPlace: (x, y) => {
+      if (pendingMonster) { dropMonsters(x, y); return; }
+      run("POST", "/api/maps/" + MID + "/tokens", { kind: "marker", label: "Marker", x, y, hidden: true },
+        () => toast("Marker placed (hidden from players). Rename it or change it to a trap on the right.", "ok"));
+    },
     canEditShapes: true,
     onPing: (x, y) => { api("POST", "/api/maps/" + MID + "/ping", { x, y }).then((d) => view.setPings(d.pings)).catch((e) => toast(e.message, "error")); if (window.FX) FX.sound("ping"); },
     onArea: (a) => run("POST", "/api/maps/" + MID + "/shapes", { kind: a.kind, x: a.x, y: a.y, size: a.size, width: a.width, dir: a.dir, color: a.color, label: a.label, hidden: a.hidden },
@@ -28,6 +31,7 @@
     onSelectShape: () => renderAreas(),
   });
   let selectedToken = null;
+  let pendingMonster = null; // the monster waiting to be clicked onto the map
 
   function run(method, url, body, after) {
     return act(method, url, body, (d) => { if (d && d.map) apply(d); if (after) after(d); },
@@ -71,6 +75,7 @@
     area: "Click to place the area. For cones and lines, press where it starts and drag to aim.",
   };
   function setTool(t) {
+    if (t !== "place" && pendingMonster) { pendingMonster = null; renderMonsters(); }
     view.tool = t;
     $$("[data-tool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.tool === t); b.setAttribute("aria-pressed", b.dataset.tool === t); });
     $("#hint").textContent = HINTS[t];
@@ -96,6 +101,49 @@
   $("#zoom-out").addEventListener("click", () => view.zoom(0.8));
   $("#zoom-fit").addEventListener("click", () => view.fit());
   setTool("select");
+
+  // ---- add monsters from the library or the Monster Book -------------------------------------
+  let monsters = [], chosen = null;
+  async function loadMonsters() {
+    try {
+      const [lib, book] = await Promise.all([api("GET", "/api/creatures?campaign_id=" + S.map.campaign_id), api("GET", "/api/monster-book")]);
+      const have = new Set(lib.creatures.map((c) => c.name.toLowerCase()));
+      monsters = lib.creatures.map((c) => ({ key: "c" + c.id, creature_id: c.id, name: c.name, info: [c.cr ? "CR " + c.cr : "", c.max_hp + " HP", "AC " + c.ac].filter(Boolean).join(" · "), from: "Your library" }))
+        .concat(book.monsters.filter((m) => !have.has(m.name.toLowerCase())).map((m) => ({ key: "b" + m.name, book: m.name, name: m.name, info: "CR " + m.cr + " · " + m.max_hp + " HP · AC " + m.ac, from: "Monster Book" })));
+    } catch (e) { monsters = []; }
+    renderMonsters();
+  }
+  function renderMonsters() {
+    const q = $("#mon-q").value.trim().toLowerCase();
+    const list = monsters.filter((m) => !q || m.name.toLowerCase().includes(q)).slice(0, 60);
+    $("#mon-list").replaceChildren(...(list.length ? list.map((m) => h("li", { class: chosen && chosen.key === m.key ? "is-sel" : "",
+      onclick: () => { chosen = m; pendingMonster = null; renderMonsters(); } },
+      h("b", null, m.name), h("span", { class: "faint" }, m.info), h("span", { class: "tag" }, m.from))) : [h("li", { class: "faint" }, monsters.length ? "No monsters match." : "No monsters yet.")]));
+    const btn = $("#mon-place");
+    btn.disabled = !chosen;
+    btn.classList.toggle("is-armed", !!pendingMonster);
+    $("span", btn).textContent = pendingMonster ? "Click the map… (Esc to cancel)" : chosen ? "Place " + ($("#mon-count").value || 1) + " × " + chosen.name : "Pick a monster";
+  }
+  function dropMonsters(x, y) {
+    const m = pendingMonster, n = Math.max(1, Math.min(20, Number($("#mon-count").value) || 1));
+    const body = Object.assign({ count: n, x, y }, m.creature_id ? { creature_id: m.creature_id } : { book: m.book });
+    run("POST", "/api/maps/" + MID + "/monsters", body, (d) => {
+      toast("Added " + d.added.join(", ") + (d.encounter_created ? ". Made an encounter for this map so you can run the fight." : "."), "ok",
+        { action: { label: "Open combat", run: () => { location.href = "/combat/" + d.map.encounter_id; } } });
+      if (window.FX) FX.sound("hit");
+    });
+    // stay ready to drop more of the same until another tool is picked
+  }
+  $("#mon-q").addEventListener("input", renderMonsters);
+  $("#mon-count").addEventListener("input", renderMonsters);
+  $("#mon-place").addEventListener("click", () => {
+    if (!chosen) return;
+    pendingMonster = pendingMonster ? null : chosen;
+    if (pendingMonster) { setTool("place"); pendingMonster = chosen; const n = Number($("#mon-count").value) || 1; $("#hint").textContent = "Click where " + (n > 1 ? "the " + n + " × " + chosen.name + " go" : "the " + chosen.name + " goes") + ". Keep clicking to add more; pick Move when you're done."; }
+    renderMonsters();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pendingMonster) { pendingMonster = null; setTool("select"); renderMonsters(); } });
+  loadMonsters();
 
   // ---- spell areas -------------------------------------------------------------------------
   const DAMAGE_COLORS = [["Fire", "#e0714f"], ["Cold", "#7fc4e8"], ["Lightning", "#f3d23a"], ["Acid", "#8fd14f"], ["Poison", "#5fa04a"],

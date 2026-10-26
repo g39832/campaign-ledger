@@ -633,6 +633,16 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .live-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 30%, transparent); }
 .page-play .map-tools { flex-wrap: wrap; }
 
+/* ---------- map: add monsters ---------- */
+.mon-list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.mon-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.mon-list li:last-child { border-bottom: 0; }
+.mon-list li:hover { background: var(--raised); }
+.mon-list li.is-sel { background: var(--brass-soft); box-shadow: inset 3px 0 0 var(--brass); }
+.mon-list li .faint { font-size: .82rem; }
+.mon-list li .tag { margin-left: auto; font-size: .7rem; }
+#mon-place.is-armed { background: var(--brass); border-color: var(--brass); color: #1d140a; }
+
 /* ---------- map: spell areas ---------- */
 .area-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .area-presets .btn { min-height: 28px; padding: 3px 8px; font-size: .84rem; }

@@ -120,3 +120,31 @@ def test_online_status_is_dm_only(app, api, monkeypatch):
     api.post("/api/online/start", {}, 400)
     r = app.test_client().get("/api/online", headers={"CF-Connecting-IP": "203.0.113.5", "Host": "x.trycloudflare.com"})
     assert r.status_code == 401
+
+
+def test_add_monsters_straight_onto_a_map(api, camp):
+    hero = api.character(camp["id"], name="Aria", max_hp=20)
+    st = api.post(f"/api/campaigns/{camp['id']}/maps", {"preset": "forest"}, 201)
+    mid = st["map"]["id"]
+    assert st["map"]["encounter_id"] is None
+    d = api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 3, "x": 10, "y": 10}, 201)
+    assert d["added"] == ["Goblin 1", "Goblin 2", "Goblin 3"] and d["encounter_created"]
+    eid = d["map"]["encounter_id"]
+    assert eid and d["encounter"]["id"] == eid, "the map got an encounter so the fight can be run"
+    spots = {(int(t["x"]), int(t["y"])) for t in d["tokens"]}
+    assert len(spots) == 3 and all(abs(x - 10) <= 2 and abs(y - 10) <= 2 for x, y in spots), "placed around the click"
+    for x, y in spots:
+        assert d["map"]["terrain"].get(f"{x},{y}") not in BLOCKING
+    enc = api.get(f"/api/encounters/{eid}")
+    gob = [c for c in enc["combatants"] if c["name"] == "Goblin 2"][0]
+    assert (gob["max_hp"], gob["ac"]) == (7, 15) and "Scimitar" in gob["statblock"]["attacks"]
+    # more of the same keep counting up; library creatures work too, and big ones take more squares
+    d = api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 1, "x": 10, "y": 10}, 201)
+    assert d["added"] == ["Goblin 4"] and not d["encounter_created"]
+    cid = api.post("/api/creatures", {"name": "Bog Hag", "max_hp": 40, "ac": 13, "creature_type": "Large fey"}, 201)["creature"]["id"]
+    d = api.post(f"/api/maps/{mid}/monsters", {"creature_id": cid, "x": 3, "y": 3}, 201)
+    hag = [t for t in d["tokens"] if t["display"] == "Bog Hag"][0]
+    assert hag["size"] == 2 and hag["hp"] == 40
+    for bad in ({"book": "Tarrasque"}, {"book": "Goblin", "count": 0}, {"book": "Goblin", "count": 50}, {}):
+        api.post(f"/api/maps/{mid}/monsters", bad, 400)
+    assert api.get(f"/api/characters/{hero['id']}")["character"]["current_hp"] == 20
