@@ -717,9 +717,13 @@ def api_add_monsters(map_id):
         statblock = {k: block.get(k) for k in F.CREATURE if k != "name"}
         statblock["base_name"] = base
         names = _instance_names(ctx, base, count)
+        hidden = bool(data.get("hidden"))
         for n in names:
             _insert_enemy(ctx, n, statblock, block["max_hp"], block["ac"], block["initiative_mod"], creature_id)
-        ctx.log("roster", f"Added {', '.join(names)} from the battle map")
+        if hidden:
+            conn.execute(f"UPDATE combatants SET hidden = 1 WHERE encounter_id = ? AND name IN ({','.join('?' * len(names))})",
+                         (eid, *names))
+        ctx.log("roster", f"Added {', '.join(names)} from the battle map" + (" (hidden from players)" if hidden else ""))
         if ctx.settings["auto_sort"]:
             _resort(ctx)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
@@ -736,6 +740,52 @@ def api_add_monsters(map_id):
             taken.add((sx, sy))
         _bump(conn, map_id)
     return jsonify(dm_state(map_id) | {"added": names, "encounter_created": created}), 201
+
+
+@bp.post("/tokens/<int:token_id>/visibility")
+def api_token_visibility(token_id):
+    """Show or hide a token for players in one click. For an encounter
+    combatant this hides the combatant itself, so it also leaves (or joins) the
+    players' turn order."""
+    data = request.get_json(silent=True) or {}
+    hide = bool(data.get("hidden"))
+    with tx() as conn:
+        map_id = _token_map(conn, token_id)
+        t = conn.execute("SELECT combatant_id FROM map_tokens WHERE id = ?", (token_id,)).fetchone()
+        conn.execute("UPDATE map_tokens SET hidden = ?, updated_at = ? WHERE id = ?", (int(hide), now_iso(), token_id))
+        if t["combatant_id"]:
+            _set_combatant_hidden(conn, [t["combatant_id"]], hide)
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id))
+
+
+@bp.post("/maps/<int:map_id>/reveal")
+def api_reveal_all(map_id):
+    """Show every hidden token on this map to players (the ambush springs)."""
+    with tx() as conn:
+        _map_row(conn, map_id)
+        rows = conn.execute("SELECT t.id, t.combatant_id, cb.hidden AS cb_hidden FROM map_tokens t "
+                            "LEFT JOIN combatants cb ON cb.id = t.combatant_id WHERE t.map_id = ? AND (t.hidden = 1 OR cb.hidden = 1) "
+                            "AND t.kind NOT IN ('trap', 'marker')", (map_id,)).fetchall()
+        conn.execute(f"UPDATE map_tokens SET hidden = 0 WHERE id IN ({','.join('?' * len(rows)) or 'NULL'})", [r["id"] for r in rows])
+        _set_combatant_hidden(conn, [r["combatant_id"] for r in rows if r["combatant_id"] and r["cb_hidden"]], False)
+        _bump(conn, map_id)
+    return jsonify(dm_state(map_id) | {"revealed": len(rows)})
+
+
+def _set_combatant_hidden(conn, combatant_ids, hide):
+    from .combat import Ctx
+    by_enc = {}
+    for cid in combatant_ids:
+        row = conn.execute("SELECT encounter_id, COALESCE(name, '') AS name, hidden FROM combatants WHERE id = ?", (cid,)).fetchone()
+        if row and bool(row["hidden"]) != hide:
+            by_enc.setdefault(row["encounter_id"], []).append((cid, row["name"]))
+    for eid, items in by_enc.items():
+        conn.execute(f"UPDATE combatants SET hidden = ? WHERE id IN ({','.join('?' * len(items))})", (int(hide), *[c for c, _ in items]))
+        ctx = Ctx(conn, eid)
+        names = [ctx.combatant(c)["name"] for c, _ in items]
+        ctx.log("edit", ", ".join(names) + (" hidden from players" if hide else " revealed to players"))
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
 
 
 def _token_map(conn, token_id):

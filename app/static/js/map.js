@@ -126,9 +126,9 @@
   }
   function dropMonsters(x, y) {
     const m = pendingMonster, n = Math.max(1, Math.min(20, Number($("#mon-count").value) || 1));
-    const body = Object.assign({ count: n, x, y }, m.creature_id ? { creature_id: m.creature_id } : { book: m.book });
+    const body = Object.assign({ count: n, x, y, hidden: $("#mon-hidden").checked }, m.creature_id ? { creature_id: m.creature_id } : { book: m.book });
     run("POST", "/api/maps/" + MID + "/monsters", body, (d) => {
-      toast("Added " + d.added.join(", ") + (d.encounter_created ? ". Made an encounter for this map so you can run the fight." : "."), "ok",
+      toast("Added " + d.added.join(", ") + (body.hidden ? " — hidden from players until you show them" : "") + (d.encounter_created ? ". Made an encounter for this map so you can run the fight." : "."), "ok",
         { action: { label: "Open combat", run: () => { location.href = "/combat/" + d.map.encounter_id; } } });
       if (window.FX) FX.sound("hit");
     });
@@ -212,13 +212,25 @@
   // ---- tokens ----------------------------------------------------------------------------
   function renderTokens() {
     $("#token-count").textContent = S.tokens.length;
-    $("#tokens").replaceChildren(...(S.tokens.length ? S.tokens.map((t) => h("li", { class: t.id === selectedToken ? "is-sel" : "", onclick: () => { selectedToken = t.id; view.selectedId = t.id; view.draw(); renderSelected(); renderTokens(); } },
+    const hiddenCount = S.tokens.filter((t) => (t.hidden || t.combatant_hidden) && !["trap", "marker"].includes(t.kind)).length;
+    $("#reveal-all").hidden = !hiddenCount;
+    $("#reveal-all").lastChild.textContent = " Show all hidden (" + hiddenCount + ")";
+    $("#tokens").replaceChildren(...(S.tokens.length ? S.tokens.map((t) => h("li", { class: (t.id === selectedToken ? "is-sel" : "") + (t.hidden || t.combatant_hidden ? " is-hidden" : ""), onclick: (e) => { if (e.target.closest("button")) return; selectedToken = t.id; view.selectedId = t.id; view.draw(); renderSelected(); renderTokens(); } },
       h("span", { class: "swatch", style: "background:" + (t.color || MapView.KIND_COLOR[t.kind]) }),
-      h("span", { class: "nm" }, t.display), t.hidden || t.combatant_hidden ? h("span", { class: "faint", title: "Hidden from players" }, icon("eye-off", "sm")) : null,
+      h("span", { class: "nm" }, t.display),
+      h("button", { type: "button", class: "icon-btn sm eye-btn" + (t.hidden || t.combatant_hidden ? " is-off" : ""),
+        title: t.hidden || t.combatant_hidden ? "Hidden from players — click to show" : "Players can see this — click to hide",
+        "aria-label": (t.hidden || t.combatant_hidden ? "Show " : "Hide ") + t.display,
+        onclick: () => run("POST", "/api/tokens/" + t.id + "/visibility", { hidden: !(t.hidden || t.combatant_hidden) }, () => { if (window.FX && (t.hidden || t.combatant_hidden)) FX.sound("start"); }) },
+        icon(t.hidden || t.combatant_hidden ? "eye-off" : "sun", "sm")),
       h("span", { class: "faint", style: "font-size:.8rem" }, t.kind),
       (t.notes || "").trim() ? h("span", { class: "c-note tok-note", title: t.notes }, icon("scroll-text", "sm"), h("span", null, t.notes.trim())) : null)) : [h("li", { class: "faint" }, "No tokens yet.")]));
   }
   $("#from-enc").addEventListener("click", () => run("POST", "/api/maps/" + MID + "/tokens/from-encounter"));
+  $("#reveal-all").addEventListener("click", () => run("POST", "/api/maps/" + MID + "/reveal", {}, (d) => {
+    toast("Showed " + d.revealed + " to the players.", "ok");
+    if (window.FX) { FX.banner("Ambush!", "The hidden enemies are revealed", "dmg"); FX.sound("start"); }
+  }));
   $("#add-char").addEventListener("change", (e) => {
     const id = Number(e.target.value); e.target.value = "";
     if (id) run("POST", "/api/maps/" + MID + "/tokens", { character_id: id, x: 0, y: 0 });

@@ -148,3 +148,42 @@ def test_add_monsters_straight_onto_a_map(api, camp):
     for bad in ({"book": "Tarrasque"}, {"book": "Goblin", "count": 0}, {"book": "Goblin", "count": 50}, {}):
         api.post(f"/api/maps/{mid}/monsters", bad, 400)
     assert api.get(f"/api/characters/{hero['id']}")["character"]["current_hp"] == 20
+
+
+def test_hidden_monsters_ambush_then_show(app, api, camp):
+    ch = api.character(camp["id"], name="Aria", max_hp=20)
+    code = api.post(f"/api/campaigns/{camp['id']}/join-code", {"action": "new"})["join_code"]
+    p = remote(app, "192.168.1.40")
+    p.post("/api/join", {"code": code, "name": "Sam", "character_id": ch["id"]})
+    mid = api.post(f"/api/campaigns/{camp['id']}/maps", {"preset": "forest"}, 201)["map"]["id"]
+    api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
+    api.post(f"/api/maps/{mid}/monsters", {"book": "Wolf", "count": 1, "x": 5, "y": 5}, 201)
+    d = api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 2, "x": 20, "y": 5, "hidden": True}, 201)
+    eid = d["map"]["encounter_id"]
+    names = lambda st: sorted(t["display"] for t in st["map"]["tokens"])
+    order = lambda st: [o["name"] for o in st["encounter"]["order"]] if st["encounter"] else []
+    api.post(f"/api/encounters/{eid}/start", {})
+    st = p.get("/api/play/state")
+    assert names(st) == ["Wolf"], "players can't see the ambushers on the map"
+    assert "Goblin 1" not in order(st) and "Goblin 2" not in order(st), "...or in the turn order"
+    dm = api.get(f"/api/maps/{mid}")
+    assert sorted(t["display"] for t in dm["tokens"]) == ["Goblin 1", "Goblin 2", "Wolf"], "the DM sees everyone"
+    # one at a time
+    g1 = [t for t in dm["tokens"] if t["display"] == "Goblin 1"][0]
+    api.post(f"/api/tokens/{g1['id']}/visibility", {"hidden": False})
+    assert names(p.get("/api/play/state")) == ["Goblin 1", "Wolf"]
+    # ...or all at once
+    r = api.post(f"/api/maps/{mid}/reveal", {})
+    assert r["revealed"] == 1
+    st = p.get("/api/play/state")
+    assert names(st) == ["Goblin 1", "Goblin 2", "Wolf"] and "Goblin 2" in order(st)
+    log = [e["message"] for e in api.get(f"/api/encounters/{eid}")["log"]]
+    assert any("revealed to players" in m for m in log)
+    # and hiding again works, for the token and the turn order
+    api.post(f"/api/tokens/{g1['id']}/visibility", {"hidden": True})
+    st = p.get("/api/play/state")
+    assert "Goblin 1" not in names(st) and "Goblin 1" not in order(st)
+    # traps and markers stay hidden when everything is shown
+    api.post(f"/api/maps/{mid}/tokens", {"kind": "trap", "label": "Pit", "x": 1, "y": 1, "hidden": True}, 201)
+    api.post(f"/api/maps/{mid}/reveal", {})
+    assert "Pit" not in names(p.get("/api/play/state"))

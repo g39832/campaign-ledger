@@ -643,6 +643,9 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .mon-list li .tag { margin-left: auto; font-size: .7rem; }
 #mon-place.is-armed { background: var(--brass); border-color: var(--brass); color: #1d140a; }
 
+.token-list li.is-hidden .nm { opacity: .65; font-style: italic; }
+.eye-btn.is-off { color: var(--danger); }
+
 /* ---------- map: spell areas ---------- */
 .area-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .area-presets .btn { min-height: 28px; padding: 3px 8px; font-size: .84rem; }
