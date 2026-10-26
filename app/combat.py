@@ -377,14 +377,22 @@ def api_end(eid):
         if ctx.enc["status"] == "ended":
             raise F.ApiError("This encounter has already ended")
         ctx.save_enc(status="ended", ended_at=now_iso())
-        # moves recharging in this fight are ready for the next one, and this-turn-only
-        # effects (Action Surge's extra moves, Reckless) end with it
-        turn_only = lambda x: x.get("cooldown") or x.get("extra_moves") is not None or x.get("dmg_mult")
+        # Conditions don't drag on into the next fight: Prone, Poisoned, Grappled..., recharging
+        # moves, extra moves and the fight's spell effects all clear (concentration ends too).
+        # What stays: switched-on auras (Moni's magic item) and spells lasting an hour or more (Aid).
+        stays = lambda x: x.get("aura") or ((x.get("rounds_left") or 0) >= 600 and not x.get("expired") and not x.get("concentration"))
+        cleared = []
         for c in ctx.combatants():
-            keep = [x for x in c["conditions"] if not (turn_only(x) and x.get("encounter_id") == ctx.enc["id"])]
-            if len(keep) != len(c["conditions"]):
-                ctx.set_vitals(c, conditions=keep)
+            fresh = ctx.combatant(c["id"])  # ending one caster's concentration can change someone else's list
+            ids = {x["id"] for x in fresh["conditions"] if isinstance(x, dict) and x.get("id") and not stays(x)}
+            gone = [x for x in fresh["conditions"] if x.get("id") in ids and not x.get("cooldown")]
+            if ids:
+                drop_conditions(ctx, fresh, ids, quiet=True)
+            if gone:
+                cleared.append(f"{c['name']} ({', '.join(dict.fromkeys(x['name'] for x in gone))})")
         ctx.log("system", f"Encounter ended after {ctx.enc['round']} round{'s' if ctx.enc['round'] != 1 else ''}")
+        if cleared:
+            ctx.log("condition", "Cleared at the end of the fight: " + "; ".join(cleared))
     return mutate(eid, fn, _body().get("op_id"))
 
 
