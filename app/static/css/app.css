@@ -763,6 +763,7 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .fight-result.is-miss { border-left-color: var(--text-3); font-weight: 600; }
 .fight-result.is-crit { border-left-color: var(--danger); color: var(--danger); }
 .fight-result.is-heal { border-left-color: var(--hp-high); }
+.fight-note { font-size: .88rem; color: var(--text-2, var(--text)); padding-left: 10px; border-left: 2px solid var(--line); overflow-wrap: anywhere; }
 .fight-hpctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .fight-hpctl input { width: 7ch; }
 .fight-aim .check { display: flex; margin: 0 0 8px; }

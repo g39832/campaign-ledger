@@ -309,8 +309,13 @@
           out.push({ name: s.name, many: true, icon: L.spellHelps(s) ? "shield-plus" : "zap", info: what, effect: s });
       });
     } else {
-      L.attackLines((c.statblock || {}).attacks).forEach((a) => out.push({ name: a.name, single: true, icon: "swords",
-        info: [a.hit ? a.hit + " to hit" : "", a.dmg].filter(Boolean).join(" · "),
+      L.attackLines((c.statblock || {}).attacks).forEach((a) => out.push(a.check ? { name: a.name, instant: true, icon: "dice-5",
+        info: "roll " + a.check + (a.beat != null ? " · beat " + a.beat : a.dc != null ? " · DC " + a.dc : ""),
+        run: async () => {
+          const r = await roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name });
+          if (r) say(c.id, a.name + ": rolled " + r.total + (L.checkVerdict(a, r.total) ? " — " + L.checkVerdict(a, r.total) : "") + ".", a.beat != null || a.dc != null ? (L.checkVerdict(a, r.total).startsWith("beats") || L.checkVerdict(a, r.total).startsWith("makes") ? "hit" : "miss") : "hit");
+        } } : { name: a.name, single: true, icon: "swords",
+        info: [a.hit ? a.hit + " to hit" : "", a.dmg ? a.dmg + (a.hit ? "" : " damage") : ""].filter(Boolean).join(" · "),
         toHit: a.hit ? () => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.dmg ? (crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }) : null }));
     }
@@ -327,6 +332,7 @@
 
   async function arm(c, a) {
     lastResult = null;
+    if (a.instant) { await a.run(); return; } // a plain roll: no target to pick
     aim = { by: c.id, act: a, amount: null, done: new Set(), half: false };
     if (a.roll) { // area / healing spells: roll once, then every tap gets the same amount
       const r = await a.roll();
@@ -420,7 +426,9 @@
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),
         acts.map((x) => h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : ""), onclick: () => arm(c, x) },
           icon(x.icon, "sm"), h("b", null, x.name), x.info ? h("span", { class: "faint" }, x.info) : null)))
-        : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet." : "No attacks in this stat block. Add lines like “Bite. +4 to hit, 1d6+2 piercing” on the Combat screen."),
+        : h("p", { class: "faint", style: "margin:8px 0 0;font-size:.88rem" }, c.linked ? "No attacks or spells on " + c.name + "'s sheet yet."
+          : "No attacks written for " + c.name + " yet. Add them in the Attacks box of its stat block, one per line, like “Bite 1d6” or “Claw. +4 to hit, 1d6+2”."),
+      c.linked ? null : L.attackNotes((c.statblock || {}).attacks).map((n) => h("div", { class: "fight-note" }, n)),
       a ? null : h("div", { class: "hp-ctl fight-hpctl" }, amt,
         h("button", { type: "button", class: "btn btn-sm btn-dmg", onclick: () => hp("damage") }, "Damage"),
         h("button", { type: "button", class: "btn btn-sm btn-heal", onclick: () => hp("heal") }, "Heal")),

@@ -381,7 +381,11 @@
     if (c.kind !== "enemy") return [];
     return attackLines(c.statblock.attacks).map((a) => ({ name: a.name,
       hit: a.hit ? (e) => roll({ expression: "1d20" + a.hit, label: a.name + " attack", kind: "attack", subject: c.name }, e) : null, hitLabel: "Hit " + a.hit,
-      dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }, e) : null, dmgLabel: "Dmg " + a.dmg }));
+      dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + " damage", kind: "damage", subject: c.name, crit }, e) : null, dmgLabel: "Dmg " + a.dmg,
+      chk: a.check ? (e) => roll({ expression: a.check, label: a.name, kind: "custom", subject: c.name }, e).then((r) => {
+        if (r && L.checkVerdict(a, r.total)) toast(c.name + " — " + a.name + ": " + r.total + ", " + L.checkVerdict(a, r.total) + ".", "ok");
+        return r; }) : null,
+      chkLabel: "Roll " + a.check + (a.beat != null ? " (beat " + a.beat + ")" : a.dc != null ? " (DC " + a.dc + ")" : "") }));
   }
   function castSection(c) {
     const s = casting.spell, healing = s.effect === "heal";
@@ -452,6 +456,7 @@
     const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
       a.hit ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.hit(e).then(after("hit")) }, a.hitLabel) : null,
+      a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
       a.dmg ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (e) => a.dmg(e, false).then(after(a.heal ? "heal" : "dmg")) },
         a.heal ? [icon("heart", "sm"), " " + a.dmgLabel] : a.dmgLabel) : null,
       a.dmg && !a.heal ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Critical: double the dice", onclick: (e) => a.dmg(e, true).then(after("dmg")) }, "Crit") : null))) : null;

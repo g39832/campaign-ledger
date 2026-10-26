@@ -115,14 +115,35 @@
       h("div", { class: "row", style: "margin-top:10px" },
         h("button", { type: "button", class: "btn btn-sm" + (done ? " btn-primary" : ""), onclick: onDone }, done ? "Done" : "Cancel")));
   }
-  // "Scimitar. Melee Weapon Attack: +4 to hit ... Hit: 5 (1d6 + 2)" -> { name, hit: "+4", dmg: "1d6+2" }, one per stat-block line
-  function attackLines(text) {
-    return String(text || "").split(/\n+/).map((line) => {
-      const name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1];
-      const hit = line.match(/([+-]\s*\d+)\s*to hit/i);
-      const dmg = line.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)/i);
-      return name && (hit || dmg) ? { name: name.trim(), hit: hit ? hit[1].replace(/\s/g, "") : null, dmg: dmg ? dmg[1].replace(/\s/g, "") : null } : null;
-    }).filter(Boolean);
+  /* One stat-block line -> something to roll. Understands the book style and quick shorthand:
+       "Scimitar. Melee Weapon Attack: +4 to hit ... Hit: 5 (1d6 + 2)" -> { name, hit: "+4", dmg: "1d6+2" }
+       "Bite 1d4" / "Snipe shot - 1d20 damage"                         -> { name, dmg }
+       "Spread 1d20 must beat a 5" / "Entangle 1d20"                    -> { name, check: "1d20", beat: 5 }  (a roll, not damage)
+       "can summon a mad mushroom"                                      -> { note }                          (no dice) */
+  function parseAttack(raw) {
+    const line = String(raw || "").trim();
+    if (!line) return null;
+    const hitM = line.match(/([+-]\s*\d+)\s*to hit/i);
+    const diceM = line.match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)/i);
+    if (!diceM && !hitM) return /[a-z]/i.test(line) ? { note: line } : null;
+    let name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1] || line.split(/\s+[-–—:]\s*|\s*:\s*|\s*\d*d\d|\s*[+-]\s*\d/i)[0];
+    name = name.replace(/\d*d\d+(?:\s*[+-]\s*\d+)?/gi, "").replace(/\bDC\s*\d+/gi, "").replace(/[\s\-–—:,]+$/, "").trim() || "Attack";
+    name = name.charAt(0).toUpperCase() + name.slice(1);
+    const expr = diceM ? diceM[1].replace(/\s/g, "").replace(/^d/i, "1d") : null;
+    const hit = hitM ? hitM[1].replace(/\s/g, "") : null;
+    if (expr && /^1d20([+-]\d+)?$/i.test(expr) && !hit && !/damage|dmg/i.test(line)) {
+      const dc = line.match(/\b(?:beat|beats)\s+(?:a\s+)?(\d+)/i), dcM = line.match(/\bDC\s*(\d+)/i);
+      return { name, check: expr, beat: dc ? Number(dc[1]) : null, dc: dcM ? Number(dcM[1]) : null };
+    }
+    return { name, hit, dmg: expr };
+  }
+  const attackLines = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && !a.note);
+  const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);
+  // "Spread: 7 — beats 5" for a roll with a target number
+  function checkVerdict(a, total) {
+    if (a.beat != null) return total > a.beat ? "beats " + a.beat : "doesn't beat " + a.beat;
+    if (a.dc != null) return total >= a.dc ? "makes DC " + a.dc : "fails DC " + a.dc;
+    return "";
   }
   function icon(name, cls) {
     const ns = "http://www.w3.org/2000/svg";
@@ -493,5 +514,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, isHealing, attackLines, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, isHealing, attackLines, attackNotes, checkVerdict, spellHelps, spellWhat, castPicker, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();
