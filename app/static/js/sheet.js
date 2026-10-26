@@ -236,15 +236,20 @@
                 h("b", null, (row.name || "").trim() || "Unnamed"), h("span", { class: "faint" }, opts.fold.summary(row))))),
           del(i))
         : h("tr", { class: opts.fold ? "is-open" : null },
-        opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, foldBtn(i, true), opts.rowActions(i, row)) : null,
-        cols.map((c) => h("td", { style: c.width ? "width:" + c.width : null, "data-label": c.label, class: "f-" + c.key },
-          c.type === "check"
+        opts.rowActions ? h("td", { class: "acts-cell", "data-label": "Roll" }, opts.rowActions(i, row)) : null,
+        cols.map((c) => {
+          const box = c.type === "check"
             ? h("input", { type: "checkbox", checked: !!row[c.key], "aria-label": c.label, onchange: (e) => update(i, c.key, e.target.checked) })
             : c.type === "number"
               ? h("input", { type: "number", value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
                 oninput: (e) => update(i, c.key, e.target.value === "" ? null : Number(e.target.value)) })
               : L.wrapText({ value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
-                oninput: (e) => update(i, c.key, e.target.value) }))),
+                oninput: (e) => update(i, c.key, e.target.value) });
+          // The arrow sits with the name, exactly where it is on a folded row, so folding back up
+          // is always the same click.
+          return h("td", { style: c.width ? "width:" + c.width : null, "data-label": c.label, class: "f-" + c.key },
+            opts.fold && c.key === "name" ? h("div", { class: "open-name" }, foldBtn(i, true), box) : box);
+        }),
         del(i)));
       const allOpen = list.length && list.every((_, i) => openRows.has(i));
       container.replaceChildren(

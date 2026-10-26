@@ -983,7 +983,7 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
 .dice-btn { position: relative; }
 .dice-mode-flag { font: 700 .68rem var(--sans); color: var(--on-accent); background: var(--accent); border-radius: 2px; padding: 1px 4px; }
 .dice-badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font: 700 .72rem/18px var(--sans); text-align: center; padding: 0 4px; }
-.dice-dock { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 60; background: var(--surface); border-left: 1px solid var(--line-strong); box-shadow: var(--shadow); padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; transform: translateX(105%); visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s; overflow-y: auto; }
+.dice-dock { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); z-index: 60; background: var(--surface); border-left: 1px solid var(--line-strong); box-shadow: var(--shadow); padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 10px; transform: translateX(105%); visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s; overflow-y: auto; }
 .dice-dock.is-open { transform: none; visibility: visible; transition: transform .18s ease; }
 .dice-dock > * { flex-shrink: 0; } /* the dock scrolls; never squash a section so its contents overlap */
 .dd-head { display: flex; align-items: center; gap: 10px; }
@@ -1173,8 +1173,11 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #attacks .list-editor, #attacks .list-editor tbody { display: block; width: 100%; }
 #attacks .list-editor thead { display: none; }
 #attacks .list-editor tr { display: grid; position: static; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line);
-  grid-template-columns: auto minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) minmax(72px, .6fr) 30px;
-  grid-template-areas: "acts name bonus damage cooldown del" "acts notes notes area area area"; align-items: start; }
+  grid-template-columns: 96px minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) minmax(72px, .6fr) 30px;
+  grid-template-areas: "acts name bonus damage cooldown del" "acts notes notes area area area" "acts condition extra_moves dmg_mult . ."; align-items: start; }
+#attacks td.f-condition { grid-area: condition; }
+#attacks td.f-extra_moves { grid-area: extra_moves; }
+#attacks td.f-dmg_mult { grid-area: dmg_mult; }
 #attacks td.f-cooldown { grid-area: cooldown; }
 #attacks td.f-cooldown input { width: 100%; }
 #attacks .list-editor td { display: block; width: auto !important; min-width: 0; border: 0; padding: 0; order: 0; }
@@ -1192,9 +1195,11 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 /* examples ("+5", "1d8+3 slashing") show only in the box being typed in, so empty boxes don't look filled in */
 #attacks textarea::placeholder { font-style: italic; color: var(--text-3); opacity: .7; }
 #attacks textarea:not(:focus)::placeholder { color: transparent; }
-@container (max-width: 460px) {
+/* Below ~540px the name gets too narrow beside the roll buttons, so the row stacks:
+   name on top (with its fold arrow), fields under it, buttons along the bottom. */
+@container (max-width: 540px) {
   #attacks .list-editor tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
-    grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "acts acts acts acts"; }
+    grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "condition extra_moves dmg_mult ." "acts acts acts acts"; }
   #attacks td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; }
 }
 
@@ -1221,11 +1226,17 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 /* folded attack rows: one line */
 .list-editor.foldable tr.is-folded td { vertical-align: middle; }
 .fold-cell { padding-top: 6px; padding-bottom: 6px; }
-.fold-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fold-line { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+/* the arrow lines up with the name, even when the summary wraps onto a second line */
+.fold-line .row-fold { margin-top: 1px; }
 .fold-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .fold-text .faint { font-size: .85rem; overflow-wrap: anywhere; }
 .fold-text:hover .faint { color: var(--text-2, var(--text)); }
 .acts-cell .row-fold { margin-right: 4px; }
+/* an open attack: the fold arrow sits with the name, the same click as on a folded row */
+.open-name { display: flex; align-items: flex-start; gap: 2px; min-width: 0; }
+.open-name .row-fold { flex: 0 0 auto; margin-top: 2px; }
+.open-name textarea { flex: 1 1 auto; width: auto; min-width: 0; }
 .list-editor tr.is-folded td.fold-cell, .list-editor tr.is-folded td.acts-cell { grid-column: 1 / -1; }
 /* a folded attack: its line on top, the roll buttons in one row underneath */
 #attacks .list-editor tr.is-folded { grid-template-columns: minmax(0, 1fr) 30px; grid-template-areas: "fold del" "acts acts"; align-items: center; }
