@@ -271,11 +271,10 @@
       if (this.total == null || !this.dice.length || this.flashT0 == null) return;
       const ctx = this.ctx, k = Math.min(1, (performance.now() - this.flashT0) / FLASH_MS);
       const pulse = 1 + 0.35 * Math.abs(Math.sin(k * Math.PI * 3)) * (1 - k) + (k < 0.12 ? (0.12 - k) * 4 : 0);
-      const settledSmall = k >= 1 ? 0.5 : 1; // once it's flashed, smaller and up top, so the dice show again
-      const size = Math.max(22, Math.min(this.h * 0.5, 120)) * pulse * settledSmall;
+      const size = Math.max(20, Math.min(this.h * 0.24, 64)) * pulse; // always up top, never over the dice
       const col = this.tone === "crit" ? "#ffd36b" : this.tone === "fumble" ? "#ff6b5a" : "#ffffff";
       const text = String(this.total), x = this.w / 2, top = Math.min(...this.dice.map((d) => d.end[1] - d.R));
-      const y = k >= 1 ? size * 0.62 : Math.max(size * 0.55, top - size * 0.15);
+      const y = Math.max(size * 0.62, Math.min(top - size * 0.6, this.h * 0.2));
       ctx.save();
       ctx.font = `800 ${size}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const w = ctx.measureText(text).width + size * 0.5, hgt = size * 0.95;
@@ -284,16 +283,6 @@
       ctx.globalAlpha = 1; ctx.shadowColor = col; ctx.shadowBlur = size * (0.25 + 0.35 * (1 - k));
       ctx.lineWidth = size * 0.08; ctx.strokeStyle = "rgba(0,0,0,.9)"; ctx.strokeText(text, x, y + size * 0.04);
       ctx.fillStyle = col; ctx.fillText(text, x, y + size * 0.04);
-      ctx.restore();
-    }
-    /* Each die's number, big and bright on top of it as it lands (so nobody has to squint at a face). */
-    drawPop(d, x, y, since) {
-      const ctx = this.ctx, pop = since < 260 ? 1 + 0.7 * (1 - since / 260) : 1, size = d.R * 0.95 * pop;
-      ctx.save();
-      ctx.globalAlpha = d.s.kept === false ? 0.45 : 1;
-      ctx.font = `800 ${size}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.lineWidth = size * 0.16; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(d.s.shown, x, y);
-      ctx.fillStyle = "#fffaf0"; ctx.shadowColor = "#fff"; ctx.shadowBlur = since < 400 ? size * 0.6 : 0; ctx.fillText(d.s.shown, x, y);
       ctx.restore();
     }
     orient(d, p) {
@@ -331,7 +320,6 @@
         ctx.restore();
         const dim = p >= 1 && !d.s.kept;
         this.drawDie(d, this.orient(d, p), x, y - z * 0.55, d.R * (1 + z / (d.R * 9)), dim);
-        if (p >= 1) this.drawPop(d, x, y, elapsed === Infinity ? 1e9 : elapsed - d.delay - this.duration);
       }
       this.drawTotal();
       return done;
