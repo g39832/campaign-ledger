@@ -200,7 +200,7 @@ def _own_character(conn, char_id):
     if live is not None:
         from .movement import fight_turn
         turn = fight_turn(conn, map_dict(live), char_id)
-        out["move"] = turn and {k: turn[k] for k in ("my_turn", "speed", "used", "dash", "left")}
+        out["move"] = turn and {k: turn[k] for k in ("my_turn", "speed", "used", "dash", "left", "held")}
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
                                    "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign

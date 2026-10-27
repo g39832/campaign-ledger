@@ -72,9 +72,29 @@ def turn_info(conn, cb_id):
     mine = row["current_id"] == row["cb_id"]
     done = _turn(row)
     speed = speed_ft(conn, row["character_id"]) if row["character_id"] else monster_speed(row)
+    held = held_by(conn, row)
+    if held:
+        speed = 0  # Grappled, Restrained, down...: they can't move at all
     used = done.get("ft", 0)
     return {"cb_id": row["cb_id"], "name": row["name"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
-            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0}
+            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0, "held": held}
+
+
+def held_by(conn, row):
+    """What keeps someone in place (speed 0), or None: a condition like Grappled, or being down."""
+    from .play import SPEED_ZERO
+    if row["character_id"]:
+        ch = conn.execute("SELECT conditions, status FROM characters WHERE id = ?", (row["character_id"],)).fetchone()
+        conds, status = ch["conditions"], ch["status"]
+    else:
+        st = conn.execute("SELECT status FROM combatants WHERE id = ?", (row["cb_id"],)).fetchone()
+        conds, status = row["conditions"], st["status"]
+    if status in ("unconscious", "dead", "defeated"):
+        return status.capitalize()
+    for x in json.loads(conds or "[]"):
+        if isinstance(x, dict) and not x.get("expired") and str(x.get("name") or "").strip().capitalize() in SPEED_ZERO:
+            return x["name"].strip()
+    return None
 
 
 def fight_turn(conn, md, char_id):
@@ -119,6 +139,8 @@ def check_dm_move(conn, md, token, x1, y1):
 def _check(conn, md, turn, x0, y0, x1, y1, name):
     if not turn["my_turn"]:
         raise F.ApiError("Wait for your turn to move" if name is None else f"It's not {name}'s turn — they can move on their turn (or switch on Free move)", status=403)
+    if turn["held"]:
+        raise F.ApiError((f"You're {turn['held']}" if name is None else f"{name} is {turn['held']}") + " and can't move", status=403, stuck=turn["held"])
     cost = step_ft(md, x0, y0, x1, y1)
     if cost > turn["left"]:
         who = "you have" if name is None else f"{name} has"

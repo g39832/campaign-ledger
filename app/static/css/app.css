@@ -1048,7 +1048,7 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .map-tools .sep { width: 1px; background: var(--line); margin: 2px 3px; }
 .map-zoom { position: absolute; bottom: 8px; right: 8px; z-index: 6; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 2px; }
 .map-hint { position: absolute; bottom: 8px; left: 8px; z-index: 6; background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 8px; font-size: .82rem; color: var(--text-2); max-width: 60%; }
-.map-side { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 190px); overflow-y: auto; }
+.map-side { position: relative; /* keeps the hidden upload box inside, so the page doesn't grow */ display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 190px); overflow-y: auto; }
 .map-side .panel { padding: 10px 12px; }
 .map-side .rule-head { margin-bottom: 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1094,6 +1094,7 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 @media (max-width: 1100px) {
   .map-layout, .play-grid { grid-template-columns: minmax(0, 1fr); }
   .map-side { max-height: none; }
+  .page-map .topbar { position: static; }
   .map-stage { height: 62vh; }
   /* the player's phone: the map stays at the top while their character scrolls under it */
   .page-play .topbar { position: static; }
@@ -1291,3 +1292,22 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #skills li.is-set .v { color: var(--brass, var(--accent)); }
 #skills .skill-set::-webkit-inner-spin-button, #skills .skill-set::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 #skills .skill-set { -moz-appearance: textfield; }
+
+/* the player's screen before the DM shares a map: a small strip, not a big empty box */
+body.no-live-map .play-grid .map-stage, body.no-live-map[data-map-size] .play-grid .map-stage { height: 130px; min-height: 0; }
+body.no-live-map .play-map { position: static; }
+@media (max-width: 1100px) { body.no-live-map .play-grid { grid-template-columns: minmax(0, 1fr); } }
+body.no-live-map .map-tools, body.no-live-map .map-zoom, body.no-live-map .map-hint { display: none; }
+body.no-live-map #no-map { inset: 16px 12px auto !important; }
+
+/* the DM's battle map on a tablet on its side: the menu beside the map, and it scrolls on its own
+   so the map stays in view */
+@media (orientation: landscape) and (max-width: 1100px) and (min-width: 700px) {
+  .map-layout { grid-template-columns: minmax(0, 1fr) 290px; }
+  .map-layout .map-stage { height: calc(100vh - 24px); height: calc(100dvh - 24px); min-height: 0; position: sticky; top: 12px; }
+  .map-layout .map-side { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); position: sticky; top: 12px; }
+}
+/* wider screens: the map and its menu stay in view as the page scrolls */
+@media (min-width: 1101px) {
+  .map-layout .map-stage, .map-layout .map-side { position: sticky; top: 62px; }
+}

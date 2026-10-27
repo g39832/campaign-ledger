@@ -34,7 +34,7 @@ def test_only_on_your_turn_and_only_your_speed(api, battlemap):
     assert not tok(pa.get("/api/play/state")["map"], "Aria")["movable"]
     to_turn(api, eid, "Aria")
     st = pa.get("/api/play/state")
-    assert st["character"]["move"] == {"my_turn": True, "speed": 30, "used": 0, "dash": False, "left": 30}
+    assert st["character"]["move"] == {"my_turn": True, "speed": 30, "used": 0, "dash": False, "left": 30, "held": None}
     assert tok(st["map"], "Aria")["movable"] is True
     r = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 7, "y": 0}, 403)        # 35 ft
     assert "35 ft" in r["error"] and "30 ft" in r["error"]
@@ -123,3 +123,25 @@ def test_player_ends_their_own_turn(api, battlemap):
     assert st["encounter"]["current_id"] != me["id"]
     assert any("Sam ended Aria's turn" in e["message"] for e in st["log"])
     assert pa.get("/api/play/state")["character"]["my_turn"] is False
+
+
+def test_held_in_place_means_no_movement_anywhere(api, battlemap):
+    """Grappled (or down): speed 0 on the phone, on the DM's map and in the reach box."""
+    pa, eid, mid = battlemap["pa"], battlemap["eid"], battlemap["mid"]
+    me = setup(api, battlemap)
+    to_turn(api, eid, "Aria")
+    aria = next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == "Aria")
+    api.post(f"/api/combatants/{aria['id']}/conditions", {"name": "Grappled"})
+    st = pa.get("/api/play/state")["character"]["move"]
+    assert st["held"] == "Grappled" and st["left"] == 0
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 1, "y": 0}, 403)
+    err = api.post(f"/api/tokens/{me['id']}/move", {"x": 1, "y": 0}, 403)
+    assert "Aria is Grappled" in err["error"]
+    assert api.get(f"/api/maps/{mid}")["move"]["left"] == 0
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 1, "y": 0, "free": True})        # Free move still works
+    # a grappled monster too
+    to_turn(api, eid, "Bandit 1")
+    b1 = next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == "Bandit 1")
+    api.post(f"/api/combatants/{b1['id']}/conditions", {"name": "Restrained"})
+    bt = tok(api.get(f"/api/maps/{mid}"), "Bandit 1")
+    api.post(f"/api/tokens/{bt['id']}/move", {"x": bt["x"] - 1, "y": bt["y"]}, 403)

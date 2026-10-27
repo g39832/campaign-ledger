@@ -257,6 +257,7 @@
   // in a fight: your own turn only, as far as your speed
   function moveHint(mine, mv) {
     if (mv && !mv.my_turn) return "Wait for your turn to move. ";
+    if (mv && mv.held) return "You're " + mv.held + " — you can't move. ";
     if (mv && mine.movable) return "Drag your token to move: " + mv.left + " of " + mv.speed * (mv.dash ? 2 : 1) + " ft left. ";
     if (mv && !mv.left) return "No movement left this turn" + (mv.dash ? ". " : " (Dash for more). ");
     return mine.movable ? "Drag your token to move. " : "The DM has locked movement. ";
@@ -306,6 +307,7 @@
     const a = document.activeElement, keep = a && a.dataset && a.dataset.keep;
     const m = S.map;
     $("#no-map").hidden = !!m;
+    document.body.classList.toggle("no-live-map", !m); // no map shared: the map box shrinks out of the way
     if (m) {
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
       if (ms !== mapStamp && !view.drag) { mapStamp = ms; view.setData(m, S.mapTokens); }
