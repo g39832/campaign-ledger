@@ -585,6 +585,8 @@
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
     if (!t) return;
     if (!target) { toast((t.display || "That token") + " isn't a fighter, just a marker on the map. Heroes and monsters in the fight can be targeted.", "error"); return; }
+    const helpful = a.heal || (a.cast && L.spellHelps(a.cast.spell));
+    if (target.id === c.id && !helpful) { toast(c.name + " can't hit themselves.", "error"); return; } // heals and buffs on yourself are fine
     if (a.reach && !cur.area && !freeMove) { // physical moves reach the enemies right next to them (Free move ignores it)
       const d = feetBetween(c.id, target.id);
       if (d != null && d > a.reach) { toast(target.name + " is " + d + " ft away — " + a.name + " only reaches " + a.reach + " ft. Move " + c.name + " next to them first (or switch on Free move).", "error"); return; }
@@ -665,7 +667,7 @@
     // aiming: one big instruction instead of the buttons
     const inArea = a && aim.area ? caught(c) : [];
     const castBox = a && aim.cast && !aim.area ? L.castPanel({ spell: a.cast.spell, chosen: aim.done, busy: false, result: null,
-      people: enc.combatants.filter((x) => x.id === c.id || !["dead", "defeated", "fled"].includes(x.status) || aim.done.has(x.id))
+      people: enc.combatants.filter((x) => (x.id === c.id ? L.spellHelps(a.cast.spell) : !["dead", "defeated", "fled"].includes(x.status) || aim.done.has(x.id)))
         .map((x) => ({ id: x.id, name: x.id === c.id ? x.name + " (self)" : x.name, ally: (x.kind === "enemy") === (c.kind === "enemy"),
           info: a.cast.spell.kind === "heal" ? x.hp + "/" + x.max_hp + " HP" : "AC " + x.ac })),
       slots: c.linked && Object.keys(c.spell_slots || {}).length ? c.spell_slots : null, slot: aim.slot, free: aim.free, allowFree: true,

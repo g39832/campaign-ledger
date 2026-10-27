@@ -523,6 +523,8 @@ def cast(ctx, caster_id, data, viewer=None):
         left = cooldown_left(caster["conditions"], sp["name"], ctx.enc["id"])
         if left:
             raise F.ApiError(f"{sp['name']} is recharging — ready after {max(1, left - 1)} more of {caster['name']}'s turns")
+    if not spell_helps(sp) and caster["id"] in targets:  # nobody attacks themselves (heals and buffs on yourself are fine)
+        raise F.ApiError(f"{caster['name']} can't hit themselves with {sp['name']}")
     people = [ctx.combatant(t) for t in targets]
     nums = caster_numbers(ctx, caster)
     nums.update(extra)

@@ -96,3 +96,22 @@ def test_attacks_show_on_the_map_for_everyone(api, battlemap):
     assert any(p.get("fx") for p in pa.get("/api/play/state")["map"]["pings"]), "the phone gets it too"
     api.post(f"/api/maps/{battlemap['mid']}/fx", {"by": by["Bandit 1"]["id"], "name": "Scimitar", "targets": [{"id": by["Aria"]["id"], "how": "crit"}]})
     assert [p["fx"]["how"] for p in api.get(f"/api/maps/{battlemap['mid']}")["pings"] if p.get("fx")][-1] == ["crit"]
+
+
+def test_nobody_hits_themselves(api, battlemap):
+    """A player can't hit themselves (phone or not), and neither can the DM aim a hero's or a
+    monster's attack at its own caster; healing and buffs on yourself still work."""
+    eid, by = setup(api, battlemap)
+    pa = battlemap["pa"]
+    for what, index in (("attack", 0), ("attack", 1), ("spell", 0)):
+        err = pa.post("/api/play/me/use", {"what": what, "index": index, "targets": [by["Aria"]["id"]]}, 403)
+        assert "can't attack yourself" in err["error"]
+    hp0 = next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == "Aria")["hp"]
+    err = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 0, "targets": [by["Aria"]["id"]]}, 400)
+    assert "can't hit themselves" in err["error"]
+    spec = {"name": "Claw", "effect": "damage", "dice": "1d6", "hit": "attack", "attack_bonus": 50}
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Bandit 1"]["id"], "spell": spec, "targets": [by["Bandit 1"]["id"]]}, 400)
+    assert next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == "Aria")["hp"] == hp0
+    # healing yourself is fine
+    api.post(f"/api/combatants/{by['Aria']['id']}/hp", {"op": "damage", "amount": 3})
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 1, "targets": [by["Aria"]["id"]]})

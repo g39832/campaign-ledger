@@ -446,7 +446,7 @@
   }
   function castSection(c) {
     const k = casting, s = k.spell, healing = s.kind === "heal";
-    const people = S.combatants.filter((x) => x.id === c.id || !OUT.has(x.status) || k.chosen.has(x.id))
+    const people = S.combatants.filter((x) => (x.id === c.id ? L.spellHelps(s) : !OUT.has(x.status) || k.chosen.has(x.id))) // not yourself for harmful spells
       .map((x) => ({ id: x.id, name: x.id === c.id ? x.name + " (self)" : x.name, ally: !isFoe(c, x),
         info: healing ? x.hp + "/" + x.max_hp + " HP" : "AC " + x.ac }));
     const send = (free) => {
