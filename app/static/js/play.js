@@ -194,13 +194,14 @@
     k.busy = true; render();
     try {
       const d = await api("POST", "/api/play/me/use", { what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() });
+      if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []); // hit or miss once the dice land
       k.result = d.cast || null;
-      if (d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
       const hows = d.cast ? d.cast.targets.map((t) => t.how) : [];
       const missed = hows.length && hows.every((x) => x === "miss" || x === "saved");
       if (window.FX) { FX.banner(missed ? "Missed" : hows.includes("crit") ? "Critical hit!" : "Hit!", k.name, missed ? "dmg" : "crit"); FX.sound(missed ? "miss" : "hit"); }
     } catch (e) { toast(e.message, "error"); k.busy = false; k.chosen.clear(); render(); return; }
     k.busy = false;
+    render(); // the result, now that the dice have landed (the refresh below may have nothing new to draw)
     load(true);
   }
   function useBox() {
@@ -233,11 +234,12 @@
     render();
     try {
       const d = await api("POST", "/api/play/me/use", { what: "spell", index: s.index, targets: [], op_id: L.uid() });
+      if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []);
       using.result = d.cast || null;
-      if (d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
       if (window.FX) { FX.banner(s.name + "!", d.cast && d.cast.targets.length ? d.cast.targets.length + " caught in it" : "no enemies in it yet", "crit"); FX.sound("crit"); }
     } catch (e) { toast(e.message, "error"); using = null; }
     if (using) using.busy = false;
+    render();
     load(true);
   }
   // Take it back: a misclick undone (until anything else happens in the fight)
@@ -281,12 +283,13 @@
     k.busy = true; render();
     try {
       const d = await api("POST", "/api/play/cast", { spell: k.index, targets: [...k.chosen], slot: k.slot, op_id: L.uid() });
+      if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []);
       k.result = d.cast || null;
-      if (d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
       const healing = k.spell.kind === "heal";
       if (window.FX) { FX.float($("#party"), healing && d.roll ? "+" + d.roll.total : "✦", healing ? "heal" : "ac"); FX.sound(healing ? "heal" : "ac"); }
     } catch (e) { toast(e.message, "error"); }
     k.busy = false;
+    render();
     load(true);
   }
   function castBox() {
@@ -469,6 +472,7 @@
     if (!force && (document.hidden || view.drag)) return;
     try {
       const d = await api("GET", "/api/play/state");
+      if (!force && window.Dice && Dice.settle) await Dice.settle(); // HP and results after the dice land
       d.mapTokens = [];
       let pings = [], zones = [];
       if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; zones = d.map.zones || []; d.map = map; d.mapTokens = tokens; }

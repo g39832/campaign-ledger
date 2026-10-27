@@ -294,8 +294,8 @@
      after it lands (null if it didn't). Out of slots: the toast offers to cast it without one. */
   function castSpell(eid, body, done) {
     act("POST", "/api/encounters/" + eid + "/cast", body, (d) => {
-      done(d);
-      if (d && d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
+      if (d && d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []).then(() => done(d)); // the result after the dice land
+      else done(d);
     }, { onError: (err) => {
       done(null);
       toast(err.message, "error", err.data && err.data.needs_free

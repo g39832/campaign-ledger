@@ -737,7 +737,9 @@
         const r = await api("GET", "/api/encounters/" + EID + "/rev");
         if (r.rev === S.encounter.rev) return;
       }
-      apply(await api("GET", "/api/encounters/" + EID));
+      const d = await api("GET", "/api/encounters/" + EID);
+      if (!force && window.Dice && Dice.settle) await Dice.settle(); // after the dice land
+      apply(d);
     } catch (e) { /* offline: the indicator shows it when a save fails */ }
   }
   setInterval(refresh, 3000);

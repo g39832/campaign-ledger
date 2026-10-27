@@ -482,9 +482,20 @@
       if (!rolls.length || !this.dock) return;
       this.addHistory(rolls);
       if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true);
-      for (const r of rolls) {
-        await Promise.race([this.animate(r, { quiet: r !== rolls[0] && r.kind !== "attack" }), new Promise((ok) => setTimeout(ok, (DURATION[prefs.speed] || 0) + 1200))]);
+      // the first roll at full speed; the rest of the same move (its damage, the saves) a bit quicker
+      for (const [i, r] of rolls.entries()) {
+        const later = i > 0 ? { duration: Math.min(DURATION[prefs.speed] || 0, 1300), hold: 900 } : {};
+        const guard = (DURATION[prefs.speed] || 0) + HOLD_MS + 6000; // never hang a cast on an animation
+        await Promise.race([this.animate(r, Object.assign({ quiet: r !== rolls[0] && r.kind !== "attack" }, later)), new Promise((ok) => setTimeout(ok, guard))]);
       }
+    },
+    /* Wait until the dice on screen (and any new ones someone else just rolled) have landed, so
+       results, HP and attack animations never show before the roll that decides them. */
+    async settle() {
+      const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+      await Promise.race([this.poll(), wait(2500)]);
+      // the roll that's on screen now (never a backlog): at most one roll's time
+      if (this.playing) await Promise.race([this._lastRun || Promise.resolve(), wait((DURATION[prefs.speed] || 0) + 800)]);
     },
     mapOverlayActive() { return !!(this.overlayHost && prefs.overMap); },
     /* Rolls in a row (an attack, then its damage) wait their turn: each lands and shows its
@@ -492,7 +503,9 @@
     animate(roll, opts) {
       const prev = this._queue || Promise.resolve();
       const run = prev.then(() => this.animateNow(roll, opts));
-      this._queue = run.then(() => (prefs.speed === "none" ? null : new Promise((ok) => setTimeout(ok, HOLD_MS))), () => null);
+      this._lastRun = run;
+      const hold = opts && opts.hold != null ? opts.hold : HOLD_MS;
+      this._queue = run.then(() => (prefs.speed === "none" ? null : new Promise((ok) => setTimeout(ok, hold))), () => null);
       return run;
     },
     animateNow(roll, opts) {
@@ -511,7 +524,7 @@
       $("#dice-skip").disabled = false;
       const nat0 = roll.result && roll.result.natural;
       const tone = nat0 === 20 ? "crit" : nat0 === 1 ? "fumble" : "";
-      const run = tray.play(specs, { duration: DURATION[speed], size: speed === "dramatic" ? 72 : (tray === this.tray ? 40 : 44), total: roll.total, tone });
+      const run = tray.play(specs, { duration: opts.duration != null && speed !== "none" ? opts.duration : DURATION[speed], size: speed === "dramatic" ? 72 : (tray === this.tray ? 40 : 44), total: roll.total, tone });
       if (window.FX && !opts.quiet) FX.sound("roll");
       run.then((settled) => {
         this.playing = false;
@@ -607,10 +620,12 @@
         const others = d.rolls.filter((r) => !r.mine && !this.history.some((x) => x.id === r.id));
         this.addHistory(d.rolls);
         if (others.length) {
+          // someone else's roll: the newest one plays (no backlog of everything they rolled), and
+          // its pop-up comes once it has landed
           const newest = others.sort((a, b) => b.id - a.id)[0];
-          if (this.isOpen() || this.mapOverlayActive()) { if (!this.playing) this.animate(newest); }
-          else this.badge(others.length);
-          toast(`${newest.roller_name} rolled ${newest.label || newest.expression}: ${newest.total}`, null, { ms: 3500 });
+          const say = () => toast(`${newest.roller_name} rolled ${newest.label || newest.expression}: ${newest.total}`, null, { ms: 3500 });
+          if ((this.isOpen() || this.mapOverlayActive()) && !this.playing) this.animate(newest).then(say);
+          else { if (!this.isOpen()) this.badge(others.length); say(); }
         }
       } catch (e) { /* ignore */ }
     },

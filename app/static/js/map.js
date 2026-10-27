@@ -799,6 +799,7 @@
         revs.ping = r.ping;
       }
       const d = await api("GET", "/api/maps/" + MID);
+      if (!force && window.Dice && Dice.settle) await Dice.settle(); // HP, results and attack animations after the dice land
       revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null, ping: revs.ping };
       const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== "DM");
       apply(d);
