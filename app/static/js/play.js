@@ -151,9 +151,9 @@
   // Tap Use, then tap an enemy (on the map or in the list). The server rolls to hit, the damage
   // and any effect, and says what happened. Never at yourself or your party.
   const foes = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind === "enemy" && !["dead", "defeated", "fled"].includes(o.status));
-  function startUse(what, index, name, single, max) {
+  function startUse(what, index, name, single, max, reach) {
     casting = null;
-    using = { what, index, name, single, max: max || 0, chosen: new Set(), busy: false, result: null };
+    using = { what, index, name, single, max: max || 0, reach: reach || null, chosen: new Set(), busy: false, result: null };
     render();
     const box = $("#use-box");
     if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -161,6 +161,8 @@
   function pickFoe(cbId, label) {
     if (!using || using.busy || using.result) return;
     if (!foes().some((o) => o.id === cbId)) { toast((label || "That") + " isn't an enemy — you can only aim this at enemies.", "error"); return; }
+    const far = tooFar(cbId);
+    if (far) { toast((label || "They") + " is " + far + " ft away — " + using.name + " only reaches " + using.reach + " ft. Move next to them first.", "error"); return; }
     if (using.single) { using.chosen = new Set([cbId]); useNow(); return; }
     const c = using.chosen;
     if (c.has(cbId)) c.delete(cbId);
@@ -168,6 +170,15 @@
     else c.add(cbId);
     render();
   }
+  // a physical move reaches enemies right next to you: feet to them on the map (null: can't tell, no map)
+  function feetTo(cbId) {
+    const toks = (S && S.mapTokens) || [], me = toks.find((t) => t.own), them = toks.find((t) => t.combatant_id === cbId);
+    if (!me || !them || !S.map) return null;
+    const gx = Math.max(0, them.x - (me.x + me.size), me.x - (them.x + them.size)), gy = Math.max(0, them.y - (me.y + me.size), me.y - (them.y + them.size));
+    const per = !S.map.scale_unit || S.map.scale_unit === "ft" ? Number(S.map.scale_value) || 5 : 5;
+    return (Math.ceil(Math.max(gx, gy) - 1e-6) + 1) * per;
+  }
+  const tooFar = (cbId) => { if (!using || !using.reach) return 0; const d = feetTo(cbId); return d != null && d > using.reach ? d : 0; };
   async function useNow() {
     const k = using;
     if (!k || k.busy || !k.chosen.size) return;
@@ -192,19 +203,21 @@
     const list = foes();
     return h("div", { id: "use-box", class: "fight-aim" },
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
-      h("p", { class: "fa-ask" }, k.single ? "Tap the enemy it's aimed at — on the map or here." : "Tap each enemy it reaches, then Use."),
-      list.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, list.map((o) => h("button", { type: "button", disabled: k.busy,
-        class: "btn btn-sm" + (k.chosen.has(o.id) ? " is-armed" : ""), "aria-pressed": String(k.chosen.has(o.id)), onclick: () => pickFoe(o.id, o.name) },
-        o.name, o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, o.health) : null)))
+      h("p", { class: "fa-ask" }, (k.single ? "Tap the enemy it's aimed at — on the map or here." : "Tap each enemy it reaches, then Use.")
+        + (k.reach ? " It reaches " + k.reach + " ft: enemies right next to you." : "")),
+      list.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, list.map((o) => { const far = tooFar(o.id); return h("button", { type: "button", disabled: k.busy || !!far,
+        class: "btn btn-sm" + (k.chosen.has(o.id) ? " is-armed" : ""), "aria-pressed": String(k.chosen.has(o.id)), title: far ? far + " ft away — out of reach" : null, onclick: () => pickFoe(o.id, o.name) },
+        o.name, o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, o.health) : null,
+        far ? h("span", { class: "faint", style: "font-size:.72rem;margin-left:4px" }, far + " ft") : null); }))
         : h("p", { class: "faint" }, "No enemies to aim at."),
       h("div", { class: "row" },
         k.single ? null : h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: k.busy || !k.chosen.size, onclick: useNow },
           k.busy ? "Rolling…" : "Use on " + k.chosen.size),
         h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { using = null; render(); } }, "Cancel")));
   }
-  const useBtn = (what, index, name, single, max) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
+  const useBtn = (what, index, name, single, max, reach) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
     disabled: !!(S.character && S.character.actions && !S.character.actions.left),
-    title: "Then tap an enemy", onclick: () => startUse(what, index, name, single, max) }, icon("swords", "sm"), " Use");
+    title: "Then tap an enemy", onclick: () => startUse(what, index, name, single, max, reach) }, icon("swords", "sm"), " Use");
   const aimsAtFoes = (s) => (s.kind === "damage" || s.kind === "debuff") && !s.terrain && !s.aura && !s.summon && !L.spellHelps(s);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && using && !using.busy) { using = null; render(); } });
 
@@ -380,7 +393,7 @@
               if (window.FX) { FX.banner(a.name + "!", what, "crit"); FX.sound("crit"); }
             }) },
             icon("zap", "sm"), " " + (a.name || "Action Surge")) : null,
-          c.my_turn && a.damage && !a.heal ? useBtn("attack", a.index, a.name || "Attack", !a.area) :
+          c.my_turn && a.damage && !a.heal ? useBtn("attack", a.index, a.name || "Attack", !a.area, 0, a.reach) :
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: attackThen({ type: "attack", key: a.index }, a.damage && !a.heal ? { type: "damage", key: a.index } : null) }, "Hit " + a.bonus) : null,
           a.damage && !(c.my_turn && !a.heal) ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) },
             a.heal ? "Heal" : a.dmg_mult > 1 ? "Dmg ×" + a.dmg_mult : "Dmg") : null))] : null,

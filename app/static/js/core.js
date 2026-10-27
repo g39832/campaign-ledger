@@ -349,7 +349,15 @@
     }
     return { kind: AREA_KINDS[m[2].toLowerCase()], size: Math.max(5, Number(m[1])), range };
   }
-  const attackLines = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && !a.note);
+  // how far a monster's physical attack reaches: "reach 10 ft", else 5; ranged lines and areas aren't limited
+  function lineReach(line, a) {
+    if (!a || a.area || a.aimArea || a.heal || a.check) return null;
+    const m = /\breach\s*(\d+)/i.exec(line);
+    if (m) return Number(m[1]);
+    if (/\b(ranged?|bows?|crossbows?|longbow|shortbow|slings?|darts?|thrown|throws?|javelins?)\b/i.test(line) && !/\bmelee\b/i.test(line)) return null;
+    return 5;
+  }
+  const attackLines = (text) => String(text || "").split(/\n+/).map((l) => { const a = parseAttack(l); if (a && !a.note) a.reach = lineReach(l, a); return a; }).filter((a) => a && !a.note);
   const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);
   // "Spread: 7 — beats 5" for a roll with a target number
   function checkVerdict(a, total) {

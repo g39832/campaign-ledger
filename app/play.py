@@ -28,7 +28,7 @@ def held_in_place(conn, char_id):
         if isinstance(x, dict) and not x.get("expired") and str(x.get("name") or "").strip().capitalize() in SPEED_ZERO:
             return x["name"].strip()
     return None
-from .rules import ac_bonus, cooldown_left, derived, is_healing, parse_cooldown, spell_does_something, spell_helps, spell_info, spell_lasts
+from .rules import ac_bonus, cooldown_left, derived, is_healing, melee_reach, parse_cooldown, spell_does_something, spell_helps, spell_info, spell_lasts
 
 bp = Blueprint("play", __name__)
 
@@ -170,7 +170,7 @@ def _own_character(conn, char_id):
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a),
                        "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
-                       "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes")))}
+                       "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes"))), "reach": melee_reach(a)}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
     fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -698,6 +698,10 @@ def api_me_use():
         if not set(targets) <= foes:
             raise F.ApiError("You can only use that on enemies — not yourself or your party", status=403)
         check_action(conn, mine["id"], row.get("name") or "that")
+        if what == "attack":  # physical moves: only at enemies right next to you (or within their reach)
+            from .movement import check_reach
+            from .rules import melee_reach
+            check_reach(conn, mine["encounter_id"], mine["id"], targets, melee_reach(row), (row.get("name") or "That attack").strip())
         result = engine_cast(ctx, mine["id"], {"spell": spell, "targets": targets, "slot": data.get("slot")}, ident)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]

@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 from . import fields as F
 from .campaigns import get_campaign
 from .db import claim_op, get_db, new_uid, now_iso, tx
-from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, cooldown_left, derived, initiative_sort_key, knocked_prone, parse_area, parse_cooldown, roll_d20, is_healing, spell_does_something, spell_info
+from .rules import ac_bonus, apply_damage, apply_heal, apply_temp, cooldown_left, derived, initiative_sort_key, knocked_prone, melee_reach, parse_area, parse_cooldown, roll_d20, is_healing, spell_does_something, spell_info
 
 bp = Blueprint("combat", __name__, url_prefix="/api")
 
@@ -108,6 +108,7 @@ def _combatant_dict(r):
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
                            "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
                            "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
+                           "reach": melee_reach(a),
                            "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
     else:

@@ -769,3 +769,22 @@ def ac_bonus(conditions):
 def effective_ac(ac, conditions):
     return (ac or 0) + ac_bonus(conditions)
 
+
+
+RANGED_WORDS = re.compile(r"\b(ranged?|bows?|crossbows?|longbow|shortbow|slings?|darts?|thrown|throws?|javelins?)\b", re.I)
+
+
+def melee_reach(row):
+    """How far a physical move (an attack on the sheet) reaches: 5 ft, or what its notes say
+    ("reach 10 ft"). None when it isn't a melee move: ranged (a bow, "range 80 ft") or an area."""
+    if not isinstance(row, dict):
+        return None
+    if parse_area(row.get("area")) or parse_area(row.get("notes")):
+        return None
+    text = " ".join(str(row.get(k) or "") for k in ("name", "bonus", "damage", "notes"))
+    m = re.search(r"\breach\s*(\d+)", text, re.I)
+    if m:
+        return int(m.group(1))
+    if RANGED_WORDS.search(text) and not re.search(r"\bmelee\b", text, re.I):
+        return None
+    return 5

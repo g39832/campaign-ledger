@@ -151,6 +151,41 @@ def _check(conn, md, turn, x0, y0, x1, y1, name):
     return dict(turn, used=turn["used"] + cost, left=turn["left"] - cost)
 
 
+# ---- reach: how far apart two fighters stand -------------------------------------------
+
+def _token_of(conn, map_id, cb_id):
+    row = conn.execute("SELECT character_id FROM combatants WHERE id = ?", (cb_id,)).fetchone()
+    char = row["character_id"] if row else None
+    return conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ? AND (combatant_id = ? OR (? IS NOT NULL AND character_id = ?)) "
+                        "ORDER BY combatant_id = ? DESC LIMIT 1", (map_id, cb_id, char, char, cb_id)).fetchone()
+
+
+def distance_ft(conn, eid, a_cb, b_cb):
+    """Feet between two fighters on this fight's battle map (5 ft when they're side by side),
+    or None when there's no map with both on it."""
+    for m in conn.execute("SELECT m.* FROM maps m LEFT JOIN campaigns c ON c.live_map_id = m.id "
+                          "WHERE m.encounter_id = ? ORDER BY c.id IS NULL, m.id DESC", (eid,)).fetchall():
+        a, b = _token_of(conn, m["id"], a_cb), _token_of(conn, m["id"], b_cb)
+        if a and b:
+            gx = max(0.0, b["x"] - (a["x"] + a["size"]), a["x"] - (b["x"] + b["size"]))
+            gy = max(0.0, b["y"] - (a["y"] + a["size"]), a["y"] - (b["y"] + b["size"]))
+            per = ft_per_square(dict(m))
+            return (math.ceil(max(gx, gy) - 1e-6) + 1) * per
+    return None
+
+
+def check_reach(conn, eid, attacker, targets, reach, move):
+    """A melee move only reaches enemies within its reach (5 ft: right next to you)."""
+    if not reach:
+        return
+    for t in targets:
+        d = distance_ft(conn, eid, attacker, t)
+        if d is not None and d > reach:
+            name = conn.execute("SELECT COALESCE(ch.name, c.name) AS n FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id "
+                                "WHERE c.id = ?", (t,)).fetchone()["n"]
+            raise F.ApiError(f"{name} is {d} ft away — {move} only reaches {reach} ft. Move next to them first.", status=403, far=d)
+
+
 # ---- actions ---------------------------------------------------------------------------
 
 def actions(conn, cb_id):

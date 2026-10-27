@@ -360,8 +360,8 @@
         : !a.has_dmg && !a.has_hit ? (a.ac
         // no dice: "+2 ac to target" is cast like a buff spell; anything else is just a note
         ? out.push(spellAction(c, L.spellView({ name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, cooldown: a.cooldown || 0, move: true }), null))
-        : null) : a.cast ? out.push(Object.assign(spellAction(c, L.spellView(a.cast), { spell: a.cast }), { single: true, icon: "swords" }))
-        : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords",
+        : null) : a.cast ? out.push(Object.assign(spellAction(c, L.spellView(a.cast), { spell: a.cast }), { single: true, icon: "swords", reach: a.reach }))
+        : out.push({ name: a.name || "Attack", heal: !!a.heal, single: !a.area, aimArea: a.area || null, icon: a.heal ? "heart" : "swords", reach: a.heal ? null : a.reach,
         cooldown: a.cooldown || 0, cdName: a.name,
         info: (a.area ? areaText(a.area) + " · " : "") + (a.heal ? "heals" : a.has_hit ? "attack roll" : rule ? "d20 to hit" : "damage"),
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
@@ -436,7 +436,7 @@
     return spell || a.area || aimArea
       ? { name: a.name, many: true, heal: a.heal, icon, info: shown, toHit, effect, aimArea, dmg, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null,
         cooldown: a.cooldown || 0, cdName: a.name }
-      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg, cooldown: a.cooldown || 0, cdName: a.name };
+      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg, cooldown: a.cooldown || 0, cdName: a.name, reach: spell ? null : a.reach };
   }
   function say(by, text, kind, undo) {
     lastResult = { by, text, kind, undo };
@@ -525,6 +525,14 @@
   }
 
   // A move with a cooldown starts recharging once it's used (only in a running fight).
+  // feet between two fighters' tokens on this map (5 ft side by side), or null if either isn't on it
+  function feetBetween(aId, bId) {
+    const ta = S.tokens.find((t) => t.combatant_id === aId), tb = S.tokens.find((t) => t.combatant_id === bId);
+    if (!ta || !tb) return null;
+    const gx = Math.max(0, tb.x - (ta.x + ta.size), ta.x - (tb.x + tb.size)), gy = Math.max(0, tb.y - (ta.y + ta.size), ta.y - (tb.y + tb.size));
+    const per = !S.map.scale_unit || S.map.scale_unit === "ft" ? Number(S.map.scale_value) || 5 : 5;
+    return (Math.ceil(Math.max(gx, gy) - 1e-6) + 1) * per;
+  }
   function useMove(c, a) {
     if (!a.cooldown || !enc || enc.encounter.status !== "active") return;
     act("POST", "/api/combatants/" + c.id + "/cooldown", { name: a.cdName, turns: a.cooldown }, () => { enc = null; refresh(true); },
@@ -563,6 +571,10 @@
     const target = t && t.combatant_id ? fighter(t.combatant_id) : null;
     if (!t) return;
     if (!target) { toast((t.display || "That token") + " isn't a fighter, just a marker on the map. Heroes and monsters in the fight can be targeted.", "error"); return; }
+    if (a.reach && !cur.area && !freeMove) { // physical moves reach the enemies right next to them (Free move ignores it)
+      const d = feetBetween(c.id, target.id);
+      if (d != null && d > a.reach) { toast(target.name + " is " + d + " ft away — " + a.name + " only reaches " + a.reach + " ft. Move " + c.name + " next to them first (or switch on Free move).", "error"); return; }
+    }
     if (cur.cast && !cur.area) {
       if (a.single) { castNow(c, a, [target.id]); return; }
       cur.done.has(target.id) ? cur.done.delete(target.id) : cur.done.add(target.id);

@@ -1,7 +1,7 @@
 """Players use their attacks and harmful spells on enemies from their phone, like the DM does
 on the map: only on their own turn, only at enemies, the server rolls against AC (which the
 player never sees) and applies the damage. Heals and buffs still go on the party."""
-from tests.test_dice_map_players import battlemap, joined  # noqa: F401  (fixtures)
+from tests.test_dice_map_players import battlemap, joined, tok  # noqa: F401  (fixtures)
 
 ATTACKS = [{"name": "Punch", "bonus": "+50", "damage": "1d6+3 bludgeoning"},
            {"name": "Grapple", "bonus": "+50", "damage": "1d4", "condition": "Grappled"}]
@@ -13,6 +13,9 @@ def setup(api, bm):
     aria = api.get(f"/api/characters/{bm['a']['id']}")["character"]
     api.set_char(aria, attacks=ATTACKS, spells=SPELLS, spell_slots={"1": {"max": 2, "used": 0}})
     eid = bm["eid"]
+    m = api.get(f"/api/maps/{bm['mid']}")  # the bandits stand right next to her (physical moves reach 5 ft)
+    for name, (x, y) in {"Aria": (3, 3), "Bandit 1": (4, 3), "Bandit 2": (3, 4)}.items():
+        api.post(f"/api/tokens/{tok(m, name)['id']}/move", {"x": x, "y": y, "free": True})
     st = api.post(f"/api/encounters/{eid}/start")
     by = {c["name"]: c for c in st["combatants"]}
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
