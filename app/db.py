@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 MIGRATIONS = {
     1: """
@@ -353,6 +353,10 @@ MIGRATIONS = {
     # v7: how far each hero has moved this turn (players move only as far as their speed).
     7: """
     ALTER TABLE combatants ADD COLUMN moved TEXT NOT NULL DEFAULT '';
+    """,
+    # v8: skills typed in by hand ({"perception": 7}) instead of worked out from the abilities.
+    8: """
+    ALTER TABLE characters ADD COLUMN skill_set TEXT NOT NULL DEFAULT '{}';
     """,
 }
 

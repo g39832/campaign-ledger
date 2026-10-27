@@ -1281,3 +1281,13 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .move-card .move-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex-basis: 100%; }
 .move-card .move-btns:empty { display: none; }
 .actions-left.is-out { color: var(--hp-low, #c44); }
+
+/* skills: a box at the end of each row to type the number by hand */
+#skills li { grid-template-columns: 18px 2.6ch minmax(0, 1fr) auto auto; }
+#skills .skill-set { width: 4.6ch; margin-left: 6px; padding: 1px 4px; text-align: center; font-size: .85rem; background: transparent; border: 1px dashed var(--line); border-radius: 4px; color: var(--text); }
+#skills .skill-set::placeholder { color: var(--text-3); }
+#skills .skill-set:focus { border-style: solid; border-color: var(--accent); }
+#skills li.is-set .skill-set { border-style: solid; border-color: var(--brass, var(--accent)); font-weight: 700; }
+#skills li.is-set .v { color: var(--brass, var(--accent)); }
+#skills .skill-set::-webkit-inner-spin-button, #skills .skill-set::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#skills .skill-set { -moz-appearance: textfield; }

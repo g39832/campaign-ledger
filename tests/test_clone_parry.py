@@ -170,3 +170,23 @@ def test_players_never_see_monster_ac(api, battlemap):
     assert '"ac"' not in others and "AC 17" not in others
     rolls = pa.get("/api/rolls")["rolls"]
     assert rolls and not any("17" in (r["outcome"] or "") or "AC" in (r["outcome"] or "") or "AC" in r["label"] for r in rolls)
+
+
+def test_parry_works_on_the_attackers_turn_with_the_turn_rules(api, battlemap, monkeypatch):
+    """Players can't roll on other people's turns now, but Parry is a reaction: it still works
+    when a monster attacks him on the monster's turn, even after he's used his actions."""
+    loaded = Loaded()
+    monkeypatch.setattr(dice, "_rng", loaded)
+    eid, by = setup(api, battlemap)
+    aria, pa = by["Aria"], battlemap["pa"]
+    api.post(f"/api/encounters/{eid}/start")
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
+    pa.post("/api/rolls", {"expression": "1d20"}, 403)                                   # not his turn: no rolling
+    claw = {"name": "Claw", "effect": "damage", "dice": "2d6", "hit": "attack", "attack_bonus": 10, "level": 0}
+    loaded.next(15, 5, 5)
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Bandit 1"]["id"], "spell": claw, "targets": [aria["id"]]})
+    me = pa.get("/api/play/state")["character"]
+    assert me["parry"]["pending"]["amount"] == 10 and me["my_turn"] is False
+    loaded.next(18, 4)
+    r = pa.post("/api/play/me/parry")
+    assert r["parry"]["won"] and r["parry"]["taken"] == 5 and r["character"]["current_hp"] == 15

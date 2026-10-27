@@ -93,7 +93,7 @@
           <h3 class="rule-head" style="font-size:.85rem;margin-top:14px" data-fold="skills">Skills <span class="count fold-hint" id="skills-hint"></span></h3>
           <ul class="checklist" id="skills" data-fold-body="skills">
             {% for key, label, ab in SKILLS %}
-            <li><button type="button" class="prof" data-skill="{{ key }}" aria-label="{{ label }} proficiency (click to cycle: none, proficient, expertise)"></button><button type="button" class="v roll-link" id="skill-{{ key }}" data-roll="skill:{{ key }}" title="Roll {{ label }}">+0</button><span>{{ label }}</span><span class="ab">{{ ab }}</span></li>
+            <li><button type="button" class="prof" data-skill="{{ key }}" aria-label="{{ label }} proficiency (click to cycle: none, proficient, expertise)"></button><button type="button" class="v roll-link" id="skill-{{ key }}" data-roll="skill:{{ key }}" title="Roll {{ label }}">+0</button><span>{{ label }}</span><span class="ab">{{ ab }}</span><input type="number" class="skill-set" data-skillset="{{ key }}" min="-20" max="40" inputmode="numeric" aria-label="{{ label }}: type a number to set it by hand (empty = worked out)" title="Type a number to set {{ label }} by hand. Empty: worked out from {{ ab }} and proficiency."></li>
             {% endfor %}
           </ul>
         </div>
@@ -205,4 +205,4 @@
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=79"></script>{% endblock %}
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=80"></script>{% endblock %}

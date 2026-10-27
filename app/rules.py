@@ -108,10 +108,16 @@ def derived(char):
     }
     skill_profs = char.get("skill_profs") or {}
     skill_bonus = char.get("skill_bonus") or {}
+    skill_set = char.get("skill_set") or {}
     skills = {}
     for key, _label, ab in SKILLS:
         level = int(skill_profs.get(key) or 0)  # 0 none, 1 proficient, 2 expertise
         skills[key] = mods[ab] + prof * level + int(skill_bonus.get(key) or 0)
+        try:
+            if skill_set.get(key) not in (None, ""):
+                skills[key] = int(skill_set[key])  # typed in by hand
+        except (TypeError, ValueError):
+            pass
     if char.get("initiative_override") is not None:
         initiative = char["initiative_override"]
     else:

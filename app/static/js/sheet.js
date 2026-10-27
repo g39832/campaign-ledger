@@ -28,15 +28,23 @@
     const sp = new Set(model.save_profs || []), sb = model.save_bonus || {};
     const saves = Object.fromEntries(ABS.map((a) => [a, mods[a] + (sp.has(a) ? prof : 0) + (Number(sb[a]) || 0)]));
     const kp = model.skill_profs || {}, kb = model.skill_bonus || {};
-    const skills = Object.fromEntries(SKILLS.map(([k, , a]) => [k, mods[a] + prof * (Number(kp[k]) || 0) + (Number(kb[k]) || 0)]));
+    const ks = model.skill_set || {};
+    const skills = Object.fromEntries(SKILLS.map(([k, , a]) => [k, ks[k] != null && ks[k] !== "" ? Number(ks[k]) : mods[a] + prof * (Number(kp[k]) || 0) + (Number(kb[k]) || 0)]));
+    const autoSkills = Object.fromEntries(SKILLS.map(([k, , a]) => [k, mods[a] + prof * (Number(kp[k]) || 0) + (Number(kb[k]) || 0)]));
     const init = Number.isInteger(model.initiative_override) ? model.initiative_override : mods.dex + (Number(model.initiative_bonus) || 0);
     const sa = model.spellcasting_ability;
-    return { mods, prof, saves, skills, init, spell: ABS.includes(sa) ? { dc: 8 + prof + mods[sa], atk: prof + mods[sa] } : null };
+    return { mods, prof, saves, skills, autoSkills, init, spell: ABS.includes(sa) ? { dc: 8 + prof + mods[sa], atk: prof + mods[sa] } : null };
   }
   function derive() {
     const d = derived();
     ABS.forEach((a) => { $("#mod-" + a).textContent = signed(d.mods[a]); $("#save-" + a).textContent = signed(d.saves[a]); });
-    SKILLS.forEach(([k]) => { $("#skill-" + k).textContent = signed(d.skills[k]); });
+    SKILLS.forEach(([k]) => {
+      $("#skill-" + k).textContent = signed(d.skills[k]);
+      const set = (model.skill_set || {})[k] != null && (model.skill_set || {})[k] !== "";
+      $("#skill-" + k).closest("li").classList.toggle("is-set", set);
+      const box = $("[data-skillset='" + k + "']");
+      if (box) box.placeholder = signed(d.autoSkills[k]);
+    });
     $("#d-init").textContent = signed(d.init);
     $("#d-init-hint").textContent = Number.isInteger(model.initiative_override) ? "override" : (model.initiative_bonus ? "Dex " + signed(d.mods.dex) + ", bonus " + signed(model.initiative_bonus) : "Dex");
     $("#d-prof").textContent = signed(d.prof);
@@ -75,6 +83,8 @@
   $$("[data-ab]").forEach((el) => el.addEventListener("input", () => setIn("abilities", el.dataset.ab, intOr(el.value, 10))));
   $$("[data-savebonus]").forEach((el) => el.addEventListener("input", () => setIn("save_bonus", el.dataset.savebonus, el.value === "" ? null : intOr(el.value, 0))));
   $$("[data-skillbonus]").forEach((el) => el.addEventListener("input", () => setIn("skill_bonus", el.dataset.skillbonus, el.value === "" ? null : intOr(el.value, 0))));
+  // a skill typed in by hand replaces the worked-out number; clearing the box goes back to it
+  $$("[data-skillset]").forEach((el) => el.addEventListener("input", () => setIn("skill_set", el.dataset.skillset, el.value === "" ? null : intOr(el.value, 0))));
   $$("[data-coin]").forEach((el) => el.addEventListener("input", () => setIn("currency", el.dataset.coin, Math.max(0, intOr(el.value, 0)))));
   $$("[data-save]").forEach((btn) => btn.addEventListener("click", () => {
     const s = new Set(model.save_profs || []);
@@ -100,6 +110,7 @@
     $$("[data-ab]").forEach((el) => { if (document.activeElement !== el) el.value = (model.abilities || {})[el.dataset.ab] ?? 10; });
     $$("[data-savebonus]").forEach((el) => { if (document.activeElement !== el) el.value = (model.save_bonus || {})[el.dataset.savebonus] ?? ""; });
     $$("[data-skillbonus]").forEach((el) => { if (document.activeElement !== el) el.value = (model.skill_bonus || {})[el.dataset.skillbonus] ?? ""; });
+    $$("[data-skillset]").forEach((el) => { if (document.activeElement !== el) el.value = (model.skill_set || {})[el.dataset.skillset] ?? ""; });
     $$("[data-coin]").forEach((el) => { if (document.activeElement !== el) el.value = (model.currency || {})[el.dataset.coin] ?? 0; });
   }
 
@@ -647,7 +658,7 @@
   function renderField(f) {
     const el = b.inputs.get(f);
     if (el && el._write) el._write(model[f]);
-    if (["abilities", "save_bonus", "skill_bonus", "currency"].includes(f)) renderNested();
+    if (["abilities", "save_bonus", "skill_bonus", "skill_set", "currency"].includes(f)) renderNested();
     if (f === "save_profs" || f === "skill_profs") renderProfs();
     if (f === "death_successes" || f === "death_failures") renderPips();
     if (f === "conditions") renderConds();

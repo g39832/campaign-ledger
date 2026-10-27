@@ -251,6 +251,7 @@ CHARACTER = {
     "save_bonus": Json("dict"),
     "skill_profs": Json("dict"),
     "skill_bonus": Json("dict"),
+    "skill_set": Json("dict"),  # a skill's total typed in by hand: it replaces the worked-out number
     "attacks": Json("list"),
     "spellcasting_ability": Choice("", "str", "dex", "con", "int", "wis", "cha"),
     "spell_slots": Json("dict"),
