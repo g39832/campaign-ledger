@@ -1104,6 +1104,14 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
   body[data-map-size="large"] .play-grid .map-stage { height: 64vh; }
   .map-size-btn { display: inline-flex; }
 }
+/* a phone on its side: the map on the left follows you down the page, the character on the right */
+@media (orientation: landscape) and (max-height: 600px) {
+  .page-play .main { padding-top: 6px; }
+  .play-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 42%); gap: 10px; align-items: start; }
+  .play-map { position: sticky; top: 6px; box-shadow: none; padding-bottom: 0; }
+  .play-grid .map-stage, body[data-map-size] .play-grid .map-stage { height: calc(100vh - 12px); height: calc(100dvh - 12px); min-height: 0; }
+  .map-size-btn { display: none; }
+}
 @media (max-width: 640px) {
   .dd-keys { display: none; }
   .dice-btn { padding: 5px 7px; }
