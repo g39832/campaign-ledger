@@ -474,11 +474,10 @@
           chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
           chk(i, "aura", "Switched on and off (a magic item's aura): lasts until switched off", !!s.aura, "Reaches allies within its Area (default 60 ft)"),
           s.aura ? field("Speed ×", num(i, "speed_mult", { min: 1, max: 10, placeholder: "1", title: "2 = double speed" })) : null,
-          field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })),
-          field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "0" })))) : null;
+          field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })))) : null;
       const open = openSpells.has(i);
       const toggle = () => { setOpen(i, !open); renderSpells(); };
-      const brief = [L.levelWord(v), L.spellWhat(v) || (does ? "" : "notes"), s.notes ? String(s.notes).slice(0, 80) : ""].filter(Boolean).join(" · ");
+      const brief = [L.levelWord(v), L.spellWhat(v) || (does ? "" : "notes"), Number(s.cooldown) ? s.cooldown + "-turn cooldown" : "", s.notes ? String(s.notes).slice(0, 80) : ""].filter(Boolean).join(" · ");
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") + (open ? " is-open" : " is-folded") },
         h("div", { class: "spell-top" },
           h("button", { type: "button", class: "icon-btn sm spell-fold", "aria-expanded": String(open), "aria-label": (open ? "Fold up " : "Open ") + (s.name || "spell"),
@@ -491,6 +490,7 @@
         open ? h("div", { class: "spell-fields" },
           field("Does", pick(i, "effect", SPELL_DOES, null, does)),
           field("Level", pick(i, "level", [["0", "Cantrip"]].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), "Level " + n])), null, String(Number(s.level) || 0))),
+          does ? field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "none", title: "Turns to wait before using it again (no spell slots: this is what limits it)" })) : null,
           does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
             text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => redrawSoon() })) : null,
           does === "damage" ? field("Damage type", pick(i, "damage_type", DAMAGE_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]))) : null,

@@ -56,6 +56,10 @@
         <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.roll_to_hit"> On</label></div>
       </div>
       <div class="setting">
+        <div><b>Spell slots</b></div><div class="desc">Off (house rule): no spell slots. Spells are used like attacks, as often as their cooldown allows. On: levelled spells spend a slot from the sheet.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.spell_slots"> Use slots</label></div>
+      </div>
+      <div class="setting">
         <div><b>Concentration saves</b></div><div class="desc">When a caster who's concentrating takes damage, roll their Constitution save (DC 10 or half the damage) automatically. A failed save ends the spell on everyone. Off: the log just reminds you to call for it.</div>
         <div class="ctl"><label class="check"><input type="checkbox" data-set="combat.auto_concentration"> Automatic</label></div>
       </div>
@@ -166,5 +170,5 @@
 })();
 </script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=75"></script>
 {% endblock %}

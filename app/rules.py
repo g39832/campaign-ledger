@@ -60,7 +60,8 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "auto_sort": True,
         "skip_statuses": ["dead", "defeated", "fled"],
         "roll_to_hit": True,
-        "auto_concentration": True,  # a concentrating caster who takes damage rolls the Constitution save automatically
+        "auto_concentration": True,
+        "spell_slots": False,  # house rule: no spell slots; spells are used like attacks and only have their cooldown  # a concentrating caster who takes damage rolls the Constitution save automatically
         "ally_death_save_bonus": 2,  # house rule: a downed hero with an ally standing next to them adds this to death saves  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
     },
     "players": {

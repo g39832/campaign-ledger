@@ -222,6 +222,8 @@ def spend_slot(ctx, caster, sp, slot, free):
     """Spend the spell slot (characters who track slots on their sheet). Returns the
     level it's cast at. Cantrips and free casts don't use a slot."""
     level = sp["level"]
+    if not ctx.settings.get("spell_slots", False):
+        return level, False  # house rule: no slots, just the spell's cooldown
     if slot not in (None, ""):
         try:
             slot = int(slot)

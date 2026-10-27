@@ -26,6 +26,7 @@
     role: "player",
     imageUrl: (m) => m.image_url,
     canMove: (t) => t.movable && !casting && !using,
+    reach: (t) => (t.own && S && S.character && S.character.move && S.character.move.my_turn ? S.character.move.left : null),
     onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
       if (casting && t && t.character_id) pick(t.character_id);
       else if (using && t) pickFoe(t.combatant_id, t.display);

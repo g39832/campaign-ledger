@@ -189,8 +189,12 @@ def dm_state(map_id):
     m = map_dict(_map_row(conn, map_id))
     enc = encounter_summary(conn, m["encounter_id"])
     live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (m["campaign_id"],)).fetchone()["live_map_id"]
+    move = None
+    if enc and enc["status"] == "active" and enc["current_id"]:
+        from .movement import turn_info
+        move = turn_info(conn, enc["current_id"])  # how far whoever's turn it is can still go
     return {"map": m, "tokens": tokens_for(conn, map_id, enc["current_id"] if enc and enc["status"] == "active" else None),
-            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id)}
+            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id), "move": move}
 
 
 def _disengaged(conn, char_id):

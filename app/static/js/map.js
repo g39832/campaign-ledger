@@ -12,6 +12,8 @@
   const view = new MapView($("#stage"), {
     role: "dm",
     imageUrl: (m) => (m.image ? "/api/uploads/" + m.image : null),
+    // in a fight, dragging whoever's turn it is shows how far they can still go (not with Free move)
+    reach: (t) => (!freeMove && S && S.move && t.combatant_id === S.move.cb_id ? S.move.left : null),
     onSelect: (t) => {
       if (aim) { aimAt(t); view.selectedId = selectedToken; view.draw(); return; } // picking a target, not a new token
       selectedToken = t ? t.id : null; renderSelected(); renderTokens();

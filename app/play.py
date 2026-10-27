@@ -156,6 +156,9 @@ def _own_character(conn, char_id):
             "status", "death_successes", "death_failures", "exhaustion", "portrait", "abilities", "save_profs",
             "skill_profs", "spell_slots", "spellcasting_ability", "inspiration", "hit_dice", "hit_dice_used")
     out = {k: c[k] for k in keep}
+    from .combat import slots_used
+    if not slots_used(c["campaign_id"]):
+        out["spell_slots"] = {}  # house rule: no slots to show or spend
     out["conditions"] = [x["name"] + (f" {int(x['ac']):+d} AC" if x.get("ac") and not x.get("expired") else "")
                          + (f" · {x['extra_moves']} extra move{'s' if x['extra_moves'] != 1 else ''} left" if x.get("extra_moves") is not None else "")
                          + (f" · damage ×{x['dmg_mult']}" if x.get("dmg_mult") and not x.get("expired") else "")
@@ -730,7 +733,8 @@ def _cast_outside_a_fight(conn, ident, me, sp, targets, names, slot):
         raise F.ApiError("Slot level must be a number")
     if level and not level <= slot <= 9:
         raise F.ApiError(f"{sp['name']} is a level {level} spell — cast it with a slot of level {level} or higher")
-    slots = me.get("spell_slots") or {}
+    from .combat import slots_used
+    slots = (me.get("spell_slots") or {}) if slots_used(me["campaign_id"]) else {}
     spent = False
     if level and any(isinstance(v, dict) and (v.get("max") or 0) > 0 for v in slots.values()):
         cur = dict(slots.get(str(slot)) or {})

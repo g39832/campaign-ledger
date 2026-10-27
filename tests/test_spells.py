@@ -45,6 +45,9 @@ def table(api):
     """A cleric and a wizard (level 5, slots) against goblins and a fire-resistant imp."""
     camp = api.campaign("Spells")
     cid = camp["id"]
+    settings = camp["settings"]
+    settings["combat"]["spell_slots"] = True  # these tests use book spell slots (the house rule turns them off)
+    api.patch(f"/api/campaigns/{cid}", {"changes": {"settings": {"to": settings}}})
     cleric = api.character(cid, name="Bram", max_hp=30, ac=14, level=5)
     cleric = api.set_char(cleric, spellcasting_ability="wis", current_hp=30,
                           abilities={"str": 10, "dex": 10, "con": 14, "int": 10, "wis": 16, "cha": 10}, save_profs=["wis", "cha"],
@@ -485,3 +488,24 @@ def test_effects_change_ordinary_rolls(table):
     assert roll["mode"] == "disadvantage" and "Frightened" in roll["label"]
     roll = api.post("/api/rolls", {"check": {"type": "spell_attack", "character_id": t["wizard"]["id"]}, "mode": "advantage"}, 201)["roll"]
     assert roll["mode"] == "normal", "advantage and disadvantage cancel out"
+
+
+def test_house_rule_no_spell_slots_just_cooldowns(api):
+    """Off by default: spells don't spend slots (none are shown); a cooldown is what limits them."""
+    camp = api.campaign("No slots")
+    assert camp["settings"]["combat"]["spell_slots"] is False
+    c = api.character(camp["id"], name="Wiz", max_hp=20, level=5)
+    c = api.set_char(c, spellcasting_ability="int", spell_slots={"3": {"max": 1, "used": 0}},
+                     spells=[dict(BOOK["Fireball"], cooldown=2)])
+    eid = api.encounter(camp["id"], "Test")["encounter"]["id"]
+    st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [c["id"]], "quick": {"name": "Orc", "max_hp": 200, "count": 1}})
+    by = {x["name"]: x for x in st["combatants"]}
+    api.post(f"/api/encounters/{eid}/start")
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Wiz"]["id"]})
+    st = api.get(f"/api/encounters/{eid}")
+    assert next(x for x in st["combatants"] if x["name"] == "Wiz")["spell_slots"] == {}
+    r = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Wiz"]["id"], "spell": 0, "targets": [by["Orc"]["id"]], "slot": 5})
+    assert r["cast"]["spent"] is False and r["cast"]["slot"] == 3, "cast at its own level, no slot used"
+    assert api.get(f"/api/characters/{c['id']}")["character"]["spell_slots"]["3"]["used"] == 0
+    err = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Wiz"]["id"], "spell": 0, "targets": [by["Orc"]["id"]]}, 400)
+    assert "recharging" in err["error"]

@@ -141,8 +141,14 @@ def _add_spells(conn, c):
                    if spell_does_something(spell_info(s))]
     for s in c["spells"]:
         s["aura_on"] = s["aura"] and is_on(ch, s["name"])
-    c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0}
+    c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0} \
+        if slots_used(ch["campaign_id"]) else {}
     c["parry"] = parry_state(conn, c, ch)
+
+
+def slots_used(campaign_id):
+    """Whether this table uses spell slots (house rule: off, spells only have cooldowns)."""
+    return bool(get_campaign(campaign_id)["settings"]["combat"].get("spell_slots", False))
 
 
 def encounter_state(enc_id, conn=None, log_limit=400):

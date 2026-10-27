@@ -196,6 +196,40 @@
     revealed(x, y) { const m = this.map; const i = y * m.cols + x; return m.revealed && m.revealed[i] === "1"; }
 
     // ---- drawing ----------------------------------------------------------------
+    /** While a token is dragged in a fight: the squares it can still reach (its movement left). */
+    reachOf(t) {
+      const ft = this.opts.reach ? this.opts.reach(t) : null;
+      if (ft == null || !this.map) return null;
+      const per = this.map.scale_unit === "ft" || !this.map.scale_unit ? (Number(this.map.scale_value) || 5) : 5;
+      return { ft, per, squares: Math.floor(ft / per) };
+    }
+    drawReach(t, cp, ox, oy) {
+      const r = this.reachOf(t);
+      if (!r) return;
+      const m = this.map, ctx = this.ctx;
+      const x0 = Math.max(0, t.x - r.squares), y0 = Math.max(0, t.y - r.squares);
+      const x1 = Math.min(m.cols, t.x + t.size + r.squares), y1 = Math.min(m.rows, t.y + t.size + r.squares);
+      ctx.save();
+      ctx.fillStyle = "rgba(120, 200, 140, .16)"; ctx.strokeStyle = "rgba(120, 220, 150, .9)"; ctx.lineWidth = cp * 0.06;
+      ctx.setLineDash([cp * 0.2, cp * 0.12]);
+      ctx.fillRect(ox + x0 * cp, oy + y0 * cp, (x1 - x0) * cp, (y1 - y0) * cp);
+      ctx.strokeRect(ox + x0 * cp, oy + y0 * cp, (x1 - x0) * cp, (y1 - y0) * cp);
+      ctx.restore();
+    }
+    drawStepLabel(t, cp, ox, oy) {
+      const r = this.reachOf(t);
+      if (!r) return;
+      const [ax, ay] = this.drag.at, sq = Math.ceil(Math.max(Math.abs(ax - t.x), Math.abs(ay - t.y)) - 1e-6), ft = sq * r.per;
+      const too = ft > r.ft, ctx = this.ctx, X = ox + (ax + t.size / 2) * cp, Y = oy + ay * cp - cp * 0.25;
+      const text = ft + " / " + r.ft + " ft" + (too ? " — too far" : "");
+      ctx.save();
+      ctx.font = "700 " + Math.round(cp * 0.36) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      const w = ctx.measureText(text).width + cp * 0.3;
+      ctx.fillStyle = too ? "rgba(170, 40, 30, .92)" : "rgba(20, 60, 30, .9)";
+      ctx.fillRect(X - w / 2, Y - cp * 0.5, w, cp * 0.5);
+      ctx.fillStyle = "#fff"; ctx.fillText(text, X, Y - cp * 0.06);
+      ctx.restore();
+    }
     draw() {
       const ctx = this.ctx, m = this.map, dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -222,7 +256,9 @@
       for (const sh of shapes) this.drawShape(sh, cp, ox, oy, false);
       if (this.areaDraft) this.drawShape(this.areaDraft, cp, ox, oy, true);
       if (this.aim) this.drawAim(cp, ox, oy);
+      if (this.drag && this.drag.token && this.drag.moved) this.drawReach(this.drag.token, cp, ox, oy);
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
+      if (this.drag && this.drag.token && this.drag.moved) this.drawStepLabel(this.drag.token, cp, ox, oy);
       if (this.aim && this.aim.hits) for (const t of this.tokens) if (this.aim.hits.has(t.id)) {
         const r = t.size * cp * 0.5, X = ox + (t.x + t.size / 2) * cp, Y = oy + (t.y + t.size / 2) * cp;
         ctx.save(); ctx.strokeStyle = "#ffd36b"; ctx.lineWidth = cp * 0.1; ctx.shadowColor = "#ffb347"; ctx.shadowBlur = cp * 0.4;
