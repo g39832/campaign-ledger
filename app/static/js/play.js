@@ -437,7 +437,8 @@
           using && using.what === "spell" ? useBox() : null,
           ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
           c.my_turn && s.zone && !s.recharging ? h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !!(c.actions && !c.actions.left),
-            title: "It rises around you: enemies in it are hit, and it stays up", onclick: () => useZone(s) }, icon("sun", "sm"), " Use") :
+            title: "It rises around you: enemies in it are hit, and it stays up",
+            onclick: () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets)) }, icon("sun", "sm"), " Use") : // no map: tap who's in it
           c.my_turn && aimsAtFoes(s) && !s.recharging ? useBtn("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets) :
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
