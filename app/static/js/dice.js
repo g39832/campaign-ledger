@@ -171,11 +171,8 @@
   }
 
   // ---- the tray: animation + drawing ------------------------------------------
-  // what a roll was, short, for its floating total: "Punch attack", "Great Axe damage"
-  const shortLabel = (roll) => String(roll.label || roll.expression || "").replace(/\s*—.*$/, "").slice(0, 32);
   const FLASH_MS = 2200; // how long the total pulses after the dice land
-  const FLOAT_MS = 4500;
-  const RECENT_MS = 6000; // only a roll from the last few seconds floats up when the next one starts // how long the last roll's total takes to float up and fade when the next roll starts
+  const HOLD_MS = 1600; // a landed roll stays on screen this long before the next one in a row starts
   class Tray {
     constructor(canvas) {
       this.canvas = canvas;
@@ -183,7 +180,6 @@
       this.dice = [];
       this.raf = null;
       this.lastSettled = [];
-      this.floaters = []; // earlier totals drifting up and fading, so quick rolls in a row can all be read
       this.resize();
       window.addEventListener("resize", () => { this.resize(); this.draw(); });
     }
@@ -198,7 +194,6 @@
       opts = opts || {};
       this.resize();
       cancelAnimationFrame(this.raf);
-      const wasRolling = !!this._resolve; // the last roll hadn't landed yet
       if (this._resolve) { const prev = this._resolve; this._resolve = null; prev(null); }
       const n = specs.length;
       const R = Math.max(14, Math.min(opts.size || 40, (this.w / Math.max(2.5, n + 0.6)) * 0.42, this.h * 0.24));
@@ -235,13 +230,6 @@
       });
       this.duration = opts.duration ?? 1500;
       this.t0 = performance.now();
-      // the last roll's total floats up and fades while this one rolls (even if it hadn't landed yet)
-      const recent = wasRolling || (this.flashT0 != null && performance.now() - this.flashT0 < RECENT_MS);
-      if (this.total != null && this.dice.length && !opts.mirror && recent) { // no leftovers from rolls long ago
-        this.floaters = this.floaters.filter((f) => performance.now() - f.t0 < FLOAT_MS).slice(-3)
-          .concat([{ text: String(this.total), label: this.label || "", tone: this.tone, t0: performance.now() }]);
-      }
-      this.label = opts.label || "";
       this.total = opts.total ?? null;       // flashed big over the dice once they land
       this.tone = opts.tone || "";           // "crit" (natural 20) or "fumble" (natural 1)
       this.flashT0 = null; cancelAnimationFrame(this.flashRaf);
@@ -272,7 +260,7 @@
         this.flashT0 = performance.now();
         const step = (now) => {
           this.draw(Infinity);
-          if (now - this.flashT0 < FLASH_MS || this.floaters.some((f) => now - f.t0 < FLOAT_MS)) this.flashRaf = requestAnimationFrame(step);
+          if (now - this.flashT0 < FLASH_MS) this.flashRaf = requestAnimationFrame(step);
         };
         this.flashRaf = requestAnimationFrame(step);
       }
@@ -297,30 +285,6 @@
       ctx.lineWidth = size * 0.08; ctx.strokeStyle = "rgba(0,0,0,.9)"; ctx.strokeText(text, x, y + size * 0.04);
       ctx.fillStyle = col; ctx.fillText(text, x, y + size * 0.04);
       ctx.restore();
-    }
-    /* Earlier totals: each drifts up from the middle and fades, newest lowest, with what it was. */
-    drawFloaters() {
-      const now = performance.now();
-      this.floaters = this.floaters.filter((f) => now - f.t0 < FLOAT_MS);
-      if (!this.floaters.length) return;
-      const ctx = this.ctx, base = Math.max(16, Math.min(this.h * 0.2, 44));
-      // down the left side, newest lowest, each on its own line, out of the way of the dice in the middle
-      [...this.floaters].reverse().forEach((f, i) => {
-        const k = (now - f.t0) / FLOAT_MS, size = base;
-        const x = Math.max(base * 1.4, this.w * 0.14), y = this.h * 0.7 - i * base * 1.7 - k * this.h * 0.18;
-        const col = f.tone === "crit" ? "#ffd36b" : f.tone === "fumble" ? "#ff6b5a" : "#ffffff";
-        ctx.save();
-        ctx.globalAlpha = k < 0.55 ? 1 : Math.max(0, 1 - (k - 0.55) / 0.45);
-        ctx.font = `800 ${size}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.lineWidth = size * 0.12; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(f.text, x, y);
-        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = size * 0.3; ctx.fillText(f.text, x, y);
-        if (f.label) {
-          const ls = Math.max(10, size * 0.3);
-          ctx.shadowBlur = 0; ctx.font = `700 ${ls}px 'Alegreya Sans', sans-serif`; ctx.lineWidth = ls * 0.25;
-          ctx.strokeText(f.label, x, y + size * 0.62); ctx.fillStyle = "#e9dfc8"; ctx.fillText(f.label, x, y + size * 0.62);
-        }
-        ctx.restore();
-      });
     }
     /* Each die's number, big and bright on top of it as it lands (so nobody has to squint at a face). */
     drawPop(d, x, y, since) {
@@ -370,7 +334,6 @@
         if (p >= 1) this.drawPop(d, x, y, elapsed === Infinity ? 1e9 : elapsed - d.delay - this.duration);
       }
       this.drawTotal();
-      this.drawFloaters();
       return done;
     }
     drawDie(d, q, cx, cy, s, dim) {
@@ -536,7 +499,15 @@
       }
     },
     mapOverlayActive() { return !!(this.overlayHost && prefs.overMap); },
+    /* Rolls in a row (an attack, then its damage) wait their turn: each lands and shows its
+       total for a moment, then the next starts in a clean tray. */
     animate(roll, opts) {
+      const prev = this._queue || Promise.resolve();
+      const run = prev.then(() => this.animateNow(roll, opts));
+      this._queue = run.then(() => (prefs.speed === "none" ? null : new Promise((ok) => setTimeout(ok, HOLD_MS))), () => null);
+      return run;
+    },
+    animateNow(roll, opts) {
       opts = opts || {};
       this.current = roll;
       this.showResult(roll, true);
@@ -552,7 +523,7 @@
       $("#dice-skip").disabled = false;
       const nat0 = roll.result && roll.result.natural;
       const tone = nat0 === 20 ? "crit" : nat0 === 1 ? "fumble" : "";
-      const run = tray.play(specs, { duration: DURATION[speed], size: speed === "dramatic" ? 72 : (tray === this.tray ? 40 : 44), total: roll.total, tone, label: shortLabel(roll) });
+      const run = tray.play(specs, { duration: DURATION[speed], size: speed === "dramatic" ? 72 : (tray === this.tray ? 40 : 44), total: roll.total, tone });
       if (window.FX && !opts.quiet) FX.sound("roll");
       run.then((settled) => {
         this.playing = false;
@@ -572,7 +543,7 @@
         this.dock.dataset.settled = JSON.stringify(settled);
         if (speed === "dramatic") setTimeout(() => { if (!this.playing) drama.hidden = true; }, 1400);
         if (tray !== this.tray) {
-          this.tray.play(specs, { duration: 0, total: roll.total, tone, label: shortLabel(roll) }); // keep the dock's tray in step with the result
+          this.tray.play(specs, { duration: 0, total: roll.total, tone }); // keep the dock's tray in step with the result
           if (tray === this._overlay) setTimeout(() => { if (!this.playing) { tray.dice = []; tray.draw(Infinity); } }, 2500);
         }
       });
