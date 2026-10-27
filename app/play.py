@@ -16,7 +16,7 @@ from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
 
-from .combat import dmg_mult, extra_moves, stance_mult  # noqa: E402
+from .combat import dmg_mult, extra_moves, parse_area, stance_mult  # noqa: E402
 
 SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
 
@@ -166,7 +166,8 @@ def _own_character(conn, char_id):
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a),
-                       "dmg_mult": dmg_mult(a), "stance": stance_mult(a)}
+                       "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
+                       "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes")))}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
     fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -596,6 +597,93 @@ def api_me_cast():
     if heal:
         out["roll"] = heal
     return jsonify(out)
+
+
+def _attack_spec(row, c):
+    """A sheet attack as the spell engine reads it: rolls to hit (house rule: d20 + bonus vs AC),
+    then the damage, any condition it leaves and its cooldown. Built here from the sheet,
+    never from what the phone sends."""
+    import re
+    from . import dice
+    from .combat import attack_cast
+    from .rules import DAMAGE_TYPES
+    spec = attack_cast(row, derived(c))
+    if spec:
+        return spec
+    text = str(row.get("damage") or "")
+    expr = dice.damage_expression(text)
+    if not expr:
+        raise F.ApiError(f"{(row.get('name') or 'That attack').strip()} has no damage dice to roll — ask the DM")
+    return {"name": (row.get("name") or "Attack").strip() or "Attack", "effect": "damage", "dice": expr, "level": 0,
+            "damage_type": next((t for t in DAMAGE_TYPES if re.search(rf"{t}", text, re.I)), ""), "hit": "attack",
+            "attack_bonus": dice.attack_bonus(str(row.get("bonus") or "")) or 0, "cooldown": parse_cooldown(row),
+            "dmg_mult": dmg_mult(row) if stance_mult(row) == 1 else 1, "notes": str(row.get("notes") or "")[:300], "move": True}
+
+
+@bp.post("/api/play/me/use")
+def api_me_use():
+    """A player uses one of their attacks or harmful spells on enemies, the way the DM does on
+    the map: {what: "attack" | "spell", index, targets: [combatant ids], slot}. Only on their
+    own turn, within their actions, and only at enemies (never themselves or the party).
+    The server rolls to hit against AC (which the player never sees), the damage and effects."""
+    from .combat import Ctx
+    from .db import claim_op
+    from .movement import check_action
+    from .rest import active_combatant
+    from .rolls import AC_NOTE, roll_dict
+    from .spells import cast as engine_cast
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    what, targets = data.get("what"), data.get("targets")
+    if what not in ("attack", "spell"):
+        raise F.ApiError("what must be attack or spell")
+    if not isinstance(targets, list) or not targets or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+        raise F.ApiError("Pick who it's aimed at")
+    targets = list(dict.fromkeys(targets))
+    conn = get_db()
+    c = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
+    rows = c["attacks"] if what == "attack" else c["spells"]
+    try:
+        row = (rows or [])[int(data.get("index"))]
+    except (TypeError, ValueError, IndexError):
+        raise F.ApiError("That isn't on your sheet any more")
+    if what == "attack":
+        spell = _attack_spec(row, c)
+        if is_healing(row):
+            raise F.ApiError("Healing moves go on your party — ask the DM to apply it")
+    else:
+        spell = int(data.get("index"))
+        sp = spell_info(row)
+        if spell_helps(sp) or sp["terrain"] or sp["aura"] or sp["summon"]:
+            raise F.ApiError(f"{sp['name']} isn't aimed at enemies")
+    with tx() as conn:
+        if not claim_op(conn, data.get("op_id")):
+            return jsonify({"character": _own_character(conn, char_id), "repeat": True})
+        mine = active_combatant(conn, char_id)
+        if mine is None:
+            raise F.ApiError("Attacks on enemies are for fights, and there's no fight running")
+        ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
+        if ctx.enc["current_id"] != mine["id"]:
+            raise F.ApiError("It's not your turn yet — you can attack when your turn comes round", status=403)
+        foes = {r["id"] for r in conn.execute("SELECT id FROM combatants WHERE encounter_id = ? AND kind = 'enemy' AND hidden = 0 "
+                                              "AND status NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
+        if not set(targets) <= foes:
+            raise F.ApiError("You can only use that on enemies — not yourself or your party", status=403)
+        check_action(conn, mine["id"], row.get("name") or "that")
+        result = engine_cast(ctx, mine["id"], {"spell": spell, "targets": targets, "slot": data.get("slot")}, ident)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    conn = get_db()
+    result["rolls"] = [roll_dict(r, ident) for r in conn.execute(
+        f"SELECT * FROM rolls WHERE id IN ({','.join('?' * len(result['rolls'])) or 'NULL'}) ORDER BY id", result["rolls"]).fetchall()]
+    # what the player reads: no Armor Class
+    result["summary"] = AC_NOTE.sub("", result["summary"])
+    for t in result["targets"]:
+        t["text"] = AC_NOTE.sub("", t.get("text") or "")
+        t.pop("ac", None)
+    return jsonify({"character": _own_character(conn, char_id), "cast": result})
 
 
 def _summon_from_phone(ident, char_id, index, data):

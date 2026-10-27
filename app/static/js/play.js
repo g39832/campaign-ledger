@@ -12,7 +12,8 @@
   let S = null, stamp = "", mapStamp = "";
   const PING_COOLDOWN_MS = 5000;
   let lastPing = 0;
-  let casting = null; // { spell, chosen: Set of character ids, slot, busy, result } while the player picks who a spell is for
+  let casting = null;
+  let using = null; // { what: "attack" | "spell", index, name, single, max, chosen: Set of combatant ids, busy, result } while aiming at enemies // { spell, chosen: Set of character ids, slot, busy, result } while the player picks who a spell is for
 
   try { const t = localStorage.getItem("player-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
   $("#theme-toggle-p").addEventListener("click", () => {
@@ -24,8 +25,11 @@
   const view = new MapView($("#stage"), {
     role: "player",
     imageUrl: (m) => m.image_url,
-    canMove: (t) => t.movable && !casting,
-    onSelect: (t) => { if (casting && t && t.character_id) pick(t.character_id); }, // tap a token to cast on them
+    canMove: (t) => t.movable && !casting && !using,
+    onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
+      if (casting && t && t.character_id) pick(t.character_id);
+      else if (using && t) pickFoe(t.combatant_id, t.display);
+    },
     onPing: async (x, y) => {
       // one ping every few seconds (the server keeps the same cooldown)
       const wait = Math.ceil((lastPing + PING_COOLDOWN_MS - Date.now()) / 1000);
@@ -122,6 +126,66 @@
     }
     return out;
   }
+
+  // ---- attacks and harmful spells on enemies, like the DM's map ------------------------------
+  // Tap Use, then tap an enemy (on the map or in the list). The server rolls to hit, the damage
+  // and any effect, and says what happened. Never at yourself or your party.
+  const foes = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind === "enemy" && !["dead", "defeated", "fled"].includes(o.status));
+  function startUse(what, index, name, single, max) {
+    casting = null;
+    using = { what, index, name, single, max: max || 0, chosen: new Set(), busy: false, result: null };
+    render();
+    const box = $("#use-box");
+    if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function pickFoe(cbId, label) {
+    if (!using || using.busy || using.result) return;
+    if (!foes().some((o) => o.id === cbId)) { toast((label || "That") + " isn't an enemy — you can only aim this at enemies.", "error"); return; }
+    if (using.single) { using.chosen = new Set([cbId]); useNow(); return; }
+    const c = using.chosen;
+    if (c.has(cbId)) c.delete(cbId);
+    else if (using.max && c.size >= using.max) { toast(using.name + " reaches at most " + using.max + ".", "error"); return; }
+    else c.add(cbId);
+    render();
+  }
+  async function useNow() {
+    const k = using;
+    if (!k || k.busy || !k.chosen.size) return;
+    k.busy = true; render();
+    try {
+      const d = await api("POST", "/api/play/me/use", { what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() });
+      k.result = d.cast || null;
+      if (d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
+      const hows = d.cast ? d.cast.targets.map((t) => t.how) : [];
+      const missed = hows.length && hows.every((x) => x === "miss" || x === "saved");
+      if (window.FX) { FX.banner(missed ? "Missed" : hows.includes("crit") ? "Critical hit!" : "Hit!", k.name, missed ? "dmg" : "crit"); FX.sound(missed ? "miss" : "hit"); }
+    } catch (e) { toast(e.message, "error"); k.busy = false; k.chosen.clear(); render(); return; }
+    k.busy = false;
+    load(true);
+  }
+  function useBox() {
+    const k = using;
+    if (k.result) return h("div", { id: "use-box", class: "fight-aim" },
+      h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
+      k.result.targets.map((t) => h("p", { style: "margin:4px 0" }, t.text)),
+      h("button", { type: "button", class: "btn btn-sm", onclick: () => { using = null; render(); } }, "Done"));
+    const list = foes();
+    return h("div", { id: "use-box", class: "fight-aim" },
+      h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
+      h("p", { class: "fa-ask" }, k.single ? "Tap the enemy it's aimed at — on the map or here." : "Tap each enemy it reaches, then Use."),
+      list.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, list.map((o) => h("button", { type: "button", disabled: k.busy,
+        class: "btn btn-sm" + (k.chosen.has(o.id) ? " is-armed" : ""), "aria-pressed": String(k.chosen.has(o.id)), onclick: () => pickFoe(o.id, o.name) },
+        o.name, o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, o.health) : null)))
+        : h("p", { class: "faint" }, "No enemies to aim at."),
+      h("div", { class: "row" },
+        k.single ? null : h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: k.busy || !k.chosen.size, onclick: useNow },
+          k.busy ? "Rolling…" : "Use on " + k.chosen.size),
+        h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { using = null; render(); } }, "Cancel")));
+  }
+  const useBtn = (what, index, name, single, max) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
+    title: "Then tap an enemy", onclick: () => startUse(what, index, name, single, max) }, icon("swords", "sm"), " Use");
+  const aimsAtFoes = (s) => (s.kind === "damage" || s.kind === "debuff") && !s.terrain && !s.aura && !s.summon && !L.spellHelps(s);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && using && !using.busy) { using = null; render(); } });
 
   // ---- casting a healing or buff spell on someone in the party ------------------------------
   // Tap the spell, tap who it's for (here or their token on the map), then Cast. The server rolls it.
@@ -264,6 +328,7 @@
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"),
           c.my_turn === false ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Attacks unlock on your turn.") : null,
+          using && using.what === "attack" ? useBox() : null,
           c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
             c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
           ...c.attacks.map((a) => a.recharging ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
@@ -279,15 +344,18 @@
               if (window.FX) { FX.banner(a.name + "!", what, "crit"); FX.sound("crit"); }
             }) },
             icon("zap", "sm"), " " + (a.name || "Action Surge")) : null,
+          c.my_turn && a.damage && !a.heal ? useBtn("attack", a.index, a.name || "Attack", !a.area) :
           a.bonus ? h("button", { type: "button", class: "btn btn-sm", onclick: attackThen({ type: "attack", key: a.index }, a.damage && !a.heal ? { type: "damage", key: a.index } : null) }, "Hit " + a.bonus) : null,
-          a.damage ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) },
+          a.damage && !(c.my_turn && !a.heal) ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) },
             a.heal ? "Heal" : a.dmg_mult > 1 ? "Dmg ×" + a.dmg_mult : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
           casting ? castBox() : null,
+          using && using.what === "spell" ? useBox() : null,
           ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
+          c.my_turn && aimsAtFoes(s) && !s.recharging ? useBtn("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets) :
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
-          s.kind === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
+          s.kind === "damage" && s.dice && !(c.my_turn && aimsAtFoes(s)) ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
           s.hit && s.hit !== "attack" && !c.roll_to_hit ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
           s.aura ? L.auraButton(s, "/api/play/me/aura", () => load(true))
           : s.terrain ? h("span", { class: "tag", title: "Ask the DM: it's aimed on the battle map" }, icon("map", "sm"), " the DM aims it on the map")
@@ -295,7 +363,7 @@
           : castable(s) && c.can.cast_spells !== false
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
-            : s.kind === "debuff" ? h("span", { class: "tag", title: "The DM casts this one" }, L.spellWhat(s) || "debuff") : null))] : null,
+            : s.kind === "debuff" && !c.my_turn ? h("span", { class: "tag", title: "On your turn" }, L.spellWhat(s) || "debuff") : null))] : null,
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
         h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
         h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),

@@ -212,7 +212,7 @@ def player_view(conn, map_id, player):
             continue
         own = bool(player.get("character_id") and t["character_id"] == player["character_id"])
         is_party = t["kind"] in ("pc", "npc") and t["character_id"]
-        out = {k: t[k] for k in ("id", "kind", "x", "y", "size", "color", "display", "is_current", "portrait")}
+        out = {k: t[k] for k in ("id", "kind", "x", "y", "size", "color", "display", "is_current", "portrait", "combatant_id")}
         out["status"] = t["status"] if t["status"] in ("dead", "defeated", "unconscious", "fled") else None
         out["movable"] = own and (bool(m["players_can_move"]) or _disengaged(conn, t["character_id"]))
         if out["movable"]:
