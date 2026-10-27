@@ -571,18 +571,21 @@
     }
     if (a.single) {
       aim = null; setTool(view.tool);
-      useMove(c, a);
-      let crit = false, how = "";
+      let crit = false, how = "", used = false;
+      // the move's cooldown starts once its roll has gone through (a refused roll, e.g. no actions left, doesn't use it)
+      const spend = () => { if (!used) { used = true; useMove(c, a); } };
       if (a.toHit) {
         const r = await rollToHit(a, target);
         if (!r) { renderSelected(); return; }
+        spend();
         if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
         crit = r.crit; how = " (" + r.text + ")";
       }
       if (a.effect) putEffect(c, target, a.effect, a.dmg ? null : () => say(c.id, a.name + ": " + target.name + " is " + a.effect.condition + how + ".", "hit"));
-      if (!a.dmg) { if (!a.effect) say(c.id, a.name + ": hit " + target.name + how + ".", "hit"); return; }
+      if (!a.dmg) { spend(); if (!a.effect) say(c.id, a.name + ": hit " + target.name + how + ".", "hit"); return; }
       const d = await a.dmg(crit && !a.heal);
       if (!d) { renderSelected(); return; }
+      spend();
       const n = Math.max(0, d.total);
       hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.heal ? a.name + ": healed " + target.name + " for " + n + "."
         : (crit ? "Critical hit! " : "Hit! ") + n + " damage to " + target.name + " with " + a.name + how + (a.effect ? ", and " + a.effect.condition : "") + ".",
@@ -591,17 +594,18 @@
     }
     // spells that reach several: each tap lands on one more (rolling to hit each one first)
     if (cur.done.has(target.id)) return;
-    if (!cur.done.size) useMove(c, a);
+    const first = !cur.done.size;
     cur.done.add(target.id);
     renderSelected();
     let how = "", crit = false;
     if (a.toHit) {
       const r = await rollToHit(a, target);
       if (!r) { cur.done.delete(target.id); renderSelected(); return; }
+      if (first) useMove(c, a);
       if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
       how = " (" + r.text + ")";
       crit = r.crit;
-    }
+    } else if (first) useMove(c, a);
     if (crit && a.crit && cur.amount != null) { // natural 20: this one takes double dice
       const d = await a.crit();
       if (d) {

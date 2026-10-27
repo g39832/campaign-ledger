@@ -106,3 +106,20 @@ def test_dm_map_moves_follow_turns_and_speed(api, battlemap):
     api.post(f"/api/tokens/{me['id']}/move", {"x": 7, "y": 0}, 403)                # no more
     to_turn(api, eid, "Bandit 1")
     api.post(f"/api/tokens/{bandit['id']}/move", {"x": bandit["x"] - 6, "y": bandit["y"]})   # a bandit's 30 ft from its stat block
+
+
+def test_player_ends_their_own_turn(api, battlemap):
+    pa, eid = battlemap["pa"], battlemap["eid"]
+    setup(api, battlemap)
+    to_turn(api, eid, "Bandit 1")
+    err = pa.post("/api/play/me/end-turn", {}, 403)
+    assert "isn't your turn" in err["error"]
+    to_turn(api, eid, "Aria")
+    st = api.get(f"/api/encounters/{eid}")
+    me = next(c for c in st["combatants"] if c["name"] == "Aria")
+    pa.post("/api/play/me/end-turn", {"op_id": "end-1"})
+    pa.post("/api/play/me/end-turn", {"op_id": "end-1"})                         # a retried tap doesn't skip anyone
+    st = api.get(f"/api/encounters/{eid}")
+    assert st["encounter"]["current_id"] != me["id"]
+    assert any("Sam ended Aria's turn" in e["message"] for e in st["log"])
+    assert pa.get("/api/play/state")["character"]["my_turn"] is False

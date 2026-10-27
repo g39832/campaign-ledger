@@ -65,6 +65,13 @@
   $("#zoom-in").addEventListener("click", () => view.zoom(1.25));
   $("#zoom-out").addEventListener("click", () => view.zoom(0.8));
   $("#zoom-fit").addEventListener("click", () => view.fit());
+  // turning the phone or tablet (or a big resize): fit the map to its new shape
+  let lastShape = innerWidth + "x" + innerHeight;
+  window.addEventListener("resize", L.debounce(() => {
+    const shape = innerWidth + "x" + innerHeight, [w0, h0] = lastShape.split("x").map(Number);
+    if (Math.abs(innerWidth - w0) > 120 || Math.abs(innerHeight - h0) > 120) view.fit();
+    lastShape = shape;
+  }, 250));
   // on a phone the map stays at the top while the rest scrolls under it; this picks how tall it is
   const SIZES = ["small", "medium", "large"];
   let mapSize = "medium";
@@ -265,6 +272,17 @@
     return [v.aura ? "" : L.levelWord(v), ar ? ar.size + " ft " + (ar.kind || "") + (ar.range ? " · range " + ar.range + " ft" : "") : "", L.spellWhat(v),
       L.spellLands(v, d.spell || (v.dc ? { dc: v.dc } : null), c.roll_to_hit), v.cooldown ? v.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · "); };
 
+  // End turn: tap once to arm, again to end it (so a stray tap doesn't skip a turn)
+  let endArmed = false;
+  function endTurnBtn() {
+    return h("button", { type: "button", class: "btn btn-primary end-turn-btn" + (endArmed ? " is-armed" : ""),
+      title: "Hand the turn on to whoever's next", onclick: async () => {
+        if (!endArmed) { endArmed = true; render(); setTimeout(() => { if (endArmed) { endArmed = false; render(); } }, 4000); return; }
+        endArmed = false; using = null; casting = null;
+        const d = await me("end-turn", {});
+        if (d) { toast("Turn ended.", "ok"); if (window.FX) FX.sound("ac"); }
+      } }, icon("check", "sm"), endArmed ? " Tap again to end your turn" : " End my turn");
+  }
   async function dash() {
     const d = await me("dash", {});
     if (!d) return;
@@ -304,7 +322,8 @@
         o.hp != null ? h("span", { class: "faint num" }, o.hp + "/" + o.max_hp) : o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem" }, o.health) : null,
         o.status ? h("span", { class: "faint", style: "font-size:.8rem" }, o.status) : null)))
         : h("p", { class: "faint", style: "margin:0" }, "No fight right now."),
-      e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!" : e.current + "'s turn") : null);
+      e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!" : e.current + "'s turn") : null,
+      S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null);
 
     const c = S.character;
     if (!c) {
@@ -343,6 +362,7 @@
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"),
           c.my_turn === false ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Attacks unlock on your turn.") : null,
           using && using.what === "attack" ? useBox() : null,
+          c.my_turn ? h("div", { style: "margin:0 0 8px" }, endTurnBtn()) : null,
           c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
             c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
           ...c.attacks.map((a) => a.recharging ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),

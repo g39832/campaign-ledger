@@ -489,6 +489,31 @@ def api_me_surge():
     return jsonify({"character": _own_character(get_db(), char_id)})
 
 
+@bp.post("/api/play/me/end-turn")
+def api_me_end_turn():
+    """The player ends their own turn: the fight moves on to whoever is next, like the DM's Next."""
+    from .combat import Ctx, next_turn
+    from .db import claim_op
+    from .rest import active_combatant
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("There's no fight running")
+        ctx = Ctx(conn, cb["encounter_id"])
+        if claim_op(conn, data.get("op_id")):
+            if ctx.enc["current_id"] != cb["id"]:
+                raise F.ApiError("It isn't your turn", status=403)
+            ctx.log("turn", f"{ident['name']} ended {ctx.combatant(cb['id'])['name']}'s turn")
+            next_turn(ctx)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+            live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+            if live:
+                _bump(conn, live)
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
 @bp.post("/api/play/me/dash")
 def api_me_dash():
     """The Dash action: twice their speed to move this turn."""

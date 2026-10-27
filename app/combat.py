@@ -470,22 +470,25 @@ def _step(ctx, direction):
     return chosen, wrapped
 
 
+def next_turn(ctx):
+    """End the current turn and start the next one (the DM's Next, or a player's End turn)."""
+    prev_id = ctx.enc["current_id"]
+    chosen, wrapped = _step(ctx, 1)
+    if prev_id:
+        on_turn(ctx, prev_id, "end")
+        _tick(ctx, prev_id, "end")
+    if wrapped:
+        ctx.save_enc(round=ctx.enc["round"] + 1, current_id=None)
+        ctx.log("round", f"Round {ctx.enc['round']} begins")
+    ctx.save_enc(current_id=chosen["id"])
+    ctx.log("turn", f"{chosen['name']}'s turn")
+    _tick(ctx, chosen["id"], "start")
+    on_turn(ctx, chosen["id"], "start")
+
+
 @bp.post("/encounters/<int:eid>/next")
 def api_next(eid):
-    def fn(ctx):
-        prev_id = ctx.enc["current_id"]
-        chosen, wrapped = _step(ctx, 1)
-        if prev_id:
-            on_turn(ctx, prev_id, "end")
-            _tick(ctx, prev_id, "end")
-        if wrapped:
-            ctx.save_enc(round=ctx.enc["round"] + 1, current_id=None)
-            ctx.log("round", f"Round {ctx.enc['round']} begins")
-        ctx.save_enc(current_id=chosen["id"])
-        ctx.log("turn", f"{chosen['name']}'s turn")
-        _tick(ctx, chosen["id"], "start")
-        on_turn(ctx, chosen["id"], "start")
-    return mutate(eid, fn, _body().get("op_id"))
+    return mutate(eid, next_turn, _body().get("op_id"))
 
 
 @bp.post("/encounters/<int:eid>/prev")

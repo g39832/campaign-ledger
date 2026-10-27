@@ -1076,6 +1076,7 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .share-url { font: 700 1.05rem var(--sans); word-break: break-all; }
 .play-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 .play-grid .map-stage { height: calc(100vh - 150px); }
+.play-map { position: sticky; top: 62px; } /* the map stays in view while the side panel scrolls */
 .pc-card .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .pc-card .stat { border: 1px solid var(--line); border-radius: var(--radius); text-align: center; padding: 6px 4px; cursor: pointer; background: none; color: inherit; font: inherit; }
 .pc-card .stat:hover { border-color: var(--accent); }
@@ -1104,9 +1105,12 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
   body[data-map-size="large"] .play-grid .map-stage { height: 64vh; }
   .map-size-btn { display: inline-flex; }
 }
-/* a phone on its side: the map on the left follows you down the page, the character on the right */
-@media (orientation: landscape) and (max-height: 600px) {
-  .page-play .main { padding-top: 6px; }
+/* a phone or tablet on its side: the map on the left follows you down the page, the character on the right */
+@media (orientation: landscape) and (max-width: 1100px) {
+  .page-play .topbar { position: static; }
+  /* no gap under the grid: a pinned map can't go past the bottom of its grid, so the room goes inside the side panel */
+  .page-play .main { padding-top: 6px; padding-bottom: 0; }
+  .page-play .map-side { padding-bottom: 64px; }
   .play-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 42%); gap: 10px; align-items: start; }
   .play-map { position: sticky; top: 6px; box-shadow: none; padding-bottom: 0; }
   .play-grid .map-stage, body[data-map-size] .play-grid .map-stage { height: calc(100vh - 12px); height: calc(100dvh - 12px); min-height: 0; }
