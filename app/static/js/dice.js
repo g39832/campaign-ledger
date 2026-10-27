@@ -173,8 +173,9 @@
   // ---- the tray: animation + drawing ------------------------------------------
   // what a roll was, short, for its floating total: "Punch attack", "Great Axe damage"
   const shortLabel = (roll) => String(roll.label || roll.expression || "").replace(/\s*—.*$/, "").slice(0, 32);
-  const FLASH_MS = 1400; // how long the total pulses after the dice land
-  const FLOAT_MS = 3600; // how long the last roll's total takes to float up and fade when the next roll starts
+  const FLASH_MS = 2200; // how long the total pulses after the dice land
+  const FLOAT_MS = 4500;
+  const RECENT_MS = 6000; // only a roll from the last few seconds floats up when the next one starts // how long the last roll's total takes to float up and fade when the next roll starts
   class Tray {
     constructor(canvas) {
       this.canvas = canvas;
@@ -197,6 +198,7 @@
       opts = opts || {};
       this.resize();
       cancelAnimationFrame(this.raf);
+      const wasRolling = !!this._resolve; // the last roll hadn't landed yet
       if (this._resolve) { const prev = this._resolve; this._resolve = null; prev(null); }
       const n = specs.length;
       const R = Math.max(14, Math.min(opts.size || 40, (this.w / Math.max(2.5, n + 0.6)) * 0.42, this.h * 0.24));
@@ -234,7 +236,8 @@
       this.duration = opts.duration ?? 1500;
       this.t0 = performance.now();
       // the last roll's total floats up and fades while this one rolls (even if it hadn't landed yet)
-      if (this.total != null && this.dice.length && !opts.mirror) {
+      const recent = wasRolling || (this.flashT0 != null && performance.now() - this.flashT0 < RECENT_MS);
+      if (this.total != null && this.dice.length && !opts.mirror && recent) { // no leftovers from rolls long ago
         this.floaters = this.floaters.filter((f) => performance.now() - f.t0 < FLOAT_MS).slice(-3)
           .concat([{ text: String(this.total), label: this.label || "", tone: this.tone, t0: performance.now() }]);
       }
@@ -419,7 +422,7 @@
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduceMotion && !localStorage.getItem(prefsKey)) prefs.speed = "none";
   const savePrefs = () => { try { localStorage.setItem(prefsKey, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
-  const DURATION = { fast: 650, normal: 1500, dramatic: 2600, none: 0 };
+  const DURATION = { fast: 1000, normal: 2300, dramatic: 3400, none: 0 }; // slow enough to follow the dice
 
   const role = document.body.dataset.role || "dm";
   const Dice = {
