@@ -274,7 +274,7 @@
       const size = Math.max(20, Math.min(this.h * 0.24, 64)) * pulse; // always up top, never over the dice
       const col = this.tone === "crit" ? "#ffd36b" : this.tone === "fumble" ? "#ff6b5a" : "#ffffff";
       const text = String(this.total), x = this.w / 2, top = Math.min(...this.dice.map((d) => d.end[1] - d.R));
-      const y = Math.max(size * 0.62, Math.min(top - size * 0.6, this.h * 0.2));
+      const y = Math.max(size * 0.62, top - size * 0.75); // just above the dice (never over them)
       ctx.save();
       ctx.font = `800 ${size}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const w = ctx.measureText(text).width + size * 0.5, hgt = size * 0.95;
