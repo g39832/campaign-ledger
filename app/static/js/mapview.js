@@ -247,24 +247,24 @@
         const x0 = ox + (tx - z.half) * cp, y0 = oy + (ty - z.half) * cp, w = (t.size + z.half * 2) * cp;
         ctx.save();
         const glow = ctx.createRadialGradient(x0 + w / 2, y0 + w / 2, w * 0.1, x0 + w / 2, y0 + w / 2, w * 0.75);
-        glow.addColorStop(0, "rgba(255, 244, 196, .34)"); glow.addColorStop(1, "rgba(255, 226, 140, .10)");
+        glow.addColorStop(0, "rgba(255, 236, 150, .55)"); glow.addColorStop(1, "rgba(255, 210, 90, .22)");
         ctx.fillStyle = glow; ctx.fillRect(x0, y0, w, w);
         // shafts of light coming down
         ctx.beginPath(); ctx.rect(x0, y0, w, w); ctx.clip();
         for (let i = 0; i < 7; i++) {
-          const sx = x0 + ((i + 0.5) / 7) * w + Math.sin(now * 0.8 + i * 1.7) * cp * 0.25, a = 0.10 + 0.08 * Math.sin(now * 2 + i);
+          const sx = x0 + ((i + 0.5) / 7) * w + Math.sin(now * 0.8 + i * 1.7) * cp * 0.25, a = 0.22 + 0.12 * Math.sin(now * 2 + i);
           const g = ctx.createLinearGradient(sx, y0, sx, y0 + w);
-          g.addColorStop(0, "rgba(255, 250, 220, " + (a + 0.12) + ")"); g.addColorStop(1, "rgba(255, 240, 180, 0)");
+          g.addColorStop(0, "rgba(255, 252, 230, " + (a + 0.25) + ")"); g.addColorStop(1, "rgba(255, 236, 160, 0.04)");
           ctx.fillStyle = g; ctx.beginPath();
           ctx.moveTo(sx - cp * 0.15, y0); ctx.lineTo(sx + cp * 0.15, y0); ctx.lineTo(sx + cp * 0.55, y0 + w); ctx.lineTo(sx - cp * 0.55, y0 + w); ctx.closePath(); ctx.fill();
         }
         for (let i = 0; i < 10; i++) { // little motes drifting down
           const px = x0 + ((i * 0.37 + 0.1) % 1) * w, py = y0 + ((now * 0.15 + i * 0.23) % 1) * w;
-          ctx.fillStyle = "rgba(255, 248, 210, .8)"; ctx.beginPath(); ctx.arc(px, py, cp * 0.05, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "rgba(255, 255, 240, .95)"; ctx.shadowColor = "#fff6c8"; ctx.shadowBlur = cp * 0.3; ctx.beginPath(); ctx.arc(px, py, cp * 0.07, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
         ctx.save();
-        ctx.strokeStyle = "rgba(255, 226, 140, .9)"; ctx.lineWidth = cp * 0.06; ctx.shadowColor = "#ffe9a3"; ctx.shadowBlur = cp * 0.4;
+        ctx.strokeStyle = "rgba(230, 180, 40, .95)"; ctx.lineWidth = cp * 0.09; ctx.shadowColor = "#ffd75a"; ctx.shadowBlur = cp * 0.6;
         ctx.strokeRect(x0, y0, w, w);
         ctx.font = `700 ${cp * 0.3}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
         ctx.fillStyle = "rgba(60, 45, 10, .85)"; const label = z.name; const lw = ctx.measureText(label).width + cp * 0.2;

@@ -317,7 +317,7 @@
   }
   const attackInfo = (a) => [a.bonus ? "attack roll " + a.bonus : "", a.damage, a.extra_moves ? "+" + a.extra_moves + " extra moves this turn" : "",
     a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : ""].filter(Boolean).join(" · ");
-  const spellInfo = (s, c, d) => { const v = L.spellView(s), ar = v.area && v.area.size ? v.area : null;
+  const spellInfo = (s, c, d) => { const v = L.spellView(s), ar = v.area && v.area.size && !v.zone ? v.area : null;
     return [v.aura ? "" : L.levelWord(v), ar ? ar.size + " ft " + (ar.kind || "") + (ar.range ? " · range " + ar.range + " ft" : "") : "", L.spellWhat(v),
       L.spellLands(v, d.spell || (v.dc ? { dc: v.dc } : null), c.roll_to_hit), v.cooldown ? v.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · "); };
 

@@ -387,7 +387,7 @@
     const helps = L.spellHelps(s);
     return { name: s.name, icon: L.KIND_ICON[s.kind] || "zap", heal: helps, cast: { spell: s, body: body || { spell: s } },
       aimArea: s.area || null, single: s.targets === 1, cooldown: s.cooldown || 0, cdName: s.name,
-      info: [L.levelWord(s), s.area ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, c.spellcasting || (s.dc ? { dc: s.dc } : null), toHitRule())].filter(Boolean).join(" · ") };
+      info: [L.levelWord(s), s.area && !s.zone ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, c.spellcasting || (s.dc ? { dc: s.dc } : null), toHitRule())].filter(Boolean).join(" · ") };
   }
   /* Cast it: the server spends the slot, rolls to hit or the saves, the damage or healing,
      and leaves the effect. Then the panel says what happened (with Undo for the HP). */

@@ -119,7 +119,7 @@
     const k = spellKind(s), bits = [];
     if (Number(s.dmg_mult) > 1) bits.push((s.dmg_mult == 2 ? "double" : "×" + s.dmg_mult) + " damage on a hit");
     if (Number(s.speed_mult) > 1) bits.push((s.speed_mult == 2 ? "double" : "×" + s.speed_mult) + " speed");
-    if (s.zone) bits.push("around the caster for " + (s.rounds || 3) + " rounds, enemies only" + (Number(s.zone_speed) < 1 ? ": they move at " + (Number(s.zone_speed) === 0.5 ? "half" : Math.round(s.zone_speed * 100) + "%") + " speed in it" : ""));
+    if (s.zone) bits.push(((s.area && s.area.size) || 15) + " ft all around the caster for " + (s.rounds || 3) + " rounds, enemies only" + (Number(s.zone_speed) < 1 ? ": they move at " + (Number(s.zone_speed) === 0.5 ? "half" : Math.round(s.zone_speed * 100) + "%") + " speed in it" : ""));
     if (s.aura) bits.push("for allies within " + ((s.area && s.area.size) || 60) + " ft, until switched off");
     if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
