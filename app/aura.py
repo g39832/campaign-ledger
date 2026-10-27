@@ -76,6 +76,9 @@ def toggle(conn, char_id, index, on):
     key = aura_key(char_id, sp["name"])
     radius = (sp["area"] or {}).get("size") or 60
     changed = []
+    # an item renamed while it was on leaves its effects under the old name: take those off first
+    live = {aura_key(char_id, spell_info(x)["name"]) for x in owner.get("spells") or [] if isinstance(x, dict) and x.get("aura")}
+    _take_off(conn, owner, lambda k: k.startswith(f"{char_id}:") and k not in live)
     if on:
         targets, by_map = _allies(conn, owner, radius)
         for cid in targets:
@@ -97,22 +100,30 @@ def toggle(conn, char_id, index, on):
             changed.append(ch["name"])
         where = f"within {radius} ft" if by_map else "in the party"
     else:
-        for r in conn.execute("SELECT * FROM characters WHERE campaign_id = ?", (owner["campaign_id"],)).fetchall():
-            ch = F.decode_row(r, F.CHARACTER)
-            gone = [x for x in ch["conditions"] or [] if x.get("aura") == key]
-            if not gone:
-                continue
-            extra = sum(int(x.get("max_hp") or 0) for x in gone)
-            new_max = max(0, ch["max_hp"] - extra)
-            conn.execute("UPDATE characters SET conditions = ?, max_hp = ?, current_hp = ?, updated_at = ? WHERE id = ?",
-                         (json.dumps([x for x in ch["conditions"] if x.get("aura") != key]), new_max,
-                          min(ch["current_hp"], new_max) if new_max else ch["current_hp"], now_iso(), ch["id"]))
-            _touch(conn, ch["id"])
-            changed.append(ch["name"])
+        changed = _take_off(conn, owner, lambda k: k == key)
         where = ""
     _log(conn, owner, f"{owner['name']} switches {'on' if on else 'off'} {sp['name']}"
          + (f": {', '.join(changed)} {where}" if on and changed else f" for {', '.join(changed)}" if changed else ""))
     return {"name": sp["name"], "on": on, "who": changed}
+
+
+def _take_off(conn, owner, which):
+    """Remove the aura effects whose key matches, everywhere in the campaign (their extra max HP
+    goes too, and HP never ends above max). Returns who had them."""
+    changed = []
+    for r in conn.execute("SELECT * FROM characters WHERE campaign_id = ?", (owner["campaign_id"],)).fetchall():
+        ch = F.decode_row(r, F.CHARACTER)
+        gone = [x for x in ch["conditions"] or [] if isinstance(x, dict) and x.get("aura") and which(x["aura"])]
+        if not gone:
+            continue
+        extra = sum(int(x.get("max_hp") or 0) for x in gone)
+        new_max = max(0, ch["max_hp"] - extra)
+        conn.execute("UPDATE characters SET conditions = ?, max_hp = ?, current_hp = ?, updated_at = ? WHERE id = ?",
+                     (json.dumps([x for x in ch["conditions"] if x not in gone]), new_max,
+                      min(ch["current_hp"], new_max) if new_max else ch["current_hp"], now_iso(), ch["id"]))
+        _touch(conn, ch["id"])
+        changed.append(ch["name"])
+    return changed
 
 
 def _log(conn, owner, message):

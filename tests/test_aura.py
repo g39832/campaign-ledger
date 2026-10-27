@@ -79,3 +79,22 @@ def test_the_player_switches_it_from_their_phone(api, battlemap):
     assert any("speed ×2" in c and "+20 max HP" in c for c in r["character"]["conditions"])
     r = pa.post("/api/play/me/aura", {"index": 0, "on": False})
     assert r["character"]["spells"][0]["aura_on"] is False
+
+
+def test_renaming_the_item_while_on_never_leaves_it_stuck(api, battlemap):
+    camp = battlemap["camp"]
+    by = chars(api, camp)
+    aria = api.get(f"/api/characters/{by['Aria']['id']}")["character"]
+    aria = api.set_char(aria, spells=[ITEM])
+    hp0 = {n: c["max_hp"] for n, c in chars(api, camp).items()}
+    api.post(f"/api/characters/{aria['id']}/aura", {"index": 0, "on": True})
+    aria = api.get(f"/api/characters/{aria['id']}")["character"]
+    api.set_char(aria, spells=[dict(ITEM, name="Fateweaver cosmic cape")])        # renamed while on
+    r = api.post(f"/api/characters/{aria['id']}/aura", {"index": 0, "on": False})
+    now = chars(api, camp)
+    assert all(now[n]["max_hp"] == hp0[n] for n in hp0), "switching off takes the old-name effects off too"
+    for c in now.values():
+        assert not any(x.get("aura") for x in api.get(f"/api/characters/{c['id']}")["character"]["conditions"])
+    # and switching on again after a rename doesn't double it
+    api.post(f"/api/characters/{aria['id']}/aura", {"index": 0, "on": True})
+    assert all(chars(api, camp)[n]["max_hp"] == hp0[n] + 20 for n in hp0)
