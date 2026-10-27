@@ -19,7 +19,7 @@
       if (t && t.combatant_id && S.map.encounter_id) try { localStorage.setItem("combat-sel-" + S.map.encounter_id, t.combatant_id); } catch (e) { /* ignore */ }
     },
     canMove: () => !aim,
-    onMove: (t, x, y) => run("POST", "/api/tokens/" + t.id + "/move", { x, y }),
+    onMove: (t, x, y) => run("POST", "/api/tokens/" + t.id + "/move", { x, y, free: freeMove }),
     onBrush: (tool, cells) => {
       if (tool === "paint") run("POST", "/api/maps/" + MID + "/terrain", { cells, value: terrainKind === "erase" ? null : terrainKind });
       else run("POST", "/api/maps/" + MID + "/fog", { cells, reveal: tool === "reveal" });
@@ -44,6 +44,13 @@
   let hpAmt = "";
   let pendingMonster = null; // the monster waiting to be clicked onto the map
 
+  // Free move: the DM repositions anyone, ignoring turns and speed (off: fights follow the rules)
+  let freeMove = false;
+  $("#free-move").addEventListener("click", () => {
+    freeMove = !freeMove;
+    $("#free-move").classList.toggle("is-on", freeMove); $("#free-move").setAttribute("aria-pressed", String(freeMove));
+    toast(freeMove ? "Free move on: drag anyone anywhere." : "Free move off: in a fight, tokens move on their turn and within their speed.", "ok");
+  });
   function run(method, url, body, after) {
     return act(method, url, body, (d) => { if (d && d.map) apply(d); if (after) after(d); },
       { onError: (err) => { toast(err.message, "error"); refresh(true); } });

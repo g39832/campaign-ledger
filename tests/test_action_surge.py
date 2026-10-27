@@ -87,8 +87,16 @@ def test_two_actions_a_turn_without_surge(api, battlemap):
     err = pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": aid}}, 403)
     assert "2 actions" in err["error"] and "Action Surge" in err["error"]
     pa.post("/api/play/me/disengage", {}, 403)                                               # Disengage is an action too
-    # the DM can still roll for her
-    api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "combatant_id": by["Aria"]["id"]}}, 201)
+    # the DM's rolls for her count the same
+    api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "combatant_id": by["Aria"]["id"]}}, 403)
+    spec = {"name": "Shove", "effect": "debuff", "condition": "Prone", "hit": "attack", "attack_bonus": 5, "move": True}
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": spec, "targets": [by["Bandit 1"]["id"]]}, 403)
+    # monsters are the DM's call
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
+    glare = {"name": "Glare", "effect": "debuff", "condition": "Frightened", "hit": "attack", "attack_bonus": 5}
+    for _ in range(3):
+        api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Bandit 1"]["id"], "spell": glare, "targets": [by["Bandit 2"]["id"]]})
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
     # Action Surge on top: two more
     pa.post("/api/play/me/surge", {"index": 1})
     pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": aid}}, 201)
@@ -146,3 +154,16 @@ def test_ending_the_fight_clears_extra_moves(api, battlemap):
     st = api.post(f"/api/encounters/{eid}/end")
     a = next(c for c in st["combatants"] if c["name"] == "Aria")
     assert not any(x.get("extra_moves") is not None or x.get("cooldown") for x in a["conditions"])
+
+
+def test_leftover_surge_ends_when_their_next_turn_starts(api, battlemap):
+    """The DM moved the turn away with Set turn (no end-of-turn): the surge still ends."""
+    eid, by = setup(api, battlemap)
+    api.post(f"/api/combatants/{by['Aria']['id']}/surge", {"index": 1})
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
+    for _ in range(4):
+        st = api.post(f"/api/encounters/{eid}/next")
+        if st["encounter"]["current_id"] == by["Aria"]["id"]:
+            break
+    assert surge_of(st) is None
+    assert battlemap["pa"].get("/api/play/state")["character"]["actions"]["limit"] == 2

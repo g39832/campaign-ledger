@@ -53,7 +53,7 @@ def test_death_saves_count_themselves(api, fight, monkeypatch):
     api.post(f"/api/combatants/{lux['id']}/death-save", {}, 400)  # not at 0 HP yet
     api.post(f"/api/encounters/{eid}/damage", {"targets": [lux["id"]], "amount": 20})
     # move Yamato far away so there's no bonus
-    api.post(f"/api/tokens/{tok(api, fight['map'], 'Yamato')['id']}/move", {"x": 20, "y": 14})
+    api.post(f"/api/tokens/{tok(api, fight['map'], 'Yamato')['id']}/move", {"free": True, "x": 20, "y": 14})
     fixed_d20(monkeypatch, 12)
     st = api.post(f"/api/combatants/{lux['id']}/death-save", {})
     assert st["roll"]["expression"] == "1d20" and st["roll"]["label"] == "Death save"
@@ -91,14 +91,14 @@ def test_an_ally_next_to_them_gives_a_bonus(api, fight, monkeypatch):
     eid, lux, mid = fight["eid"], fight["by"]["Lux"], fight["map"]
     api.post(f"/api/encounters/{eid}/damage", {"targets": [lux["id"]], "amount": 20})
     lt = tok(api, mid, "Lux")
-    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"x": lt["x"] + 1, "y": lt["y"] + 1})  # diagonal counts
+    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"free": True, "x": lt["x"] + 1, "y": lt["y"] + 1})  # diagonal counts
     r = api.post(f"/api/combatants/{lux['id']}/death-save", {})["roll"]
     assert r["expression"] == "1d20+2" and r["label"] == "Death save +2 (Yamato beside them)"
     # two squares away: no bonus
-    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"x": lt["x"] + 2, "y": lt["y"]})
+    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"free": True, "x": lt["x"] + 2, "y": lt["y"]})
     assert api.post(f"/api/combatants/{lux['id']}/death-save", {})["roll"]["expression"] == "1d20"
     # a downed ally doesn't help
-    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"x": lt["x"] + 1, "y": lt["y"]})
+    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"free": True, "x": lt["x"] + 1, "y": lt["y"]})
     api.post(f"/api/encounters/{eid}/damage", {"targets": [fight["by"]["Yamato"]["id"]], "amount": 40})
     assert api.post(f"/api/combatants/{lux['id']}/death-save", {})["roll"]["expression"] == "1d20"
 
@@ -112,7 +112,7 @@ def test_bonus_size_is_a_setting(api, fight, monkeypatch):
     lux, mid = fight["by"]["Lux"], fight["map"]
     api.post(f"/api/encounters/{fight['eid']}/damage", {"targets": [lux["id"]], "amount": 20})
     lt = tok(api, mid, "Lux")
-    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"x": lt["x"], "y": lt["y"] + 1})
+    api.post(f"/api/tokens/{tok(api, mid, 'Yamato')['id']}/move", {"free": True, "x": lt["x"], "y": lt["y"] + 1})
     assert api.post(f"/api/combatants/{lux['id']}/death-save", {})["roll"]["expression"] == "1d20+5"
     bad = dict(s, combat=dict(s["combat"], ally_death_save_bonus=99))
     api.patch(f"/api/campaigns/{camp['id']}", {"changes": {"settings": {"from": s, "to": bad}}}, 400)  # checked before saving

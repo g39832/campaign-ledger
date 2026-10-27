@@ -515,6 +515,14 @@ def on_turn(ctx, cid, phase):
     from .spells import on_turn as spell_turn
     if phase == "start":  # a fresh turn: full movement and actions again
         ctx.conn.execute("UPDATE combatants SET moved = '' WHERE id = ?", (cid,))
+        # "this turn only" effects (Action Surge, Reckless, Disengage) left over from an earlier
+        # turn that ended without Next (the DM set the turn): they're over now
+        c = ctx.combatant(cid)
+        stale = {x["id"] for x in c["conditions"] if isinstance(x, dict) and x.get("id") and not x.get("cooldown")
+                 and x.get("encounter_id") in (None, ctx.enc["id"])
+                 and (x.get("this_turn") or x.get("extra_moves") is not None or x.get("name") == "Disengaged")}
+        if stale:
+            drop_conditions(ctx, c, stale, quiet=True)
     spell_turn(ctx, cid, phase)
 
 
@@ -721,7 +729,7 @@ def surge(ctx, cid, index, by_player=False):
     what = " and ".join(w for w in what if w) + " this turn"
     cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": what[0].upper() + what[1:],
             "rounds_left": 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
-            "expired": False, "applied_round": ctx.enc["round"]}
+            "expired": False, "applied_round": ctx.enc["round"], "this_turn": True}
     if n:
         cond.update(extra_moves=n, extra_total=n)
     if mult > 1:

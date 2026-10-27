@@ -6,7 +6,7 @@ from app import dice
 from tests.test_dice_map_players import battlemap, joined  # noqa: F401  (fixtures)
 from tests.test_spells import Loaded
 
-ROWS = [{"name": "Great Axe", "bonus": "", "damage": "3d12"},
+ROWS = [{"name": "Great Axe", "bonus": "+5", "damage": "3d12"},  # damage after a to-hit: not another action
         {"name": "Reckless attack", "bonus": "", "damage": "", "dmg_mult": 2, "cooldown": 1,
          "notes": "Doubles your attack then opponents attacks"},
         {"name": "Smite", "bonus": "+5", "damage": "1d8", "dmg_mult": 2}]

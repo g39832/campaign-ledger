@@ -11,7 +11,7 @@ def setup(api, bm):
     api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
     m = api.get(f"/api/maps/{mid}")
     me = tok(m, "Aria")
-    api.post(f"/api/tokens/{me['id']}/move", {"x": 0, "y": 0})
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 0, "y": 0, "free": True})
     api.post(f"/api/encounters/{eid}/start")
     return me
 
@@ -49,8 +49,10 @@ def test_only_on_your_turn_and_only_your_speed(api, battlemap):
     assert pa.get("/api/play/state")["character"]["move"]["left"] == 30
     pa.post("/api/play/me/dash", {}, 400)
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 12, "y": 4})
-    # the DM still moves anyone, any distance, any time
-    api.post(f"/api/tokens/{me['id']}/move", {"x": 25, "y": 0})
+    # the DM's map follows the same rules in a fight; Free move ignores them
+    err = api.post(f"/api/tokens/{me['id']}/move", {"x": 25, "y": 0}, 403)
+    assert "Aria has" in err["error"]
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 25, "y": 0, "free": True})
     # next round: a fresh 30 ft
     to_turn(api, eid, "Bandit 1")
     pa.post("/api/play/me/dash", {}, 403)                                          # not your turn
@@ -91,3 +93,16 @@ def test_ping_cooldown(api, battlemap, monkeypatch):
         api.post(f"/api/maps/{battlemap['mid']}/ping", {"x": 1, "y": 1})           # the DM has no cooldown
     monkeypatch.setattr(play, "PING_COOLDOWN", 0)
     pa.post("/api/play/ping", {"x": 2, "y": 1})
+
+
+def test_dm_map_moves_follow_turns_and_speed(api, battlemap):
+    eid = battlemap["eid"]
+    me = setup(api, battlemap)
+    bandit = tok(api.get(f"/api/maps/{battlemap['mid']}"), "Bandit 1")
+    to_turn(api, eid, "Aria")
+    err = api.post(f"/api/tokens/{bandit['id']}/move", {"x": bandit["x"] - 1, "y": bandit["y"]}, 403)
+    assert "not Bandit 1's turn" in err["error"]
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 6, "y": 0})                     # Aria: 30 ft on her turn
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 7, "y": 0}, 403)                # no more
+    to_turn(api, eid, "Bandit 1")
+    api.post(f"/api/tokens/{bandit['id']}/move", {"x": bandit["x"] - 6, "y": bandit["y"]})   # a bandit's 30 ft from its stat block

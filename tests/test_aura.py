@@ -46,13 +46,13 @@ def test_in_a_fight_only_allies_within_60_ft(api, battlemap):
     api.post(f"/api/maps/{mid}/tokens/from-encounter")
     api.patch(f"/api/maps/{mid}", {"changes": {"cols": {"to": 40}}})
     m = api.get(f"/api/maps/{mid}")
-    api.post(f"/api/tokens/{tok(m, 'Aria')['id']}/move", {"x": 0, "y": 0})
-    api.post(f"/api/tokens/{tok(m, 'Bram')['id']}/move", {"x": 30, "y": 0})      # 150 ft away
-    api.post(f"/api/tokens/{tok(m, 'Bandit 1')['id']}/move", {"x": 2, "y": 0})  # an enemy right beside her
+    api.post(f"/api/tokens/{tok(m, 'Aria')['id']}/move", {"free": True, "x": 0, "y": 0})
+    api.post(f"/api/tokens/{tok(m, 'Bram')['id']}/move", {"free": True, "x": 30, "y": 0})      # 150 ft away
+    api.post(f"/api/tokens/{tok(m, 'Bandit 1')['id']}/move", {"free": True, "x": 2, "y": 0})  # an enemy right beside her
     api.post(f"/api/encounters/{eid}/start")
     r = api.post(f"/api/characters/{aria['id']}/aura", {"index": 0, "on": True})
     assert r["aura"]["who"] == ["Aria"], "Bram is too far; the bandit is an enemy"
-    api.post(f"/api/tokens/{tok(m, 'Bram')['id']}/move", {"x": 12, "y": 0})      # 60 ft away
+    api.post(f"/api/tokens/{tok(m, 'Bram')['id']}/move", {"free": True, "x": 12, "y": 0})      # 60 ft away
     r = api.post(f"/api/characters/{aria['id']}/aura", {"index": 0, "on": True})
     assert r["aura"]["who"] == ["Bram"]
     st = api.get(f"/api/encounters/{eid}")

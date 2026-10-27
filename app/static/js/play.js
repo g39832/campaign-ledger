@@ -64,6 +64,18 @@
   $("#zoom-in").addEventListener("click", () => view.zoom(1.25));
   $("#zoom-out").addEventListener("click", () => view.zoom(0.8));
   $("#zoom-fit").addEventListener("click", () => view.fit());
+  // on a phone the map stays at the top while the rest scrolls under it; this picks how tall it is
+  const SIZES = ["small", "medium", "large"];
+  let mapSize = "medium";
+  try { mapSize = SIZES.includes(localStorage.getItem("play-map-size")) ? localStorage.getItem("play-map-size") : "medium"; } catch (e) { /* ignore */ }
+  const setSize = (s) => { mapSize = s; document.body.dataset.mapSize = s; $("#map-size").title = "Map size: " + s + " — tap to change"; };
+  setSize(mapSize);
+  $("#map-size").addEventListener("click", () => {
+    setSize(SIZES[(SIZES.indexOf(mapSize) + 1) % SIZES.length]);
+    try { localStorage.setItem("play-map-size", mapSize); } catch (e) { /* ignore */ }
+    setTimeout(() => view.fit(), 50);
+  });
+  let rollsOpen = !window.matchMedia("(max-width: 1100px)").matches; // saving throws and skills: folded on phones
   if (window.Dice) Dice.overlayHost = $("#stage");
 
   const roll = (check, e, crit) => Dice.roll({ check: Object.assign({ character_id: S.character.id }, check), crit: !!crit }, e, { wait: true });
@@ -183,6 +195,7 @@
         h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { using = null; render(); } }, "Cancel")));
   }
   const useBtn = (what, index, name, single, max) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
+    disabled: !!(S.character && S.character.actions && !S.character.actions.left),
     title: "Then tap an enemy", onclick: () => startUse(what, index, name, single, max) }, icon("swords", "sm"), " Use");
   const aimsAtFoes = (s) => (s.kind === "damage" || s.kind === "debuff") && !s.terrain && !s.aura && !s.summon && !L.spellHelps(s);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && using && !using.busy) { using = null; render(); } });
@@ -364,10 +377,12 @@
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
             : s.kind === "debuff" && !c.my_turn ? h("span", { class: "tag", title: "On your turn" }, L.spellWhat(s) || "debuff") : null))] : null,
-        h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
-        h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
-        h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),
-        h("div", { class: "roll-grid" }, SKILLS.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "skill", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.skills[k]))))));
+        h("details", { class: "roll-fold", open: rollsOpen, ontoggle: (e) => { rollsOpen = e.target.open; } },
+          h("summary", { class: "lbl" }, "Saving throws & skills"),
+          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
+          h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
+          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),
+          h("div", { class: "roll-grid" }, SKILLS.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "skill", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.skills[k])))))));
     }
     if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
     $("#party").replaceChildren(h("h3", { class: "rule-head" }, "Party"),

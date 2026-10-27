@@ -367,9 +367,9 @@ def api_roll():
     with tx() as conn:
         probe = dict(ids)
         is_move = bool(check) and _is_a_move(conn, check, probe)
-        if is_move and viewer["role"] == "player":
-            from .movement import check_action
-            check_action(conn, probe["combatant_id"], label or "that")
+        if is_move:  # two actions a turn, whether the player or the DM rolls it
+            from .movement import check_hero_action
+            check_hero_action(conn, probe["combatant_id"], label or "that")
         if op_id and conn.execute("SELECT 1 FROM rolls WHERE op_id = ?", (op_id,)).fetchone():
             row = conn.execute("SELECT * FROM rolls WHERE op_id = ?", (op_id,)).fetchone()
             return jsonify({"roll": roll_dict(row, viewer), "repeat": True})

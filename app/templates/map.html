@@ -21,6 +21,7 @@
       <button type="button" data-tool="measure" title="Measure distance">{{ icon("arrow-up-down", "sm") }}<span>Measure</span></button>
       <button type="button" data-tool="ping" title="Ping: show everyone a spot (or double-click anywhere)">{{ icon("map-pin", "sm") }}<span>Ping</span></button>
       <button type="button" data-tool="area" title="Spell areas: circles, cones, lines and cubes">{{ icon("zap", "sm") }}<span>Area</span></button>
+      <button type="button" id="free-move" aria-pressed="false" title="Free move: move anyone anywhere, ignoring turns and speed">{{ icon("compass", "sm") }}<span>Free move</span></button>
       <span class="sep"></span>
       <button type="button" data-tool="reveal" title="Paint to reveal (fog of war)">{{ icon("sun", "sm") }}<span>Reveal</span></button>
       <button type="button" data-tool="conceal" title="Paint to hide (fog of war)">{{ icon("moon", "sm") }}<span>Hide</span></button>
@@ -139,6 +140,6 @@
 {% endblock %}
 {% block scripts %}
 <script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=71"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=71"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=73"></script>
 {% endblock %}

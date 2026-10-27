@@ -34,7 +34,7 @@ def step_ft(md, x0, y0, x1, y1):
 
 
 def _row(conn, cb_id):
-    return conn.execute("SELECT cb.id AS cb_id, cb.moved, cb.conditions, cb.character_id, e.id AS eid, e.status, e.current_id, e.round "
+    return conn.execute("SELECT cb.id AS cb_id, cb.name, cb.moved, cb.conditions, cb.statblock, cb.character_id, e.id AS eid, e.status, e.current_id, e.round "
                         "FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id WHERE cb.id = ?", (cb_id,)).fetchone()
 
 
@@ -51,34 +51,78 @@ def _save(conn, row, done):
     conn.execute("UPDATE combatants SET moved = ? WHERE id = ?", (json.dumps(dict(done, round=row["round"])), row["cb_id"]))
 
 
+def monster_speed(row):
+    """A monster's walking speed from its stat block ("30 ft., fly 60 ft." is 30), with speed boosts."""
+    try:
+        sb = json.loads(row["statblock"] or "{}")
+    except ValueError:
+        sb = {}
+    m = re.search(r"\d+", str(sb.get("speed") or ""))
+    base = int(m.group()) if m else DEFAULT_SPEED
+    mult = max([float(x.get("speed_mult") or 1) for x in json.loads(row["conditions"] or "[]")
+                if isinstance(x, dict) and not x.get("expired")] or [1])
+    return int(base * max(mult, 1))
+
+
+def turn_info(conn, cb_id):
+    """{cb_id, name, my_turn, speed, used, dash, left} for someone in a running fight, or None."""
+    row = _row(conn, cb_id)
+    if row is None or row["status"] != "active":
+        return None
+    mine = row["current_id"] == row["cb_id"]
+    done = _turn(row)
+    speed = speed_ft(conn, row["character_id"]) if row["character_id"] else monster_speed(row)
+    used = done.get("ft", 0)
+    return {"cb_id": row["cb_id"], "name": row["name"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
+            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0}
+
+
 def fight_turn(conn, md, char_id):
-    """The hero's place in the fight on this map, or None when they aren't in a running one.
-    {cb_id, my_turn, speed, used, dash, left}"""
+    """The hero's place in the fight on this map, or None when they aren't in a running one."""
     if not md.get("encounter_id") or not char_id:
         return None
     hit = conn.execute("SELECT cb.id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
                        "WHERE e.id = ? AND e.status = 'active' AND cb.character_id = ?", (md["encounter_id"], char_id)).fetchone()
-    if hit is None:
+    return turn_info(conn, hit["id"]) if hit else None
+
+
+def token_fighter(conn, md, token):
+    """The combatant a token stands for in this map's running fight, or None."""
+    if not md.get("encounter_id"):
         return None
-    row = _row(conn, hit["id"])
-    mine = row["current_id"] == row["cb_id"]
-    done = _turn(row)
-    speed = speed_ft(conn, char_id)
-    used = done.get("ft", 0)
-    return {"cb_id": row["cb_id"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
-            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0}
+    if token["combatant_id"]:
+        row = conn.execute("SELECT cb.id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
+                           "WHERE cb.id = ? AND e.id = ? AND e.status = 'active'", (token["combatant_id"], md["encounter_id"])).fetchone()
+        if row:
+            return row["id"]
+    if token["character_id"]:
+        row = conn.execute("SELECT cb.id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
+                           "WHERE cb.character_id = ? AND e.id = ? AND e.status = 'active'", (token["character_id"], md["encounter_id"])).fetchone()
+        if row:
+            return row["id"]
+    return None
 
 
 def check_move(conn, md, char_id, x0, y0, x1, y1):
     """Refuses a player's move that's out of turn or too far; records it otherwise."""
     turn = fight_turn(conn, md, char_id)
-    if turn is None:
-        return None
+    return _check(conn, md, turn, x0, y0, x1, y1, None) if turn else None
+
+
+def check_dm_move(conn, md, token, x1, y1):
+    """The DM's map follows the same rules in a fight (unless they choose Free move)."""
+    cb = token_fighter(conn, md, token)
+    turn = turn_info(conn, cb) if cb else None
+    return _check(conn, md, turn, token["x"], token["y"], x1, y1, turn["name"]) if turn else None
+
+
+def _check(conn, md, turn, x0, y0, x1, y1, name):
     if not turn["my_turn"]:
-        raise F.ApiError("Wait for your turn to move", status=403)
+        raise F.ApiError("Wait for your turn to move" if name is None else f"It's not {name}'s turn — they can move on their turn (or switch on Free move)", status=403)
     cost = step_ft(md, x0, y0, x1, y1)
     if cost > turn["left"]:
-        raise F.ApiError(f"That's {cost} ft, and you have {turn['left']} ft of movement left this turn"
+        who = "you have" if name is None else f"{name} has"
+        raise F.ApiError(f"That's {cost} ft, and {who} {turn['left']} ft of movement left this turn"
                          + ("" if turn["dash"] or turn["left"] else " (Dash for more)"), status=403, left=turn["left"])
     row = _row(conn, turn["cb_id"])
     _save(conn, row, dict(_turn(row), ft=turn["used"] + cost))
@@ -96,7 +140,7 @@ def actions(conn, cb_id):
         if row["character_id"] else row["conditions"]
     extra = sum(int(x.get("extra_total") or 0) for x in json.loads(conds or "[]")
                 if isinstance(x, dict) and x.get("extra_moves") is not None and not x.get("expired")
-                and x.get("encounter_id") in (None, row["eid"]))
+                and x.get("encounter_id") in (None, row["eid"]) and x.get("applied_round") in (None, row["round"]))
     used = _turn(row).get("acts", 0)
     limit = ACTIONS_PER_TURN + extra
     return {"used": used, "limit": limit, "left": max(0, limit - used), "extra": extra}
@@ -109,6 +153,12 @@ def check_action(conn, cb_id, what="that"):
         raise F.ApiError(f"You've used your {a['limit']} actions this turn — no more for {what} until your next turn"
                          + ("" if a["extra"] else " (Action Surge gives two more)"), status=403)
     return a
+
+
+def check_hero_action(conn, cb_id, what="that"):
+    """The same two actions for a hero when the DM rolls or casts for them (monsters are the DM's call)."""
+    row = conn.execute("SELECT character_id FROM combatants WHERE id = ?", (cb_id,)).fetchone()
+    return check_action(conn, cb_id, what) if row and row["character_id"] else None
 
 
 def spend_action(conn, cb_id):

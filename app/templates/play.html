@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ campaign_name }} · Campaign Ledger</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=71">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=73">
 </head>
 <body class="page-play" data-role="player">
 {% include "_sprite.svg" %}
@@ -21,7 +21,7 @@
 </header>
 <main class="main" style="max-width:none">
   <div class="play-grid">
-    <div>
+    <div class="play-map">
       <div class="map-stage" id="stage">
         <div class="map-tools" role="toolbar" aria-label="Map tools">
           <button type="button" data-ptool="select" title="Move your token, drag to look around">{{ icon("play", "sm") }}<span>Move</span></button>
@@ -32,6 +32,7 @@
           <button type="button" class="icon-btn sm" id="zoom-in" aria-label="Zoom in">{{ icon("plus", "sm") }}</button>
           <button type="button" class="icon-btn sm" id="zoom-out" aria-label="Zoom out">{{ icon("minus", "sm") }}</button>
           <button type="button" class="icon-btn sm" id="zoom-fit" aria-label="Fit map">{{ icon("rotate-ccw", "sm") }}</button>
+          <button type="button" class="icon-btn sm map-size-btn" id="map-size" aria-label="Map size" title="Make the map bigger or smaller">{{ icon("arrow-up-down", "sm") }}</button>
         </div>
         <div class="map-hint" id="hint"></div>
         <div class="empty" id="no-map" style="position:absolute;inset:30% 10% auto;border-color:var(--line)" hidden><h3>No map yet</h3>The DM hasn't shared a battle map.</div>
@@ -47,10 +48,10 @@
 </main>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 {% set role = "player" %}{% include "_dice_dock.html" %}
-<script src="{{ url_for('static', filename='js/core.js') }}?v=71"></script>
-<script src="{{ url_for('static', filename='js/effects.js') }}?v=71"></script>
-<script src="{{ url_for('static', filename='js/dice.js') }}?v=71"></script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=71"></script>
-<script src="{{ url_for('static', filename='js/play.js') }}?v=71"></script>
+<script src="{{ url_for('static', filename='js/core.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/effects.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/dice.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=73"></script>
+<script src="{{ url_for('static', filename='js/play.js') }}?v=73"></script>
 </body>
 </html>

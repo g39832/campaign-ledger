@@ -658,7 +658,13 @@ def api_cast(eid):
     with tx() as conn:
         ctx = Ctx(conn, eid)
         if claim_op(conn, data.get("op_id")):
-            out = cast(ctx, data["caster_id"], data, viewer)
+            from .movement import check_hero_action
+            try:
+                caster_id = int(data["caster_id"])
+            except (TypeError, ValueError):
+                raise F.ApiError("Who is casting?")
+            check_hero_action(conn, caster_id, "spells")
+            out = cast(ctx, caster_id, data, viewer)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
             conn.execute("UPDATE campaigns SET updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["campaign_id"]))
     if out:

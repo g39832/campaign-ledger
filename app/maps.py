@@ -900,10 +900,13 @@ def api_move_token(token_id):
     with tx() as conn:
         map_id = _token_map(conn, token_id)
         m = map_dict(_map_row(conn, map_id))
-        t = conn.execute("SELECT size FROM map_tokens WHERE id = ?", (token_id,)).fetchone()
+        t = conn.execute("SELECT * FROM map_tokens WHERE id = ?", (token_id,)).fetchone()
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(m, t["size"], x, y)
+        if not data.get("free"):  # in a fight: only on their turn and as far as their speed
+            from .movement import check_dm_move
+            check_dm_move(conn, m, t, x, y)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         _bump(conn, map_id)
     return jsonify(dm_state(map_id))
