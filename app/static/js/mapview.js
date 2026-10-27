@@ -625,6 +625,11 @@
           let nx = cx - d.grab[0], ny = cy - d.grab[1];
           if (this.map.snap) { nx = Math.round(nx); ny = Math.round(ny); }
           nx = Math.max(0, Math.min(this.map.cols - d.token.size, nx)); ny = Math.max(0, Math.min(this.map.rows - d.token.size, ny));
+          const r = this.reachOf(d.token); // in a fight: it stops at the edge of the movement box
+          if (r) {
+            nx = Math.max(d.token.x - r.squares, Math.min(d.token.x + r.squares, nx));
+            ny = Math.max(d.token.y - r.squares, Math.min(d.token.y + r.squares, ny));
+          }
           d.moved = d.moved || Math.abs(nx - d.token.x) > 0.05 || Math.abs(ny - d.token.y) > 0.05;
           d.at = [nx, ny];
           if (d.moved) this.ruler = [[d.token.x + 0.01, d.token.y + 0.01], [nx + 0.01, ny + 0.01]];
