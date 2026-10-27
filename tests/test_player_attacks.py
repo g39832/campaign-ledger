@@ -43,19 +43,22 @@ def test_attack_an_enemy_from_the_phone(api, battlemap):
     pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [by["Bandit 1"]["id"]]}, 403)
 
 
-def test_only_enemies_and_only_on_your_turn(api, battlemap):
+def test_friendly_fire_but_never_yourself_and_only_on_your_turn(api, battlemap):
+    """Attacks can hit teammates too (so players are careful), never the attacker themselves."""
     eid, by = setup(api, battlemap)
     pa = battlemap["pa"]
     api.post(f"/api/encounters/{eid}/combatants", {"characters": [battlemap["b"]["id"]]})
     bram = next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == "Bram")
-    for who in (by["Aria"]["id"], bram["id"]):
-        err = pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [who]}, 403)
-        assert "only use that on enemies" in err["error"]
-    pa.post("/api/play/me/use", {"what": "spell", "index": 1, "targets": [by["Bandit 1"]["id"]]}, 400)   # Cure Wounds isn't aimed at foes
+    err = pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [by["Aria"]["id"]]}, 403)
+    assert "can't attack yourself" in err["error"]
+    r = pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [bram["id"]]})          # a teammate: allowed
+    assert r["cast"]["targets"][0]["name"] == "Bram"
+    pa.post("/api/play/me/use", {"what": "spell", "index": 1, "targets": [by["Bandit 1"]["id"]]}, 400)   # Cure Wounds isn't aimed like this
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
     err = pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [by["Bandit 1"]["id"]]}, 403)
     assert "not your turn" in err["error"]
-    assert hp(api, eid, "Bandit 1") == 11
+    st = pa.get("/api/play/state")
+    assert any(o.get("character_id") == battlemap["a"]["id"] for o in st["encounter"]["order"]), "the phone can tell which one is them"
 
 
 def test_damage_spell_on_an_enemy_and_heals_still_on_the_party(api, battlemap):
@@ -80,3 +83,16 @@ def test_speed_comes_from_the_sheet(api, battlemap):
     assert pa.get("/api/play/state")["character"]["move"]["speed"] == 40
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 8, "y": 0})       # 40 ft: exactly her speed
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 9, "y": 0}, 403)  # one more square is too far
+
+
+def test_attacks_show_on_the_map_for_everyone(api, battlemap):
+    """Each attack leaves a short animation (from attacker to target) that the DM's map and the phones pick up."""
+    eid, by = setup(api, battlemap)
+    pa = battlemap["pa"]
+    api.post(f"/api/campaigns/{battlemap['camp']['id']}/live-map", {"map_id": battlemap["mid"]})
+    pa.post("/api/play/me/use", {"what": "attack", "index": 0, "targets": [by["Bandit 1"]["id"]]})
+    fx = [p["fx"] for p in api.get(f"/api/maps/{battlemap['mid']}")["pings"] if p.get("fx")]
+    assert fx and fx[-1]["name"] == "Punch" and fx[-1]["from"] and len(fx[-1]["to"]) == 1 and fx[-1]["how"][0] in ("hit", "crit", "miss")
+    assert any(p.get("fx") for p in pa.get("/api/play/state")["map"]["pings"]), "the phone gets it too"
+    api.post(f"/api/maps/{battlemap['mid']}/fx", {"by": by["Bandit 1"]["id"], "name": "Scimitar", "targets": [{"id": by["Aria"]["id"], "how": "crit"}]})
+    assert [p["fx"]["how"] for p in api.get(f"/api/maps/{battlemap['mid']}")["pings"] if p.get("fx")][-1] == ["crit"]

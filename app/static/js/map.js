@@ -487,14 +487,15 @@
     renderSelected();
     view.draw();
   }
-  // who's caught in the aimed area (not the attacker)
-  const caught = (c) => {
+  // who's caught in the aimed area (not the attacker): everyone standing in it, allies too
+  // (friendly fire), except the ones the DM taps to spare
+  const inTheArea = (c) => {
     if (!view.aim) return [];
-    const a = aim && aim.act, foesOnly = a && a.cast && !L.spellHelps(a.cast.spell);
     return [...view.aim.hits].map((id) => S.tokens.find((t) => t.id === id))
-      .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean)
-      .filter((x) => !foesOnly || (x.kind === "enemy") !== (c.kind === "enemy"));
+      .filter((t) => t && t.combatant_id && t.combatant_id !== c.id).map((t) => fighter(t.combatant_id)).filter(Boolean);
   };
+  const caught = (c) => inTheArea(c).filter((x) => !(aim && aim.spared && aim.spared.has(x.id)));
+  const isAlly = (c, x) => (x.kind === "enemy") === (c.kind === "enemy");
   async function confirmAim() {
     const cur = aim, c = fighter(cur.by), a = cur.act, targets = caught(c);
     const ground = a.cast && a.cast.spell.terrain;
@@ -504,15 +505,16 @@
     useMove(c, a);
     let amount = null;
     if (a.dmg) { const d = await a.dmg(false); if (!d) return; amount = Math.max(0, d.total); }
-    const lines = [];
+    const lines = [], hits = [];
     for (const target of targets) {
       let how = "", crit = false;
       if (a.toHit) {
         const r = await rollToHit(a, target);
         if (!r) continue;
-        if (!r.hit) { lines.push("missed " + target.name + " (" + r.text + ")"); continue; }
+        if (!r.hit) { lines.push("missed " + target.name + " (" + r.text + ")"); hits.push([target.id, "miss"]); continue; }
         how = " (" + r.text + ")"; crit = r.crit;
       }
+      hits.push([target.id, crit ? "crit" : "hit"]);
       let n = amount;
       if (crit && a.dmg && !a.heal) { const d = await a.dmg(true); if (d) n = Math.max(0, d.total); }
       if (a.effect) putEffect(c, target, a.effect);
@@ -521,6 +523,7 @@
         lines.push((crit ? "CRIT on " : a.heal ? "healed " : "hit ") + target.name + " for " + n + how);
       } else lines.push((a.effect ? (a.effect.condition || a.effect.name) + " on " : "hit ") + target.name + how);
     }
+    if (hits.length) showFx(c, a, hits);
     say(c.id, a.name + ": " + (lines.join("; ") || "no one") + ".", lines.some((l) => !l.startsWith("missed")) ? "hit" : "miss");
   }
 
@@ -532,6 +535,11 @@
     const gx = Math.max(0, tb.x - (ta.x + ta.size), ta.x - (tb.x + tb.size)), gy = Math.max(0, tb.y - (ta.y + ta.size), ta.y - (tb.y + tb.size));
     const per = !S.map.scale_unit || S.map.scale_unit === "ft" ? Number(S.map.scale_value) || 5 : 5;
     return (Math.ceil(Math.max(gx, gy) - 1e-6) + 1) * per;
+  }
+  // everyone watching sees the attack: a slash, a bite, a fire bolt... (how: hit, crit, miss, saved)
+  function showFx(c, a, hits) {
+    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", targets: hits.map(([id, how]) => ({ id, how })) })
+      .then((d) => view.setPings(d.pings)).catch(() => { /* the animation is a nicety */ });
   }
   function useMove(c, a) {
     if (!a.cooldown || !enc || enc.encounter.status !== "active") return;
@@ -590,14 +598,15 @@
         const r = await rollToHit(a, target);
         if (!r) { renderSelected(); return; }
         spend();
-        if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
+        if (!r.hit) { showFx(c, a, [[target.id, "miss"]]); say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
         crit = r.crit; how = " (" + r.text + ")";
       }
       if (a.effect) putEffect(c, target, a.effect, a.dmg ? null : () => say(c.id, a.name + ": " + target.name + " is " + a.effect.condition + how + ".", "hit"));
-      if (!a.dmg) { spend(); if (!a.effect) say(c.id, a.name + ": hit " + target.name + how + ".", "hit"); return; }
+      if (!a.dmg) { spend(); showFx(c, a, [[target.id, crit ? "crit" : "hit"]]); if (!a.effect) say(c.id, a.name + ": hit " + target.name + how + ".", "hit"); return; }
       const d = await a.dmg(crit && !a.heal);
       if (!d) { renderSelected(); return; }
       spend();
+      showFx(c, a, [[target.id, crit ? "crit" : "hit"]]);
       const n = Math.max(0, d.total);
       hpTo(target, a.heal ? "heal" : "damage", n, c, () => say(c.id, a.heal ? a.name + ": healed " + target.name + " for " + n + "."
         : (crit ? "Critical hit! " : "Hit! ") + n + " damage to " + target.name + " with " + a.name + how + (a.effect ? ", and " + a.effect.condition : "") + ".",
@@ -614,9 +623,10 @@
       const r = await rollToHit(a, target);
       if (!r) { cur.done.delete(target.id); renderSelected(); return; }
       if (first) useMove(c, a);
-      if (!r.hit) { say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
+      if (!r.hit) { showFx(c, a, [[target.id, "miss"]]); say(c.id, a.name + ": missed " + target.name + " (" + r.text + ").", "miss"); return; }
       how = " (" + r.text + ")";
       crit = r.crit;
+      showFx(c, a, [[target.id, crit ? "crit" : "hit"]]);
     } else if (first) useMove(c, a);
     if (crit && a.crit && cur.amount != null) { // natural 20: this one takes double dice
       const d = await a.crit();
@@ -663,7 +673,13 @@
         : "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
       a.cast && a.cast.spell.terrain ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" },
         a.cast.spell.terrain === "rock" ? "Rock rises in the highlighted squares, but not under anyone standing there." : "Rock, rubble and pits in the highlighted squares go back to plain ground.")
-      : h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, inArea.length ? "In it: " + inArea.map((x) => x.name).join(", ") : "Nobody's in it yet."),
+      : inTheArea(c).length ? h("div", { class: "aim-in", style: "margin:0 0 6px;font-size:.88rem" }, h("span", { class: "faint" }, "In it (tap someone to spare them): "),
+        inTheArea(c).map((x) => { const spared = aim.spared && aim.spared.has(x.id), ally = isAlly(c, x);
+          return h("button", { type: "button", class: "tag" + (spared ? " is-off" : ally ? " is-bad" : ""), style: "margin:2px;cursor:pointer" + (spared ? ";text-decoration:line-through;opacity:.6" : ""),
+            title: spared ? "Spared: click to put them back in it" : ally ? "An ally! Click to spare them" : "Click to spare them",
+            onclick: () => { aim.spared = aim.spared || new Set(); spared ? aim.spared.delete(x.id) : aim.spared.add(x.id); renderSelected(); } },
+            (ally && !spared ? "⚠ " : "") + x.name + (ally ? " (ally)" : "")); }))
+        : h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Nobody's in it yet."),
       a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, [L.spellWhat(a.cast.spell), L.spellLands(a.cast.spell, c.spellcasting, toHitRule())].filter(Boolean).join(" · ")) : null,
       a.cast ? slotPicker(c, a.cast.spell) : null,
       a.toHit && !a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
@@ -774,7 +790,7 @@
       }
       const d = await api("GET", "/api/maps/" + MID);
       revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null, ping: revs.ping };
-      const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && p.by !== "DM");
+      const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== "DM");
       apply(d);
       if (fresh.length && window.FX) FX.sound("ping");
     } catch (e) { /* offline */ }

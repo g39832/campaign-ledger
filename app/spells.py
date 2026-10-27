@@ -633,6 +633,9 @@ def cast(ctx, caster_id, data, viewer=None):
     move = isinstance(data.get("spell"), dict) and bool(data["spell"].get("move"))  # Grapple: a move, not a spell
     head = f"{caster['name']} {'uses' if move else 'casts'} {sp['name']}{slot_word}" + (" (concentration)" if sp["concentration"] else "")
     ctx.log("spell", head + (": " + "; ".join(lines) if lines else ""))
+    from .maps import attack_fx
+    attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
+              "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"])
     return {"spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
             "spent": spent, "lands": lands, "targets": results, "summary": head + (": " + "; ".join(lines) if lines else ""),
             "rolls": roller.ids, "concentration": sp["concentration"], "move": move}

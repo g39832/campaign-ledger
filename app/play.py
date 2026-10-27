@@ -232,7 +232,7 @@ def _player_encounter(conn, campaign_id, live_map):
     for r in rows:
         if r["hidden"]:
             continue
-        item = {"id": r["id"], "name": r["name"], "kind": r["kind"], "is_current": r["id"] == enc["current_id"],
+        item = {"id": r["id"], "name": r["name"], "kind": r["kind"], "is_current": r["id"] == enc["current_id"], "character_id": r["character_id"],
                 "init": r["init_roll"],
                 "status": r["status"] if r["status"] in ("dead", "defeated", "unconscious", "fled", "stable") else None}
         if r["character_id"]:
@@ -650,9 +650,9 @@ def _attack_spec(row, c):
 
 @bp.post("/api/play/me/use")
 def api_me_use():
-    """A player uses one of their attacks or harmful spells on enemies, the way the DM does on
-    the map: {what: "attack" | "spell", index, targets: [combatant ids], slot}. Only on their
-    own turn, within their actions, and only at enemies (never themselves or the party).
+    """A player uses one of their attacks or harmful spells, the way the DM does on the map:
+    {what: "attack" | "spell", index, targets: [combatant ids], slot}. Only on their own turn,
+    within their actions; at anyone else in the fight, teammates too (friendly fire), never themselves.
     The server rolls to hit against AC (which the player never sees), the damage and effects."""
     from .combat import Ctx
     from .db import claim_op
@@ -693,10 +693,14 @@ def api_me_use():
         ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
         if ctx.enc["current_id"] != mine["id"]:
             raise F.ApiError("It's not your turn yet — you can attack when your turn comes round", status=403)
-        foes = {r["id"] for r in conn.execute("SELECT id FROM combatants WHERE encounter_id = ? AND kind = 'enemy' AND hidden = 0 "
-                                              "AND status NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
-        if not set(targets) <= foes:
-            raise F.ApiError("You can only use that on enemies — not yourself or your party", status=403)
+        # anyone else in the fight can be hit, teammates too (friendly fire: be careful), never yourself
+        if mine["id"] in targets:
+            raise F.ApiError("You can't attack yourself", status=403)
+        fair = {r["id"] for r in conn.execute(
+            "SELECT c.id FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ? AND c.hidden = 0 "
+            "AND COALESCE(ch.status, c.status) NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
+        if not set(targets) <= fair:
+            raise F.ApiError("They aren't in this fight", status=403)
         check_action(conn, mine["id"], row.get("name") or "that")
         if what == "attack":  # physical moves: only at enemies right next to you (or within their reach)
             from .movement import check_reach

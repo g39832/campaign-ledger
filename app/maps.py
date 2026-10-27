@@ -257,19 +257,66 @@ def recent_pings(map_id):
     store = _ping_store()
     keep = [p for p in store.get(map_id, []) if now - p["t"] < PING_SECONDS]
     store[map_id] = keep
-    return [{"id": p["id"], "x": p["x"], "y": p["y"], "by": p["by"], "color": p["color"], "age": round(now - p["t"], 2)} for p in keep]
+    return [{"id": p["id"], "x": p["x"], "y": p["y"], "by": p["by"], "color": p["color"], "age": round(now - p["t"], 2)}
+            | ({"fx": p["fx"]} if p.get("fx") else {}) for p in keep]
 
 
 def add_ping(map_id, x, y, by, color):
     import time
     store = _ping_store()
     pings = [p for p in store.get(map_id, []) if time.time() - p["t"] < PING_SECONDS]
-    mine = [p for p in pings if p["by"] == by]
+    mine = [p for p in pings if p["by"] == by and not p.get("fx")]
     if len(mine) >= 3:  # no spamming: three at a time each
         pings.remove(mine[0])
     pings.append({"id": uuid.uuid4().hex[:10], "x": round(float(x), 2), "y": round(float(y), 2), "by": str(by)[:40],
                   "color": color, "t": time.time()})
     store[map_id] = pings[-30:]
+
+
+def add_fx(map_id, fx):
+    """An attack's animation (a slash, a fire bolt...) that everyone looking at the map sees once.
+    It rides along with the pings: short-lived, kept in memory only."""
+    import time
+    store = _ping_store()
+    keep = [p for p in store.get(map_id, []) if time.time() - p["t"] < PING_SECONDS]
+    x, y = fx["to"][0] if fx.get("to") else fx.get("from") or (0, 0)
+    keep.append({"id": uuid.uuid4().hex[:10], "x": x, "y": y, "by": "", "color": "", "t": time.time(), "fx": fx})
+    store[map_id] = keep[-40:]
+
+
+def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type=""):
+    """Show an attack on every map of this fight: from the attacker's token to each target's.
+    hits: [(combatant id, how)] with how = hit, crit, miss, saved, failed, auto."""
+    from .movement import _token_of
+    maps = conn.execute("SELECT id FROM maps WHERE encounter_id = ?", (enc_id,)).fetchall()
+    for m in maps:
+        a = _token_of(conn, m["id"], attacker_id) if attacker_id else None
+        to, hows = [], []
+        for cid, how in hits:
+            t = _token_of(conn, m["id"], cid)
+            if t:
+                to.append([round(t["x"] + t["size"] / 2, 2), round(t["y"] + t["size"] / 2, 2)])
+                hows.append(how)
+        if not to and not a:
+            continue
+        add_fx(m["id"], {"name": str(name or "")[:60], "kind": kind or "damage", "type": str(damage_type or "")[:20],
+                         "from": [round(a["x"] + a["size"] / 2, 2), round(a["y"] + a["size"] / 2, 2)] if a else None,
+                         "to": to, "how": hows})
+
+
+@bp.post("/maps/<int:map_id>/fx")
+def api_fx(map_id):
+    """The DM's map resolved an attack on its own (rolls, then HP): show it to everyone.
+    {by: attacker combatant id, targets: [{id, how}], name, kind, damage_type}"""
+    data = request.get_json(silent=True) or {}
+    conn = get_db()
+    m = map_dict(_map_row(conn, map_id))
+    if not m["encounter_id"]:
+        return jsonify({"pings": recent_pings(map_id)})
+    hits = [(int(t["id"]), str(t.get("how") or "hit")[:10]) for t in (data.get("targets") or [])[:20] if isinstance(t, dict) and str(t.get("id", "")).isdigit()]
+    attack_fx(conn, m["encounter_id"], int(data["by"]) if str(data.get("by", "")).isdigit() else None, hits,
+              data.get("name"), data.get("kind") or "damage", data.get("damage_type") or "")
+    return jsonify({"pings": recent_pings(map_id)})
 
 
 def _ping_xy(data, m):

@@ -135,10 +135,44 @@
       for (const p of pings || []) {
         if (this.seenPings.has(p.id)) continue;
         this.seenPings.add(p.id);
+        if (p.fx) { if (p.age < 4) this.attackFx(p.fx, p.age); continue; }
         if (p.age > 4) continue;
         this.addFx({ type: "ping", x: p.x, y: p.y, by: p.by, color: p.color || "#f3d58a", ms: 3600, start: performance.now() - p.age * 1000 });
         if (onNew) onNew(p);
       }
+    }
+    /* An attack's look comes from its name and damage type: a slash for blades, an impact for
+       fists and maces, jaws for a bite, an arrow for bows, a bolt that bursts for fire, ice,
+       lightning, poison and magic, spirits for radiant, rock for earth, sparkles for heals. */
+    static fxStyle(name, kind, type) {
+      const t = (String(name || "") + " " + String(type || "")).toLowerCase();
+      if (kind === "heal") return "heal";
+      if (kind === "buff") return "shimmer";
+      if (/bite|fang|jaw|chomp|maw/.test(t)) return "bite";
+      if (/\b(bow|arrow|crossbow|dart|sling|javelin|shot|shoot)/.test(t)) return "arrow";
+      if (/fire|flame|burn|scorch|inferno|ember/.test(t)) return "fire";
+      if (/cold|ice|frost|snow|freez/.test(t)) return "ice";
+      if (/lightning|thunder|shock|storm|spark/.test(t)) return "lightning";
+      if (/radiant|holy|sacred|spirit|divine|smite|guardian|light/.test(t)) return "radiant";
+      if (/necrotic|poison|acid|venom|toxic|rot/.test(t)) return "poison";
+      if (/entangle|vine|root|earth|rock|stone|mend|mold/.test(t)) return "earth";
+      if (/slash|sword|axe|blade|claw|scimitar|dagger|knife|cut|cleave|scythe|sickle|rapier|glaive/.test(t)) return "slash";
+      if (/punch|fist|kick|slam|club|mace|hammer|staff|bludgeon|headbutt|grapple|shove|smash|pierc|spear|stab/.test(t)) return "punch";
+      if (/psychic|force|magic|phantas|arcane|eldritch|missile|hex/.test(t)) return "arcane";
+      return kind === "damage" && /piercing|slashing|bludgeoning/.test(t) ? "punch" : kind === "damage" ? "slash" : "arcane";
+    }
+    attackFx(fx, age) {
+      const style = MapView.fxStyle(fx.name, fx.kind, fx.type), start = performance.now() - (age || 0) * 1000;
+      const COLORS = { fire: "#ff7a2f", ice: "#8fdcff", lightning: "#fff27a", radiant: "#ffe9a3", poison: "#8fe36b", arcane: "#c08bff",
+        arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a" };
+      const color = COLORS[style] || "#ffffff", hows = fx.how || [];
+      (fx.to && fx.to.length ? fx.to : [fx.from]).forEach((to, i) => {
+        const how = hows[i] || "hit", missed = how === "miss" || how === "saved";
+        this.addFx({ type: "attack", style, color, from: fx.from, to, how, ms: 1300, start: start + i * 120 });
+        const word = how === "crit" ? "CRIT!" : how === "miss" ? "Miss" : how === "saved" ? "Saved" : "";
+        if (word && to) this.addFx({ type: "word", x: to[0], y: to[1], text: word, color: how === "crit" ? "#ffd36b" : "#d8d2c4", ms: 1500, start: start + 500 + i * 120 });
+        if (i === 0 && window.FX) FX.sound(fx.kind === "heal" || fx.kind === "buff" ? "heal" : how === "crit" ? "crit" : missed ? "fumble" : "hit");
+      });
     }
     addFx(f) {
       f.start = f.start || performance.now() + (f.delay || 0);
@@ -512,6 +546,14 @@
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.lineWidth = cp * 0.1; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.strokeText(f.text, X, Y);
           ctx.fillStyle = f.color; ctx.fillText(f.text, X, Y);
+        } else if (f.type === "attack") {
+          this.drawAttack(f, k, cp, ox, oy);
+        } else if (f.type === "word") {
+          const X = ox + f.x * cp, Y = oy + f.y * cp - cp * 0.6 - k * cp * 0.7;
+          ctx.globalAlpha = k < 0.7 ? 1 : (1 - k) / 0.3;
+          ctx.font = `800 ${cp * (f.text === "CRIT!" ? 0.62 : 0.46)}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.lineWidth = cp * 0.1; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(f.text, X, Y);
+          ctx.fillStyle = f.color; ctx.fillText(f.text, X, Y);
         } else if (f.type === "pulse" && tok) {
           const X = ox + (tok.x + tok.size / 2) * cp, Y = oy + (tok.y + tok.size / 2) * cp, r = tok.size * cp * 0.42;
           const kk = (k * 2.4) % 1;
@@ -519,6 +561,85 @@
           ctx.beginPath(); ctx.arc(X, Y, r + cp * (0.1 + kk * 0.9), 0, Math.PI * 2); ctx.stroke();
         }
         ctx.restore();
+      }
+    }
+    /** One attack's animation, k from 0 to 1. Projectiles fly from the attacker first. */
+    drawAttack(f, k, cp, ox, oy) {
+      const ctx = this.ctx, big = f.how === "crit" ? 1.5 : 1, miss = f.how === "miss" || f.how === "saved";
+      const P = (pt) => [ox + pt[0] * cp, oy + pt[1] * cp];
+      const [tx, ty] = f.to ? P(f.to) : P(f.from);
+      const fly = ["arrow", "fire", "ice", "lightning", "poison", "arcane"].includes(f.style) && f.from && f.to;
+      const travel = fly ? 0.38 : 0;
+      if (fly && k < travel) { // the shot on its way
+        const [fx, fy] = P(f.from), q = k / travel, ex = miss ? tx + cp * 0.9 : tx, ey = miss ? ty - cp * 0.7 : ty;
+        const hx = fx + (ex - fx) * q, hy = fy + (ey - fy) * q;
+        if (f.style === "lightning") {
+          ctx.strokeStyle = rgba(f.color, 0.95); ctx.lineWidth = cp * 0.09; ctx.shadowColor = f.color; ctx.shadowBlur = cp * 0.5;
+          ctx.beginPath(); ctx.moveTo(fx, fy);
+          for (let i = 1; i <= 7; i++) { const s = i / 7 * q; ctx.lineTo(fx + (ex - fx) * s + (Math.random() - 0.5) * cp * 0.5, fy + (ey - fy) * s + (Math.random() - 0.5) * cp * 0.5); }
+          ctx.stroke(); return;
+        }
+        const g = ctx.createLinearGradient(fx, fy, hx, hy);
+        g.addColorStop(0, rgba(f.color, 0)); g.addColorStop(1, rgba(f.color, 0.95));
+        ctx.strokeStyle = g; ctx.lineWidth = cp * (f.style === "arrow" ? 0.07 : 0.18); ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(hx - (hx - fx) * 0.5, hy - (hy - fy) * 0.5); ctx.lineTo(hx, hy); ctx.stroke();
+        ctx.fillStyle = f.color; ctx.shadowColor = f.color; ctx.shadowBlur = cp * 0.6;
+        ctx.beginPath(); ctx.arc(hx, hy, cp * (f.style === "arrow" ? 0.08 : 0.2), 0, Math.PI * 2); ctx.fill();
+        return;
+      }
+      const q = fly ? (k - travel) / (1 - travel) : k, fade = q < 0.6 ? 1 : (1 - q) / 0.4;
+      ctx.globalAlpha = Math.max(0, fade) * (miss ? 0.55 : 1);
+      const R = cp * 0.9 * big;
+      if (f.style === "slash") {
+        for (let i = 0; i < 3; i++) {
+          const s = Math.min(1, Math.max(0, q * 3 - i * 0.35));
+          if (!s) continue;
+          const a0 = -2.4 + i * 0.25, a1 = a0 + 2.2 * s, off = (i - 1) * cp * 0.16;
+          ctx.strokeStyle = miss ? "rgba(220,220,220,.8)" : i === 1 ? "#ff5a3c" : "#ffffff"; ctx.lineWidth = cp * 0.13 * big; ctx.lineCap = "round";
+          ctx.shadowColor = "#ff5a3c"; ctx.shadowBlur = miss ? 0 : cp * 0.3;
+          ctx.beginPath(); ctx.arc(tx + off, ty - off, R * 1.15, a0, a1); ctx.stroke();
+        }
+      } else if (f.style === "punch" || f.style === "earth") {
+        const n = f.style === "earth" ? 9 : 10, r1 = R * (0.35 + q * 1.1);
+        ctx.fillStyle = f.color; ctx.strokeStyle = f.color; ctx.lineWidth = cp * 0.1; ctx.shadowColor = "#ff9a3c"; ctx.shadowBlur = cp * 0.3;
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2 + 0.3;
+          if (f.style === "earth") { ctx.fillRect(tx + Math.cos(a) * r1 - cp * 0.07, ty + Math.sin(a) * r1 - cp * 0.07, cp * 0.14, cp * 0.14); continue; }
+          ctx.beginPath(); ctx.moveTo(tx + Math.cos(a) * r1 * 0.5, ty + Math.sin(a) * r1 * 0.5); ctx.lineTo(tx + Math.cos(a) * r1, ty + Math.sin(a) * r1); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(tx, ty, R * (0.2 + q * 0.9), 0, Math.PI * 2); ctx.stroke();
+      } else if (f.style === "bite") {
+        const close = Math.min(1, q * 2.2), gap = R * (1 - close) * 0.9 + cp * 0.04;
+        ctx.fillStyle = miss ? "#ddd" : "#fff"; ctx.strokeStyle = "rgba(120,0,0,.8)"; ctx.lineWidth = cp * 0.03;
+        for (const dir of [-1, 1]) for (let i = 0; i < 4; i++) {
+          const x = tx - R * 0.75 + i * R * 0.5, y = ty + dir * gap;
+          ctx.beginPath(); ctx.moveTo(x - R * 0.2, y + dir * R * 0.35); ctx.lineTo(x + R * 0.2, y + dir * R * 0.35); ctx.lineTo(x, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        if (close >= 1 && !miss) { ctx.fillStyle = "rgba(190,20,20,.7)"; ctx.beginPath(); ctx.arc(tx, ty + R * 0.5, cp * 0.08 * (1 + q), 0, Math.PI * 2); ctx.fill(); }
+      } else if (f.style === "radiant") {
+        for (let i = 0; i < 6; i++) {
+          const a = q * 5 + i / 6 * Math.PI * 2, r = R * (0.9 + 0.2 * Math.sin(q * 9 + i));
+          ctx.fillStyle = f.color; ctx.shadowColor = "#fff6c8"; ctx.shadowBlur = cp * 0.5;
+          ctx.beginPath(); ctx.arc(tx + Math.cos(a) * r, ty + Math.sin(a) * r, cp * 0.15, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.strokeStyle = rgba(f.color, 0.8); ctx.lineWidth = cp * 0.05; ctx.beginPath(); ctx.arc(tx, ty, R * (0.5 + q * 0.6), 0, Math.PI * 2); ctx.stroke();
+      } else if (f.style === "heal" || f.style === "shimmer") {
+        for (let i = 0; i < 7; i++) {
+          const x = tx + Math.sin(i * 2.1) * R * 0.8, y = ty + R * 0.6 - q * R * 1.6 - (i % 3) * cp * 0.12, sz = 1.6;
+          ctx.fillStyle = f.color; ctx.shadowColor = f.color; ctx.shadowBlur = cp * 0.3;
+          if (f.style === "heal") { ctx.fillRect(x - cp * 0.03 * sz, y - cp * 0.1 * sz, cp * 0.06 * sz, cp * 0.2 * sz); ctx.fillRect(x - cp * 0.1 * sz, y - cp * 0.03 * sz, cp * 0.2 * sz, cp * 0.06 * sz); }
+          else { ctx.beginPath(); ctx.arc(x, y, cp * 0.08, 0, Math.PI * 2); ctx.fill(); }
+        }
+        ctx.strokeStyle = rgba(f.color, 0.7); ctx.lineWidth = cp * 0.05; ctx.beginPath(); ctx.arc(tx, ty, R * (0.7 + q * 0.3), 0, Math.PI * 2); ctx.stroke();
+      } else { // a burst where the shot lands: fire, ice, lightning, poison, magic, arrow
+        const r = R * (0.35 + q * (f.style === "arrow" ? 0.7 : 1.4));
+        const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, r);
+        g.addColorStop(0, rgba("#ffffff", 0.95)); g.addColorStop(0.3, rgba(f.color, 0.95)); g.addColorStop(0.7, rgba(f.color, 0.55)); g.addColorStop(1, rgba(f.color, 0));
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.fill();
+        if (f.style === "ice" || f.style === "arrow") {
+          ctx.strokeStyle = f.color; ctx.lineWidth = cp * 0.05;
+          for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + Math.cos(a) * r * 0.9, ty + Math.sin(a) * r * 0.9); ctx.stroke(); }
+        }
       }
     }
     portrait(name) {

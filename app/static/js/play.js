@@ -151,6 +151,9 @@
   // Tap Use, then tap an enemy (on the map or in the list). The server rolls to hit, the damage
   // and any effect, and says what happened. Never at yourself or your party.
   const foes = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind === "enemy" && !["dead", "defeated", "fled"].includes(o.status));
+  // friendly fire: teammates (and allies like Yamato's clone) can be hit too, never yourself
+  const myCb = () => { const e = S.encounter, me = S.character; return e && me ? (e.order.find((o) => o.character_id === me.id) || {}).id : null; };
+  const teammates = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind !== "enemy" && o.id !== myCb() && !["dead", "defeated", "fled"].includes(o.status));
   function startUse(what, index, name, single, max, reach) {
     casting = null;
     using = { what, index, name, single, max: max || 0, reach: reach || null, chosen: new Set(), busy: false, result: null };
@@ -160,7 +163,13 @@
   }
   function pickFoe(cbId, label) {
     if (!using || using.busy || using.result) return;
-    if (!foes().some((o) => o.id === cbId)) { toast((label || "That") + " isn't an enemy — you can only aim this at enemies.", "error"); return; }
+    if (cbId === myCb()) { toast("You can't attack yourself.", "error"); return; }
+    const mate = teammates().find((o) => o.id === cbId);
+    if (!mate && !foes().some((o) => o.id === cbId)) { toast((label || "That") + " isn't in the fight.", "error"); return; }
+    if (mate && !using.chosen.has(cbId) && using.armedMate !== cbId) { // a teammate: tap twice so nobody hits a friend by accident
+      using.armedMate = cbId; render(); toast(mate.name + " is on your side! Tap again if you really mean to hit them.", "error"); return;
+    }
+    using.armedMate = null;
     const far = tooFar(cbId);
     if (far) { toast((label || "They") + " is " + far + " ft away — " + using.name + " only reaches " + using.reach + " ft. Move next to them first.", "error"); return; }
     if (using.single) { using.chosen = new Set([cbId]); useNow(); return; }
@@ -205,9 +214,10 @@
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
       h("p", { class: "fa-ask" }, (k.single ? "Tap the enemy it's aimed at — on the map or here." : "Tap each enemy it reaches, then Use.")
         + (k.reach ? " It reaches " + k.reach + " ft: enemies right next to you." : "")),
-      list.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, list.map((o) => { const far = tooFar(o.id); return h("button", { type: "button", disabled: k.busy || !!far,
+      list.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, list.concat(teammates()).map((o) => { const far = tooFar(o.id), mate = o.kind !== "enemy"; return h("button", { type: "button", disabled: k.busy || !!far,
         class: "btn btn-sm" + (k.chosen.has(o.id) ? " is-armed" : ""), "aria-pressed": String(k.chosen.has(o.id)), title: far ? far + " ft away — out of reach" : null, onclick: () => pickFoe(o.id, o.name) },
-        o.name, o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, o.health) : null,
+        (mate ? "⚠ " : "") + o.name, mate ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, k.armedMate === o.id ? "tap again!" : "ally") : null,
+        o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, o.health) : null,
         far ? h("span", { class: "faint", style: "font-size:.72rem;margin-left:4px" }, far + " ft") : null); }))
         : h("p", { class: "faint" }, "No enemies to aim at."),
       h("div", { class: "row" },
@@ -435,7 +445,7 @@
       let pings = [];
       if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; d.map = map; d.mapTokens = tokens; }
       // pings first: they change every poll, so they're kept out of the "did anything change" check
-      const fresh = pings.filter((p) => !view.seenPings.has(p.id) && p.by !== (S && S.me ? S.me.name : ""));
+      const fresh = pings.filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== (S && S.me ? S.me.name : ""));
       view.setPings(pings);
       if (fresh.length && window.FX) FX.sound("ping");
       const s = JSON.stringify(d);
