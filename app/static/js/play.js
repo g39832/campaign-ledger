@@ -207,8 +207,11 @@
     const k = using;
     if (k.result) return h("div", { id: "use-box", class: "fight-aim" },
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
-      k.result.targets.map((t) => h("p", { style: "margin:4px 0" }, t.text)),
-      h("button", { type: "button", class: "btn btn-sm", onclick: () => { using = null; render(); } }, "Done"));
+      k.result.targets.length ? k.result.targets.map((t) => h("p", { style: "margin:4px 0" }, t.text))
+        : h("p", { style: "margin:4px 0" }, (k.result.summary || "").split(": ").slice(1).join(": ") || "Done."),
+      h("div", { class: "row", style: "gap:8px" },
+        h("button", { type: "button", class: "btn btn-sm", onclick: () => { using = null; render(); } }, "Done"),
+        k.result.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet take-back", title: "A misclick? Undo it all", onclick: () => takeBack(k.result.undo) }, icon("undo-2", "sm"), " Take it back") : null));
     const list = foes();
     return h("div", { id: "use-box", class: "fight-aim" },
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
@@ -224,6 +227,27 @@
         k.single ? null : h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: k.busy || !k.chosen.size, onclick: useNow },
           k.busy ? "Rolling…" : "Use on " + k.chosen.size),
         h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { using = null; render(); } }, "Cancel")));
+  }
+  async function useZone(s) {
+    using = { what: "spell", index: s.index, name: s.name, single: false, chosen: new Set(), busy: true, result: null };
+    render();
+    try {
+      const d = await api("POST", "/api/play/me/use", { what: "spell", index: s.index, targets: [], op_id: L.uid() });
+      using.result = d.cast || null;
+      if (d.cast && window.Dice && Dice.showAll) Dice.showAll(d.cast.rolls || []);
+      if (window.FX) { FX.banner(s.name + "!", d.cast && d.cast.targets.length ? d.cast.targets.length + " caught in it" : "no enemies in it yet", "crit"); FX.sound("crit"); }
+    } catch (e) { toast(e.message, "error"); using = null; }
+    if (using) using.busy = false;
+    load(true);
+  }
+  // Take it back: a misclick undone (until anything else happens in the fight)
+  async function takeBack(castId) {
+    try {
+      const d = await api("POST", "/api/play/me/casts/" + castId + "/undo", { op_id: L.uid() });
+      toast(d.taken_back + " was taken back.", "ok");
+      using = null; casting = null;
+    } catch (e) { toast(e.message, "error"); }
+    load(true);
   }
   const useBtn = (what, index, name, single, max, reach) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
     disabled: !!(S.character && S.character.actions && !S.character.actions.left),
@@ -272,7 +296,8 @@
     const slots = mine && Object.fromEntries(Object.entries(mine.spell_slots || {}).filter(([, v]) => v && v.max > 0));
     return h("div", { id: "cast-box" }, L.castPanel({ spell: k.spell, people, chosen: k.chosen, busy: k.busy, result: k.result,
       slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false, casterName: mine && mine.name,
-      onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { casting = null; render(); } }),
+      onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { casting = null; render(); },
+      onTakeBack: (r) => takeBack(r.undo) }),
       S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; render(); } });
@@ -411,6 +436,8 @@
           casting ? castBox() : null,
           using && using.what === "spell" ? useBox() : null,
           ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
+          c.my_turn && s.zone && !s.recharging ? h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !!(c.actions && !c.actions.left),
+            title: "It rises around you: enemies in it are hit, and it stays up", onclick: () => useZone(s) }, icon("sun", "sm"), " Use") :
           c.my_turn && aimsAtFoes(s) && !s.recharging ? useBtn("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets) :
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
@@ -442,11 +469,12 @@
     try {
       const d = await api("GET", "/api/play/state");
       d.mapTokens = [];
-      let pings = [];
-      if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; d.map = map; d.mapTokens = tokens; }
+      let pings = [], zones = [];
+      if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; zones = d.map.zones || []; d.map = map; d.mapTokens = tokens; }
       // pings first: they change every poll, so they're kept out of the "did anything change" check
       const fresh = pings.filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== (S && S.me ? S.me.name : ""));
       view.setPings(pings);
+      view.setZones(zones);
       if (fresh.length && window.FX) FX.sound("ping");
       const s = JSON.stringify(d);
       setStatus(true);

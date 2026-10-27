@@ -464,6 +464,7 @@
         onSlot: (n) => { k.slot = n; }, onFree: (v) => { k.free = v; renderDetail(); },
         onCast: () => send(false),
         onUndo: () => run("POST", "/api/encounters/" + EID + "/undo", {}),
+        onTakeBack: (r) => L.takeBack(EID, r.undo, (d) => { if (d && d.encounter) { casting = null; apply(d); } }),
         onCancel: () => { casting = null; renderDetail(); } }));
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; renderDetail(); } });

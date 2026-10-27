@@ -514,6 +514,23 @@ def api_me_end_turn():
     return jsonify({"character": _own_character(get_db(), char_id)})
 
 
+@bp.post("/api/play/me/casts/<cast_id>/undo")
+def api_me_take_back(cast_id):
+    """Take back your own cast or attack right after a misclick (until anything else happens)."""
+    from .combat import Ctx
+    from .rest import active_combatant
+    from .spells import take_back
+    ident, char_id = _own(None)
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("There's no fight running")
+        ctx = Ctx(conn, cb["encounter_id"])
+        spell = take_back(ctx, cast_id, ident["name"], ident["id"], char_id)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+    return jsonify({"character": _own_character(get_db(), char_id), "taken_back": spell})
+
+
 @bp.post("/api/play/me/dash")
 def api_me_dash():
     """The Dash action: twice their speed to move this turn."""
@@ -608,7 +625,10 @@ def api_me_cast():
             ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
             from .movement import check_action
             check_action(conn, mine["id"], "spells")
+            from .spells import remember, snapshot as undo_snapshot
+            snap = undo_snapshot(ctx)
             result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [cbs[t] for t in targets], "slot": data.get("slot")}, ident)
+            remember(ctx, result["cast_id"], snap, result, mine["id"], ident["id"])
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         else:
             result = _cast_outside_a_fight(conn, ident, me, spell, targets, names, data.get("slot"))
@@ -665,7 +685,7 @@ def api_me_use():
     what, targets = data.get("what"), data.get("targets")
     if what not in ("attack", "spell"):
         raise F.ApiError("what must be attack or spell")
-    if not isinstance(targets, list) or not targets or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
+    if not isinstance(targets, list) or len(targets) > 12 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
         raise F.ApiError("Pick who it's aimed at")
     targets = list(dict.fromkeys(targets))
     conn = get_db()
@@ -684,6 +704,8 @@ def api_me_use():
         sp = spell_info(row)
         if spell_helps(sp) or sp["terrain"] or sp["aura"] or sp["summon"]:
             raise F.ApiError(f"{sp['name']} isn't aimed at enemies")
+    if not targets and not (what == "spell" and sp["zone"]):  # a zone finds who's in it by itself
+        raise F.ApiError("Pick who it's aimed at")
     with tx() as conn:
         if not claim_op(conn, data.get("op_id")):
             return jsonify({"character": _own_character(conn, char_id), "repeat": True})
@@ -706,7 +728,10 @@ def api_me_use():
             from .movement import check_reach
             from .rules import melee_reach
             check_reach(conn, mine["encounter_id"], mine["id"], targets, melee_reach(row), (row.get("name") or "That attack").strip())
+        from .spells import remember, snapshot as undo_snapshot
+        snap = undo_snapshot(ctx)
         result = engine_cast(ctx, mine["id"], {"spell": spell, "targets": targets, "slot": data.get("slot")}, ident)
+        remember(ctx, result["cast_id"], snap, result, mine["id"], ident["id"])
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
         if live:
@@ -740,7 +765,10 @@ def _summon_from_phone(ident, char_id, index, data):
             raise F.ApiError("You can cast it on your own turn", status=403)
         from .movement import check_action
         check_action(conn, mine["id"], "spells")
+        from .spells import remember, snapshot as undo_snapshot
+        snap = undo_snapshot(ctx)
         result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [], "slot": data.get("slot")}, ident)
+        remember(ctx, result["cast_id"], snap, result, mine["id"], ident["id"])
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
         if live:

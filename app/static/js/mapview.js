@@ -183,7 +183,7 @@
       const now = performance.now();
       this.fx = this.fx.filter((f) => now - f.start < f.ms);
       this.draw();
-      this.raf = this.fx.length ? requestAnimationFrame(() => this.loop()) : 0;
+      this.raf = this.fx.length || (this.zones && this.zones.length) ? requestAnimationFrame(() => this.loop()) : 0;
     }
     worldSize() {
       const m = this.map;
@@ -230,6 +230,48 @@
     revealed(x, y) { const m = this.map; const i = y * m.cols + x; return m.revealed && m.revealed[i] === "1"; }
 
     // ---- drawing ----------------------------------------------------------------
+    /** Zones that stay up (Spirit Guardians): a square of light shining down around the caster.
+        They follow the caster's token, and shimmer while they're up. */
+    setZones(zones) {
+      this.zones = zones || [];
+      if (this.zones.length && !this.raf) this.raf = requestAnimationFrame(() => this.loop());
+    }
+    drawZones(cp, ox, oy) {
+      if (!this.zones || !this.zones.length) return;
+      const ctx = this.ctx, now = performance.now() / 1000;
+      for (const z of this.zones) {
+        const t = this.tokens.find((x) => x.id === z.token);
+        if (!t) continue;
+        const dragging = this.drag && this.drag.token && this.drag.token.id === t.id && this.drag.moved;
+        const tx = dragging ? this.drag.at[0] : t.x, ty = dragging ? this.drag.at[1] : t.y;
+        const x0 = ox + (tx - z.half) * cp, y0 = oy + (ty - z.half) * cp, w = (t.size + z.half * 2) * cp;
+        ctx.save();
+        const glow = ctx.createRadialGradient(x0 + w / 2, y0 + w / 2, w * 0.1, x0 + w / 2, y0 + w / 2, w * 0.75);
+        glow.addColorStop(0, "rgba(255, 244, 196, .34)"); glow.addColorStop(1, "rgba(255, 226, 140, .10)");
+        ctx.fillStyle = glow; ctx.fillRect(x0, y0, w, w);
+        // shafts of light coming down
+        ctx.beginPath(); ctx.rect(x0, y0, w, w); ctx.clip();
+        for (let i = 0; i < 7; i++) {
+          const sx = x0 + ((i + 0.5) / 7) * w + Math.sin(now * 0.8 + i * 1.7) * cp * 0.25, a = 0.10 + 0.08 * Math.sin(now * 2 + i);
+          const g = ctx.createLinearGradient(sx, y0, sx, y0 + w);
+          g.addColorStop(0, "rgba(255, 250, 220, " + (a + 0.12) + ")"); g.addColorStop(1, "rgba(255, 240, 180, 0)");
+          ctx.fillStyle = g; ctx.beginPath();
+          ctx.moveTo(sx - cp * 0.15, y0); ctx.lineTo(sx + cp * 0.15, y0); ctx.lineTo(sx + cp * 0.55, y0 + w); ctx.lineTo(sx - cp * 0.55, y0 + w); ctx.closePath(); ctx.fill();
+        }
+        for (let i = 0; i < 10; i++) { // little motes drifting down
+          const px = x0 + ((i * 0.37 + 0.1) % 1) * w, py = y0 + ((now * 0.15 + i * 0.23) % 1) * w;
+          ctx.fillStyle = "rgba(255, 248, 210, .8)"; ctx.beginPath(); ctx.arc(px, py, cp * 0.05, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 226, 140, .9)"; ctx.lineWidth = cp * 0.06; ctx.shadowColor = "#ffe9a3"; ctx.shadowBlur = cp * 0.4;
+        ctx.strokeRect(x0, y0, w, w);
+        ctx.font = `700 ${cp * 0.3}px 'Alegreya Sans', sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
+        ctx.fillStyle = "rgba(60, 45, 10, .85)"; const label = z.name; const lw = ctx.measureText(label).width + cp * 0.2;
+        ctx.fillRect(x0 + cp * 0.1, y0 + cp * 0.1, lw, cp * 0.38); ctx.fillStyle = "#ffe9a3"; ctx.fillText(label, x0 + cp * 0.2, y0 + cp * 0.14);
+        ctx.restore();
+      }
+    }
     /** While a token is dragged in a fight: the squares it can still reach (its movement left). */
     reachOf(t) {
       const ft = this.opts.reach ? this.opts.reach(t) : null;
@@ -290,6 +332,7 @@
       for (const sh of shapes) this.drawShape(sh, cp, ox, oy, false);
       if (this.areaDraft) this.drawShape(this.areaDraft, cp, ox, oy, true);
       if (this.aim) this.drawAim(cp, ox, oy);
+      this.drawZones(cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawReach(this.drag.token, cp, ox, oy);
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawStepLabel(this.drag.token, cp, ox, oy);

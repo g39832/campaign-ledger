@@ -119,6 +119,7 @@
     const k = spellKind(s), bits = [];
     if (Number(s.dmg_mult) > 1) bits.push((s.dmg_mult == 2 ? "double" : "×" + s.dmg_mult) + " damage on a hit");
     if (Number(s.speed_mult) > 1) bits.push((s.speed_mult == 2 ? "double" : "×" + s.speed_mult) + " speed");
+    if (s.zone) bits.push("around the caster for " + (s.rounds || 3) + " rounds, enemies only" + (Number(s.zone_speed) < 1 ? ": they move at " + (Number(s.zone_speed) === 0.5 ? "half" : Math.round(s.zone_speed * 100) + "%") + " speed in it" : ""));
     if (s.aura) bits.push("for allies within " + ((s.area && s.area.size) || 60) + " ft, until switched off");
     if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
@@ -227,7 +228,7 @@
         levelWord(s) ? h("span", { class: "tag" }, levelWord(s)) : null, s.concentration ? h("span", { class: "tag", title: "Concentration: casting another concentration spell ends it, and damage can break it" }, "Concentration") : null,
         h("span", { class: "cast-what" }, [spellWhat(s), o.lands].filter(Boolean).join(" · "))),
       s.notes ? h("p", { class: "faint cast-notes" }, s.notes) : null,
-      res ? castResult(res, o.onUndo) : null,
+      res ? castResult(res, o.onUndo, o.onTakeBack) : null,
       res || !s.summon ? null : h("p", { class: "cast-ask" }, s.summon + " appears next to " + (o.casterName || "the caster") + " and acts right after them. Press Cast."),
       res || s.summon ? null : h("p", { class: "cast-ask" }, n ? "Casting on " + n + (max ? " of up to " + max : "") + ". Tap anyone else it reaches, then Cast." : max === 1 ? "Who is it on? Tap them." : "Who does it reach? Tap each one" + (max ? " (up to " + max + ")" : "") + "."),
       res || s.summon ? null : groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
@@ -236,17 +237,25 @@
       res || o.people.length || s.summon ? null : h("p", { class: "faint", style: "margin:0" }, "No one to cast it on."),
       res ? null : slotPick,
       h("div", { class: "row", style: "margin-top:10px;gap:8px" },
-        res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration && !s.summon), onclick: o.onCast },
-          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : " Cast" + (n && !s.summon ? " on " + n : "")),
+        res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration && !s.summon && !s.zone), onclick: o.onCast },
+          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : s.zone ? " Cast around " + (o.casterName || "them") : " Cast" + (n && !s.summon ? " on " + n : "")),
         h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
   }
   const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
-  function castResult(r, onUndo) {
+  function castResult(r, onUndo, onTakeBack) {
     return h("div", { class: "cast-result", role: "status" },
       h("div", { class: "cast-res-head" }, h("b", null, r.caster + (r.move ? " used " : " cast ") + r.spell), r.spent ? h("span", { class: "tag" }, "level " + r.slot + " slot used") : null),
       r.targets.length ? h("ul", { class: "cast-res-list" }, r.targets.map((t) => h("li", { class: HOW_CLASS[t.how] || "" }, t.text)))
         : h("p", { style: "margin:4px 0" }, (r.summary || "").split(": ").slice(1).join(": ") || (r.concentration ? "Concentrating on it." : "Done.")),
-      onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
+      onTakeBack && r.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet take-back", title: "A misclick? Undo the whole cast: damage, effects, cooldown and the action", onclick: () => onTakeBack(r) }, icon("undo-2", "sm"), " Take it back")
+        : onUndo && r.targets.some((t) => t.amount != null) ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: onUndo }, icon("undo-2", "sm"), " Undo last HP change") : null);
+  }
+  /* Take back the DM's cast (a misclick): the fight goes back to how it was before it. */
+  function takeBack(eid, castId, done) {
+    act("POST", "/api/encounters/" + eid + "/casts/" + castId + "/undo", {}, (d) => {
+      if (d && d.taken_back) toast(d.taken_back + " was taken back.", "ok");
+      if (done) done(d);
+    }, { onError: (err) => toast(err.message, "error") });
   }
   /* An aura (Moni's magic item): one button that says whether it's on, and flips it. */
   function auraButton(s, url, done) {
@@ -776,5 +785,5 @@
     Save.render();
   });
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

@@ -1311,3 +1311,6 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 @media (min-width: 1101px) {
   .map-layout .map-stage, .map-layout .map-side { position: sticky; top: 62px; }
 }
+
+/* Take it back: undo a misclicked cast */
+.take-back { margin-top: 6px; }

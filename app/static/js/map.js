@@ -76,6 +76,7 @@
     view.setData(S.map, S.tokens);
     renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings();
     if (state.pings) view.setPings(state.pings);
+    view.setZones(state.zones);
   }
 
   // ---- top bar -------------------------------------------------------------------
@@ -403,6 +404,7 @@
       const r = d.cast, hows = r.targets.map((t) => t.how);
       const kind = r.kind === "heal" || L.spellHelps(r) ? "heal" : hows.includes("crit") ? "crit" : hows.length && hows.every((x) => x === "miss" || x === "saved") ? "miss" : "hit";
       say(c.id, r.summary, kind, r.targets.some((t) => t.amount != null));
+      if (lastResult) lastResult.takeBack = r.undo;
       refresh(true);
     });
   }
@@ -552,6 +554,7 @@
   async function arm(c, a) {
     lastResult = null;
     if (a.instant) { if (!a.noUse) useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
+    if (a.cast && a.cast.spell.zone) { castNow(c, a, []); return; } // Spirit Guardians: around the caster, it finds who's in it
     if (a.cast && !a.aimArea) {
       const s = a.cast.spell;
       aim = { by: c.id, act: a, done: new Set(), cast: true, slot: s.level || null, free: false };
@@ -697,7 +700,9 @@
       a.save ? h("label", { class: "check" }, h("input", { type: "checkbox", checked: aim.half, onchange: (e) => { aim.half = e.target.checked; } }), "This one saved: half damage") : null,
       h("button", { type: "button", class: "btn btn-sm" + (aim.done.size ? " btn-primary" : ""), onclick: stopAim }, aim.done.size ? "Done" : "Cancel")) : null;
     const res = lastResult && lastResult.by === c.id ? h("div", { class: "fight-result is-" + lastResult.kind, role: "status" },
-      h("span", null, lastResult.text), lastResult.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: undoHp }, icon("undo-2", "sm"), " Undo") : null) : null;
+      h("span", null, lastResult.text), lastResult.takeBack ? h("button", { type: "button", class: "btn btn-sm btn-quiet take-back", title: "A misclick? Undo the whole cast",
+        onclick: () => L.takeBack(EID(), lastResult.takeBack, () => { lastResult = null; enc = null; refresh(true); }) }, icon("undo-2", "sm"), " Take it back")
+        : lastResult.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: undoHp }, icon("undo-2", "sm"), " Undo") : null) : null;
     const amt = h("input", { type: "number", min: 0, placeholder: "0", inputmode: "numeric", "data-keep": "fight-amt", "aria-label": "Amount", value: hpAmt,
       oninput: (e) => { hpAmt = e.target.value; } });
     const hp = (op) => {

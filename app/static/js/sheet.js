@@ -461,7 +461,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -484,6 +484,8 @@
           field("Summons (a creature from the library)", text(i, "summon", { short: true, placeholder: "e.g. Yamato clone", title: "It joins the fight on your side, next to you, and acts right after you" })),
           chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
           chk(i, "aura", "Switched on and off (a magic item's aura): lasts until switched off", !!s.aura, "Reaches allies within its Area (default 60 ft)"),
+          chk(i, "zone", "Stays up around the caster (Spirit Guardians): enemies in its Area are hit once, then it lasts its Rounds", !!s.zone, "Set the Area (20 ft radius = 20 ft all around) and Rounds; the cooldown starts when it goes down"),
+          s.zone ? field("Enemies' speed in it", pick(i, "zone_speed", [["", "Normal"], ["0.5", "Half"], ["0.25", "Quarter"]], { title: "Enemies inside move this fast" })) : null,
           s.aura ? field("Speed ×", num(i, "speed_mult", { min: 1, max: 10, placeholder: "1", title: "2 = double speed" })) : null,
           field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })))) : null;
       const open = openSpells.has(i);

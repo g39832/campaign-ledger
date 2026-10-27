@@ -492,6 +492,18 @@ def _num(v, lo, hi, default=None):
     return max(lo, min(hi, n))
 
 
+def _fraction(v, default=1.0):
+    """'½', '1/2', '0.5' or 50 (%) -> 0.5; anything else -> 1 (no change)."""
+    s = str(v if v is not None else "").strip().replace("½", "0.5").replace("%", "")
+    try:
+        n = float(s.split("/")[0]) / float(s.split("/")[1]) if "/" in s else float(s)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return default
+    if n > 1:
+        n /= 100
+    return default if n <= 0 else round(min(1.0, n), 2)
+
+
 def _flag(spell, key, default):
     v = spell.get(key)
     return default if v is None or v == "" else bool(v)
@@ -552,6 +564,10 @@ def spell_info(spell):
         # switched on and off (a magic item's aura): lasts until switched off, reaches allies in its area
         "aura": bool(spell.get("aura")),
         "speed_mult": _num(spell.get("speed_mult"), 1, 10, 1),
+        # an area around the caster that stays up for its rounds (Spirit Guardians): enemies in it
+        # when it's cast are hit once; while it's up, enemies in it move at zone_speed (½ = half)
+        "zone": bool(spell.get("zone")),
+        "zone_speed": _fraction(spell.get("zone_speed")),
         "cooldown": parse_cooldown(spell),
         "notes": notes.strip()[:300],
     }

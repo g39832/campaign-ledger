@@ -190,11 +190,27 @@ def dm_state(map_id):
     enc = encounter_summary(conn, m["encounter_id"])
     live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (m["campaign_id"],)).fetchone()["live_map_id"]
     move = None
+    zones = fight_zones(conn, map_id, enc)
     if enc and enc["status"] == "active" and enc["current_id"]:
         from .movement import turn_info
         move = turn_info(conn, enc["current_id"])  # how far whoever's turn it is can still go
     return {"map": m, "tokens": tokens_for(conn, map_id, enc["current_id"] if enc and enc["status"] == "active" else None),
-            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id), "move": move}
+            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id), "move": move, "zones": zones}
+
+
+def fight_zones(conn, map_id, enc):
+    """Zones up in this map's fight (Spirit Guardians around Lux), to draw: {token, half, name}."""
+    if not enc or enc["status"] != "active":
+        return []
+    from .movement import _token_of, active_zones
+    out = []
+    for z in active_zones(conn, enc["id"]):
+        t = conn.execute("SELECT t.id FROM map_tokens t LEFT JOIN combatants c ON c.id = ? WHERE t.map_id = ? AND (t.combatant_id = ? "
+                         "OR (c.character_id IS NOT NULL AND t.character_id = c.character_id)) LIMIT 1",
+                         (z["cb_id"], map_id, z["cb_id"])).fetchone()
+        if t:
+            out.append({"token": t["id"], "half": z["half"], "name": z["name"], "side": z["side"]})
+    return out
 
 
 def _disengaged(conn, char_id):
@@ -239,7 +255,9 @@ def player_view(conn, map_id, player):
     public["revealed"] = m["revealed"] if fog else ""
     public["image_url"] = f"/api/play/map-image/{map_id}?v={m['rev']}" if m["image"] else None
     public["shapes"] = [{k: v for k, v in s.items() if k != "hidden"} for s in m["shapes"] if not s.get("hidden")]
-    return {"map": public, "tokens": tokens, "pings": recent_pings(map_id)}
+    visible = {t["id"] for t in tokens}
+    zones = [z for z in fight_zones(conn, map_id, enc) if z["token"] in visible]
+    return {"map": public, "tokens": tokens, "pings": recent_pings(map_id), "zones": zones}
 
 
 # ---- pings: "look here!" ripples that everyone sees for a few seconds --------------

@@ -75,9 +75,13 @@ def turn_info(conn, cb_id):
     held = held_by(conn, row)
     if held:
         speed = 0  # Grappled, Restrained, down...: they can't move at all
+    slowed = zone_slowing(conn, row)
+    if slowed and speed:
+        speed = int(speed * slowed[1] // 5 * 5)  # inside an enemy's Spirit Guardians: half speed
     used = done.get("ft", 0)
     return {"cb_id": row["cb_id"], "name": row["name"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
-            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0, "held": held}
+            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0, "held": held,
+            "slowed": slowed[0] if slowed else None}
 
 
 def held_by(conn, row):
@@ -149,6 +153,82 @@ def _check(conn, md, turn, x0, y0, x1, y1, name):
     row = _row(conn, turn["cb_id"])
     _save(conn, row, dict(_turn(row), ft=turn["used"] + cost))
     return dict(turn, used=turn["used"] + cost, left=turn["left"] - cost)
+
+
+# ---- zones: an area around a caster that stays up (Spirit Guardians) ------------------------
+
+def zone_half(area, per=5):
+    """How many squares a zone reaches out from the caster's token: a "20 ft radius" reaches
+    20 ft (4 squares) every way; a "15 ft cube" is 15 ft across with the caster in the middle (1)."""
+    size = (area or {}).get("size") or 15
+    if (area or {}).get("kind") == "circle":
+        return max(1, round(size / per))
+    return max(0, (max(1, round(size / per)) - 1) // 2)
+
+
+def _live_map(conn, eid):
+    return conn.execute("SELECT m.* FROM maps m LEFT JOIN campaigns c ON c.live_map_id = m.id WHERE m.encounter_id = ? "
+                        "ORDER BY c.id IS NULL, m.id DESC LIMIT 1", (eid,)).fetchone()
+
+
+def in_zone(owner_tok, half, tok):
+    """Does a token stand (even partly) in the zone around the owner's token?"""
+    x0, y0 = owner_tok["x"] - half, owner_tok["y"] - half
+    x1, y1 = owner_tok["x"] + owner_tok["size"] + half, owner_tok["y"] + owner_tok["size"] + half
+    return tok["x"] < x1 - 1e-6 and tok["x"] + tok["size"] > x0 + 1e-6 and tok["y"] < y1 - 1e-6 and tok["y"] + tok["size"] > y0 + 1e-6
+
+
+def active_zones(conn, eid):
+    """[{cb_id, side, half, speed, name}] for every zone up in this fight."""
+    out = []
+    rows = conn.execute("SELECT c.id, c.kind, COALESCE(ch.conditions, c.conditions) AS conds FROM combatants c "
+                        "LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ?", (eid,)).fetchall()
+    for r in rows:
+        for x in json.loads(r["conds"] or "[]"):
+            if isinstance(x, dict) and x.get("zone") and not x.get("expired") and x.get("encounter_id") in (None, eid):
+                out.append({"cb_id": r["id"], "side": "enemy" if r["kind"] == "enemy" else "party", "half": int(x["zone"].get("half", 1)),
+                            "speed": float(x["zone"].get("speed", 1)), "name": x.get("name", "")})
+    return out
+
+
+def zone_slowing(conn, row):
+    """(zone name, speed factor) when this combatant stands in an enemy's zone that slows."""
+    zones = [z for z in active_zones(conn, row["eid"]) if z["speed"] < 1]
+    if not zones:
+        return None
+    me = conn.execute("SELECT kind FROM combatants WHERE id = ?", (row["cb_id"],)).fetchone()
+    side = "enemy" if me["kind"] == "enemy" else "party"
+    m = _live_map(conn, row["eid"])
+    if m is None:
+        return None
+    mine = _token_of(conn, m["id"], row["cb_id"])
+    for z in zones:
+        if z["side"] == side or z["cb_id"] == row["cb_id"]:
+            continue
+        owner = _token_of(conn, m["id"], z["cb_id"])
+        if mine and owner and in_zone(owner, z["half"], mine):
+            return z["name"], z["speed"]
+    return None
+
+
+def foes_in_zone(conn, eid, caster_id, half):
+    """The caster's enemies standing in the zone around them now (None: no battle map to tell)."""
+    m = _live_map(conn, eid)
+    if m is None:
+        return None
+    owner = _token_of(conn, m["id"], caster_id)
+    if owner is None:
+        return None
+    me = conn.execute("SELECT kind FROM combatants WHERE id = ?", (caster_id,)).fetchone()
+    out = []
+    for r in conn.execute("SELECT c.id, c.kind, COALESCE(ch.status, c.status) AS status FROM combatants c "
+                          "LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ? AND c.hidden = 0", (eid,)):
+        if r["id"] == caster_id or (r["kind"] == "enemy") == (me["kind"] == "enemy") or r["status"] in ("dead", "defeated", "fled"):
+            continue
+        t = _token_of(conn, m["id"], r["id"])
+        if t and in_zone(owner, half, t):
+            out.append(r["id"])
+    return out
 
 
 # ---- reach: how far apart two fighters stand -------------------------------------------

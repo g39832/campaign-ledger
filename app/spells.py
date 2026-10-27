@@ -498,7 +498,15 @@ def cast(ctx, caster_id, data, viewer=None):
     targets = list(dict.fromkeys(targets))
     if not sp["kind"]:
         raise F.ApiError(f"{sp['name']} is only notes — set what it does (damage, healing, buff or debuff) on the Spells tab")
-    if sp["summon"]:
+    if sp["zone"]:
+        # an area around the caster (Spirit Guardians): whoever's in it now, enemies only
+        from .movement import foes_in_zone, zone_half
+        inside = foes_in_zone(ctx.conn, ctx.enc["id"], caster["id"], zone_half(sp["area"]))
+        if inside is not None:
+            targets = inside
+        else:  # no battle map: the ones picked, as long as they're on the other side
+            targets = [t for t in targets if (ctx.combatant(t)["kind"] == "enemy") != (caster["kind"] == "enemy")]
+    elif sp["summon"]:
         if not (sp["dice"] or spell_lasts(sp) or sp["temp_hp"]):
             targets = []  # it only brings the creature in
     elif sp["terrain"]:
@@ -506,7 +514,7 @@ def cast(ctx, caster_id, data, viewer=None):
             raise F.ApiError(f"Aim {sp['name']} on the battle map to choose where it goes")
         if not (sp["dice"] or spell_lasts(sp) or sp["temp_hp"]):
             targets = []  # it only changes the ground
-    elif not targets and not sp["concentration"]:
+    elif not targets and not sp["concentration"] and not sp["zone"]:
         raise F.ApiError(f"Pick who {sp['name']} is cast on")
     if sp["targets"] and len(targets) > sp["targets"]:
         raise F.ApiError(f"{sp['name']} reaches at most {sp['targets']} {'creature' if sp['targets'] == 1 else 'creatures'}")
@@ -609,7 +617,7 @@ def cast(ctx, caster_id, data, viewer=None):
         # an area that keeps hurting (Spirit Guardians, Moonbeam: a save every turn) stays on
         # everyone caught in it, even those who made the first save
         zone = bool(sp["ongoing"] and sp["ongoing_save"])
-        if spell_lasts(sp) and (landed or zone):
+        if spell_lasts(sp) and (landed or zone) and not sp["zone"]:
             cond = effect_for(ctx, sp, caster, cast_id, nums, slot)
             got = put_effect(ctx, t, cond)
             res["effect"], res["effect_how"] = cond["name"], got
@@ -621,6 +629,8 @@ def cast(ctx, caster_id, data, viewer=None):
         res["text"] = f"{t['name']}" + (f" {verdict}" if verdict else "") + (f" ({how})" if how else "") + (" — " + ", ".join(parts) if parts else "")
         lines.append(res["text"])
         results.append(res)
+    if sp["zone"]:
+        lines.insert(0, raise_zone(ctx, caster, sp, cast_id) + ("" if results else " — no enemies in it right now"))
     if sp["terrain"]:
         lines.insert(0, change_ground(ctx, sp, data))
     if sp["summon"]:
@@ -628,7 +638,8 @@ def cast(ctx, caster_id, data, viewer=None):
     from .combat import used_a_move
     used_a_move(ctx, caster["id"], sp["name"])
     if sp["cooldown"]:
-        start_cooldown(ctx, caster["id"], sp["name"], sp["cooldown"])
+        # a zone recharges after it goes down: its rounds up, then the cooldown
+        start_cooldown(ctx, caster["id"], sp["name"], sp["cooldown"] + (sp["rounds"] or 0 if sp["zone"] else 0))
     slot_word = f" with a level {slot} slot" if spent else at
     move = isinstance(data.get("spell"), dict) and bool(data["spell"].get("move"))  # Grapple: a move, not a spell
     head = f"{caster['name']} {'uses' if move else 'casts'} {sp['name']}{slot_word}" + (" (concentration)" if sp["concentration"] else "")
@@ -636,9 +647,107 @@ def cast(ctx, caster_id, data, viewer=None):
     from .maps import attack_fx
     attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
               "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"])
-    return {"spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
+    return {"cast_id": cast_id, "spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
             "spent": spent, "lands": lands, "targets": results, "summary": head + (": " + "; ".join(lines) if lines else ""),
             "rolls": roller.ids, "concentration": sp["concentration"], "move": move}
+
+
+def raise_zone(ctx, caster, sp, cast_id):
+    """Put the zone on the caster: it goes where they go, for its rounds (ending on their turn)."""
+    from .movement import zone_half
+    c = ctx.combatant(caster["id"])
+    rounds = sp["rounds"] or 3
+    conds = [x for x in c["conditions"] if not (isinstance(x, dict) and x.get("zone") and x.get("name") == sp["name"])]
+    cond = {"id": uuid.uuid4().hex[:12], "name": sp["name"], "zone": {"half": zone_half(sp["area"]), "speed": sp["zone_speed"]},
+            "note": f"{(sp['area'] or {}).get('size', 15)} ft around {c['name']}" + (f" · enemies in it move at {'half' if sp['zone_speed'] == 0.5 else str(int(sp['zone_speed'] * 100)) + '%'} speed" if sp["zone_speed"] < 1 else ""),
+            "rounds_left": rounds, "tick": "end", "tick_on": c["id"], "encounter_id": ctx.enc["id"], "auto_expire": True,
+            "expired": False, "applied_round": ctx.enc["round"], "source": {"cast": cast_id, "caster": c["id"], "spell": sp["name"]}}
+    ctx.set_vitals(c, conditions=conds + [cond])
+    return f"{sp['name']} rises around {c['name']} for {rounds} round{'s' if rounds != 1 else ''}"
+
+
+# ---- taking a cast back (a misclick) ------------------------------------------------------
+# Right after a cast, its caster (or the DM) can take it back, as long as nothing else has
+# happened in the fight since. Kept in memory: it's only for the moment after a misclick.
+
+def _undo_store():
+    from flask import current_app
+    return current_app.extensions.setdefault("cast_undo", {})
+
+
+def snapshot(ctx):
+    """Everything a cast can change in this fight, to put back."""
+    conn, eid = ctx.conn, ctx.enc["id"]
+    cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id "
+                                         "FROM combatants WHERE encounter_id = ?", (eid,))]
+    chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots "
+                                           "FROM characters WHERE id IN (SELECT character_id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))]
+    maps = [dict(r) for r in conn.execute("SELECT id, terrain FROM maps WHERE encounter_id = ?", (eid,))]
+    one = lambda sql: conn.execute(sql, (eid,)).fetchone()[0] or 0
+    return {"cbs": cbs, "chars": chars, "maps": maps,
+            "tok": one("SELECT MAX(t.id) FROM map_tokens t JOIN maps m ON m.id = t.map_id WHERE m.encounter_id = ?"),
+            "hp": one("SELECT MAX(id) FROM hp_changes WHERE encounter_id = ?"),
+            "log": one("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?")}
+
+
+def remember(ctx, cast_id, snap, out, caster_id, player_id=None):
+    import time
+    last = ctx.conn.execute("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?", (ctx.enc["id"],)).fetchone()[0] or 0
+    store = _undo_store()
+    store[cast_id] = {"eid": ctx.enc["id"], "caster": caster_id, "player": player_id, "log": last, "snap": snap,
+                      "spell": out.get("spell"), "t": time.time()}
+    for k in [k for k, v in store.items() if time.time() - v["t"] > 3600]:
+        store.pop(k, None)
+    out["undo"] = cast_id
+
+
+def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
+    """Put the fight back the way it was before this cast."""
+    rec = _undo_store().get(str(cast_id))
+    if rec is None or rec["eid"] != ctx.enc["id"]:
+        raise F.ApiError("That can't be taken back any more")
+    conn, eid = ctx.conn, ctx.enc["id"]
+    if player_id is not None:
+        mine = conn.execute("SELECT 1 FROM combatants WHERE id = ? AND character_id = ?", (rec["caster"], char_id)).fetchone()
+        if not mine:
+            raise F.ApiError("You can only take back your own spells", status=403)
+    last = conn.execute("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?", (eid,)).fetchone()[0] or 0
+    if last != rec["log"]:
+        raise F.ApiError("Too late to take it back — something else has happened in the fight since")
+    snap = rec["snap"]
+    keep = {c["id"] for c in snap["cbs"]}
+    gone = [r["id"] for r in conn.execute("SELECT id FROM combatants WHERE encounter_id = ?", (eid,)) if r["id"] not in keep]
+    for cid in gone:  # a summoned clone goes away again
+        conn.execute("DELETE FROM map_tokens WHERE combatant_id = ?", (cid,))
+        conn.execute("DELETE FROM combatants WHERE id = ?", (cid,))
+    for c in snap["cbs"]:
+        conn.execute("UPDATE combatants SET current_hp = ?, max_hp = ?, temp_hp = ?, status = ?, conditions = ?, moved = ?, sort_order = ? WHERE id = ?",
+                     (c["current_hp"], c["max_hp"], c["temp_hp"], c["status"], c["conditions"], c["moved"], c["sort_order"], c["id"]))
+    for ch in snap["chars"]:
+        conn.execute("UPDATE characters SET current_hp = ?, max_hp = ?, temp_hp = ?, status = ?, conditions = ?, death_successes = ?, "
+                     "death_failures = ?, spell_slots = ?, updated_at = ? WHERE id = ?",
+                     (ch["current_hp"], ch["max_hp"], ch["temp_hp"], ch["status"], ch["conditions"], ch["death_successes"],
+                      ch["death_failures"], ch["spell_slots"], now_iso(), ch["id"]))
+    from .maps import _bump
+    for m in snap["maps"]:
+        conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (m["terrain"], m["id"]))
+        conn.execute("DELETE FROM map_tokens WHERE map_id = ? AND id > ?", (m["id"], snap["tok"]))
+        _bump(conn, m["id"])
+    conn.execute("DELETE FROM hp_changes WHERE encounter_id = ? AND id > ?", (eid, snap["hp"]))
+    conn.execute("DELETE FROM combat_log WHERE encounter_id = ? AND id > ?", (eid, snap["log"]))
+    ctx.log("spell", f"{by_name} took back {rec['spell']}")
+    _undo_store().pop(str(cast_id), None)
+    return rec["spell"]
+
+
+@bp.post("/encounters/<int:eid>/casts/<cast_id>/undo")
+def api_take_back(eid, cast_id):
+    from .combat import Ctx, encounter_state
+    with tx() as conn:
+        ctx = Ctx(conn, eid)
+        spell = take_back(ctx, cast_id, "The DM")
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
+    return jsonify(encounter_state(eid) | {"taken_back": spell})
 
 
 def _rolls_for(ids, viewer):
@@ -669,7 +778,9 @@ def api_cast(eid):
             except (TypeError, ValueError):
                 raise F.ApiError("Who is casting?")
             check_hero_action(conn, caster_id, "spells")
+            snap = snapshot(ctx)
             out = cast(ctx, caster_id, data, viewer)
+            remember(ctx, out.get("cast_id") or uuid.uuid4().hex[:12], snap, out, caster_id)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
             conn.execute("UPDATE campaigns SET updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["campaign_id"]))
     if out:
