@@ -321,9 +321,10 @@ def test_end_and_reopen(api, battle):
     api.post(f"/api/encounters/{eid}/next")
     s = api.post(f"/api/encounters/{eid}/end")
     assert s["encounter"]["status"] == "ended"
-    api.delete(f"/api/encounters/{eid}", expect=400)
     s = api.post(f"/api/encounters/{eid}/reopen")
     assert s["encounter"]["status"] == "active" and s["encounter"]["round"] == 1
+    err = api.delete(f"/api/encounters/{eid}", expect=400)                          # running: end it first
+    assert "end it first" in err["error"]
 
 
 # 9–10. Persistence across restarts --------------------------------------------------

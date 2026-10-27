@@ -338,15 +338,40 @@ def api_patch(eid):
     return mutate(eid, fn)
 
 
+def delete_encounter(conn, eid):
+    """Remove a prepared or finished fight from the history: its combatants and log go with
+    it. Its battle map stays (terrain, heroes and all) without the fight's monsters; dice rolls stay."""
+    enc = _encounter_row(conn, eid)
+    if enc["status"] == "active":
+        raise F.ApiError("That fight is still running — end it first, then delete it")
+    maps = [r["id"] for r in conn.execute("SELECT id FROM maps WHERE encounter_id = ?", (eid,))]
+    # heroes stay on the map as themselves; the fight's monsters go with it
+    conn.execute("UPDATE map_tokens SET character_id = (SELECT character_id FROM combatants WHERE id = map_tokens.combatant_id) "
+                 "WHERE character_id IS NULL AND combatant_id IN (SELECT id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))
+    conn.execute("DELETE FROM map_tokens WHERE character_id IS NULL AND combatant_id IN (SELECT id FROM combatants WHERE encounter_id = ?)", (eid,))
+    conn.execute("DELETE FROM journal_links WHERE target_type = 'encounter' AND target_id = ?", (eid,))
+    conn.execute("DELETE FROM encounters WHERE id = ?", (eid,))
+    from .maps import _bump
+    for mid in maps:
+        _bump(conn, mid)
+    return enc
+
+
 @bp.delete("/encounters/<int:eid>")
 def api_delete(eid):
     with tx() as conn:
-        enc = _encounter_row(conn, eid)
-        if enc["status"] != "planning":
-            raise F.ApiError("Only encounters that were never started can be deleted. End it instead — it stays in the history.")
-        conn.execute("DELETE FROM journal_links WHERE target_type = 'encounter' AND target_id = ?", (eid,))
-        conn.execute("DELETE FROM encounters WHERE id = ?", (eid,))
+        delete_encounter(conn, eid)
     return jsonify({"deleted": eid})
+
+
+@bp.delete("/campaigns/<int:cid>/encounters/finished")
+def api_delete_finished(cid):
+    """Clear every finished fight out of the history at once."""
+    with tx() as conn:
+        ids = [r["id"] for r in conn.execute("SELECT id FROM encounters WHERE campaign_id = ? AND status = 'ended'", (cid,))]
+        for eid in ids:
+            delete_encounter(conn, eid)
+    return jsonify({"deleted": ids})
 
 
 def _first_eligible(ctx, order):

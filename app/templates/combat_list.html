@@ -29,7 +29,8 @@
   {% set group = encounters | selectattr("status", "equalto", status) | list %}
   {% if group or status == "active" %}
   <section class="section">
-    <h2 class="rule-head">{{ title }} <span class="count">{{ group | length }}</span></h2>
+    <h2 class="rule-head">{{ title }} <span class="count">{{ group | length }}</span>
+      {% if status == "ended" and group | length > 1 %}<button type="button" class="btn btn-sm btn-quiet enc-del-all" style="margin-left:auto">{{ icon("trash-2", "sm") }} Delete all finished</button>{% endif %}</h2>
     {% if group %}
     <div class="panel" style="overflow-x:auto">
     <table class="ledger enc-list">
@@ -41,7 +42,8 @@
           <td>{{ e.combatant_count }}{% if e.enemy_count %} <span class="faint">({{ e.enemy_count }} enem{{ "y" if e.enemy_count == 1 else "ies" }})</span>{% endif %}</td>
           <td class="r num">{{ e.round or "—" }}</td>
           <td class="faint" data-time="{{ e.ended_at or e.updated_at }}"></td>
-          <td class="r"><a class="btn btn-sm{% if status == 'active' %} btn-primary{% endif %}" href="{{ url_for('pages.combat', enc_id=e.id) }}">{{ {"active": "Resume", "planning": "Open", "ended": "Review"}[status] }}</a></td>
+          <td class="r" style="white-space:nowrap"><a class="btn btn-sm{% if status == 'active' %} btn-primary{% endif %}" href="{{ url_for('pages.combat', enc_id=e.id) }}">{{ {"active": "Resume", "planning": "Open", "ended": "Review"}[status] }}</a>
+            {% if status != "active" %}<button type="button" class="btn btn-sm btn-quiet enc-del" data-id="{{ e.id }}" data-name="{{ e.name }}" title="Delete this fight from the history" aria-label="Delete {{ e.name }}">{{ icon("trash-2", "sm") }}</button>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -76,6 +78,16 @@ L.$$("[data-enc-preset]").forEach((b) => b.addEventListener("click", () => {
     });
   });
   if (location.hash === "#new") L.$("#new [name=name]").focus();
+  // deleting from the history: click once to arm, again to delete (no pop-up dialogs)
+  L.$$(".enc-del").forEach((b) => b.addEventListener("click", () => {
+    if (!b.classList.contains("is-armed")) { b.classList.add("is-armed"); b.textContent = "Delete?"; L.toast("Click again to delete “" + b.dataset.name + "” and its log for good.", null); return; }
+    L.act("DELETE", "/api/encounters/" + b.dataset.id, null, () => { const tr = b.closest("tr"); tr.remove(); L.toast("Deleted “" + b.dataset.name + "”.", "ok"); });
+  }));
+  const all = L.$(".enc-del-all");
+  if (all) all.addEventListener("click", () => {
+    if (!all.classList.contains("is-armed")) { all.classList.add("is-armed"); all.textContent = "Click again to delete them all"; return; }
+    L.act("DELETE", "/api/campaigns/{{ campaign.id }}/encounters/finished", null, (d) => { L.toast("Deleted " + d.deleted.length + " finished fights.", "ok"); location.reload(); });
+  });
 })();
 </script>
 {% endblock %}
