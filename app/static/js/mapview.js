@@ -166,9 +166,16 @@
       const COLORS = { fire: "#ff7a2f", ice: "#8fdcff", lightning: "#fff27a", radiant: "#ffe9a3", poison: "#8fe36b", arcane: "#c08bff",
         arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a" };
       const color = COLORS[style] || "#ffffff", hows = fx.how || [];
+      const sweep = style === "slash" && fx.area && fx.area.kind === "cone" && fx.from && fx.to && fx.to.length;
+      if (sweep) { // Wide Slash: one wide slash the full length of the cone, pointed at the ones it reaches
+        const cx = fx.to.reduce((s, p) => s + p[0], 0) / fx.to.length, cy = fx.to.reduce((s, p) => s + p[1], 0) / fx.to.length;
+        const crit = hows.includes("crit");
+        this.addFx({ type: "attack", style: "cone", color, from: fx.from, dir: Math.atan2(cy - fx.from[1], cx - fx.from[0]),
+          len: Math.max(1.5, fx.area.squares || 3), how: crit ? "crit" : hows.every((h) => h === "miss") ? "miss" : "hit", ms: 1100, start });
+      }
       (fx.to && fx.to.length ? fx.to : [fx.from]).forEach((to, i) => {
         const how = hows[i] || "hit", missed = how === "miss" || how === "saved";
-        this.addFx({ type: "attack", style, color, from: fx.from, to, how, ms: 1300, start: start + i * 120 });
+        if (!sweep) this.addFx({ type: "attack", style, color, from: fx.from, to, how, ms: 1300, start: start + i * 120 });
         const word = how === "crit" ? "CRIT!" : how === "miss" ? "Miss" : how === "saved" ? "Saved" : "";
         if (word && to) this.addFx({ type: "word", x: to[0], y: to[1], text: word, color: how === "crit" ? "#ffd36b" : "#d8d2c4", ms: 1500, start: start + 500 + i * 120 });
         if (i === 0 && window.FX) FX.sound(fx.kind === "heal" || fx.kind === "buff" ? "heal" : how === "crit" ? "crit" : missed ? "fumble" : "hit");
@@ -273,18 +280,20 @@
       }
     }
     /** While a token is dragged in a fight: the squares it can still reach (its movement left). */
+    // reach(t) -> { budget: ft this turn, from: [x, y] where they started it (null: where they stand) }
     reachOf(t) {
-      const ft = this.opts.reach ? this.opts.reach(t) : null;
-      if (ft == null || !this.map) return null;
+      const r = this.opts.reach ? this.opts.reach(t) : null;
+      if (r == null || !this.map) return null;
       const per = this.map.scale_unit === "ft" || !this.map.scale_unit ? (Number(this.map.scale_value) || 5) : 5;
-      return { ft, per, squares: Math.floor(ft / per) };
+      const from = r.from || [t.x, t.y];
+      return { ft: r.budget, per, squares: Math.floor(r.budget / per), ox: from[0], oy: from[1] };
     }
     drawReach(t, cp, ox, oy) {
       const r = this.reachOf(t);
       if (!r) return;
       const m = this.map, ctx = this.ctx;
-      const x0 = Math.max(0, t.x - r.squares), y0 = Math.max(0, t.y - r.squares);
-      const x1 = Math.min(m.cols, t.x + t.size + r.squares), y1 = Math.min(m.rows, t.y + t.size + r.squares);
+      const x0 = Math.max(0, r.ox - r.squares), y0 = Math.max(0, r.oy - r.squares);
+      const x1 = Math.min(m.cols, r.ox + t.size + r.squares), y1 = Math.min(m.rows, r.oy + t.size + r.squares);
       ctx.save();
       ctx.fillStyle = "rgba(120, 200, 140, .16)"; ctx.strokeStyle = "rgba(120, 220, 150, .9)"; ctx.lineWidth = cp * 0.06;
       ctx.setLineDash([cp * 0.2, cp * 0.12]);
@@ -295,7 +304,7 @@
     drawStepLabel(t, cp, ox, oy) {
       const r = this.reachOf(t);
       if (!r) return;
-      const [ax, ay] = this.drag.at, sq = Math.ceil(Math.max(Math.abs(ax - t.x), Math.abs(ay - t.y)) - 1e-6), ft = sq * r.per;
+      const [ax, ay] = this.drag.at, sq = Math.ceil(Math.max(Math.abs(ax - r.ox), Math.abs(ay - r.oy)) - 1e-6), ft = sq * r.per;
       const too = ft > r.ft, ctx = this.ctx, X = ox + (ax + t.size / 2) * cp, Y = oy + ay * cp - cp * 0.25;
       const text = ft + " / " + r.ft + " ft" + (too ? " — too far" : "");
       ctx.save();
@@ -633,7 +642,19 @@
       const q = fly ? (k - travel) / (1 - travel) : k, fade = q < 0.6 ? 1 : (1 - q) / 0.4;
       ctx.globalAlpha = Math.max(0, fade) * (miss ? 0.55 : 1);
       const R = cp * 0.9 * big;
-      if (f.style === "slash") {
+      if (f.style === "cone") { // the long sweep: a wide crescent across the cone's full length
+        const [fx0, fy0] = P(f.from), L = f.len * cp, span = 1.0, sweep = Math.min(1, q / 0.45);
+        const a0 = f.dir - span / 2, a1 = a0 + span * sweep;
+        ctx.globalAlpha = Math.max(0, fade) * (miss ? 0.5 : 1);
+        for (const [r, wdt, col] of [[L * 0.98, cp * 0.34 * big, miss ? "rgba(220,220,220,.7)" : "#ff5a3c"], [L * 0.98, cp * 0.16 * big, "#ffffff"], [L * 0.7, cp * 0.08, "rgba(255,255,255,.75)"], [L * 0.42, cp * 0.05, "rgba(255,255,255,.5)"]]) {
+          ctx.strokeStyle = col; ctx.lineWidth = wdt; ctx.lineCap = "round"; ctx.shadowColor = "#ff5a3c"; ctx.shadowBlur = miss ? 0 : cp * 0.5;
+          ctx.beginPath(); ctx.arc(fx0, fy0, r, a0, a1); ctx.stroke();
+        }
+        if (sweep < 1) { // the blade's bright edge at the front of the sweep
+          ctx.fillStyle = "#ffffff"; ctx.shadowBlur = cp * 0.8;
+          ctx.beginPath(); ctx.arc(fx0 + Math.cos(a1) * L * 0.98, fy0 + Math.sin(a1) * L * 0.98, cp * 0.22 * big, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (f.style === "slash") {
         for (let i = 0; i < 3; i++) {
           const s = Math.min(1, Math.max(0, q * 3 - i * 0.35));
           if (!s) continue;
@@ -791,8 +812,8 @@
           nx = Math.max(0, Math.min(this.map.cols - d.token.size, nx)); ny = Math.max(0, Math.min(this.map.rows - d.token.size, ny));
           const r = this.reachOf(d.token); // in a fight: it stops at the edge of the movement box
           if (r) {
-            nx = Math.max(d.token.x - r.squares, Math.min(d.token.x + r.squares, nx));
-            ny = Math.max(d.token.y - r.squares, Math.min(d.token.y + r.squares, ny));
+            nx = Math.max(r.ox - r.squares, Math.min(r.ox + r.squares, nx));
+            ny = Math.max(r.oy - r.squares, Math.min(r.oy + r.squares, ny));
           }
           d.moved = d.moved || Math.abs(nx - d.token.x) > 0.05 || Math.abs(ny - d.token.y) > 0.05;
           d.at = [nx, ny];

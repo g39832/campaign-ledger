@@ -78,10 +78,11 @@ def turn_info(conn, cb_id):
     slowed = zone_slowing(conn, row)
     if slowed and speed:
         speed = int(speed * slowed[1] // 5 * 5)  # inside an enemy's Spirit Guardians: half speed
-    used = done.get("ft", 0)
+    used = done.get("ft", 0) if mine else 0
+    budget = speed * (2 if done.get("dash") else 1)
     return {"cb_id": row["cb_id"], "name": row["name"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
-            "left": max(0, speed * (2 if done.get("dash") else 1) - used) if mine else 0, "held": held,
-            "slowed": slowed[0] if slowed else None}
+            "left": max(0, budget - used) if mine else 0, "budget": budget if mine else 0, "held": held,
+            "slowed": slowed[0] if slowed else None, "from": done.get("from") if mine else None}
 
 
 def held_by(conn, row):
@@ -145,14 +146,17 @@ def _check(conn, md, turn, x0, y0, x1, y1, name):
         raise F.ApiError("Wait for your turn to move" if name is None else f"It's not {name}'s turn — they can move on their turn (or switch on Free move)", status=403)
     if turn["held"]:
         raise F.ApiError((f"You're {turn['held']}" if name is None else f"{name} is {turn['held']}") + " and can't move", status=403, stuck=turn["held"])
-    cost = step_ft(md, x0, y0, x1, y1)
-    if cost > turn["left"]:
-        who = "you have" if name is None else f"{name} has"
-        raise F.ApiError(f"That's {cost} ft, and {who} {turn['left']} ft of movement left this turn"
-                         + ("" if turn["dash"] or turn["left"] else " (Dash for more)"), status=403, left=turn["left"])
+    # measured from where they started this turn: they can drag again to readjust (even back),
+    # as long as they end up within their speed of that spot
+    origin = turn["from"] or [x0, y0]
+    cost = step_ft(md, origin[0], origin[1], x1, y1)
+    if cost > turn["budget"]:
+        who = "you can" if name is None else f"{name} can"
+        raise F.ApiError(f"That's {cost} ft from where {'you' if name is None else 'they'} started this turn, and {who} only go {turn['budget']} ft"
+                         + ("" if turn["dash"] else " (Dash for more)"), status=403, left=turn["left"])
     row = _row(conn, turn["cb_id"])
-    _save(conn, row, dict(_turn(row), ft=turn["used"] + cost))
-    return dict(turn, used=turn["used"] + cost, left=turn["left"] - cost)
+    _save(conn, row, dict(_turn(row), ft=cost, **{"from": origin}))
+    return dict(turn, used=cost, left=turn["budget"] - cost, **{"from": origin})
 
 
 # ---- zones: an area around a caster that stays up (Spirit Guardians) ------------------------

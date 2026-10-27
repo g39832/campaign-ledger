@@ -238,7 +238,7 @@ def player_view(conn, map_id, player):
         if out["movable"]:
             from .movement import fight_turn
             turn = fight_turn(conn, m, t["character_id"])
-            out["movable"] = turn is None or (turn["my_turn"] and turn["left"] > 0)
+            out["movable"] = turn is None or (turn["my_turn"] and turn["budget"] > 0)  # used it all: they can still readjust
         out["own"] = own
         if is_party:
             out.update(hp=t["hp"], max_hp=t["max_hp"], conditions=t["conditions"], character_id=t["character_id"])
@@ -302,7 +302,7 @@ def add_fx(map_id, fx):
     store[map_id] = keep[-40:]
 
 
-def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type=""):
+def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type="", area=None):
     """Show an attack on every map of this fight: from the attacker's token to each target's.
     hits: [(combatant id, how)] with how = hit, crit, miss, saved, failed, auto."""
     from .movement import _token_of
@@ -319,7 +319,7 @@ def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type=
             continue
         add_fx(m["id"], {"name": str(name or "")[:60], "kind": kind or "damage", "type": str(damage_type or "")[:20],
                          "from": [round(a["x"] + a["size"] / 2, 2), round(a["y"] + a["size"] / 2, 2)] if a else None,
-                         "to": to, "how": hows})
+                         "to": to, "how": hows, "area": {"kind": area["kind"], "squares": round(area["size"] / 5, 1)} if area else None})
 
 
 @bp.post("/maps/<int:map_id>/fx")
@@ -332,8 +332,10 @@ def api_fx(map_id):
     if not m["encounter_id"]:
         return jsonify({"pings": recent_pings(map_id)})
     hits = [(int(t["id"]), str(t.get("how") or "hit")[:10]) for t in (data.get("targets") or [])[:20] if isinstance(t, dict) and str(t.get("id", "")).isdigit()]
+    area = data.get("area") if isinstance(data.get("area"), dict) and data["area"].get("kind") in ("cone", "line", "circle", "square") else None
     attack_fx(conn, m["encounter_id"], int(data["by"]) if str(data.get("by", "")).isdigit() else None, hits,
-              data.get("name"), data.get("kind") or "damage", data.get("damage_type") or "")
+              data.get("name"), data.get("kind") or "damage", data.get("damage_type") or "",
+              {"kind": area["kind"], "size": max(5, min(200, int(area.get("size") or 15)))} if area else None)
     return jsonify({"pings": recent_pings(map_id)})
 
 

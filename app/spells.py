@@ -561,11 +561,31 @@ def cast(ctx, caster_id, data, viewer=None):
 
     lines, results = [], []
     melee = bool(re.search(r"\btouch\b|\bmelee\b", sp["notes"], re.I))
+    # an area attack (Wide Slash): ONE attack roll, checked against each one's AC, and one
+    # damage roll for everyone it hits (a natural 20 crits them all)
+    one_roll = lands == "attack" and bool(sp["area"]) and len(people) > 1
+    swing = swing_dmg = None
+    if one_roll:
+        mods = roll_mods(caster["conditions"])
+        swing = roller.roll(with_mods("1d20" + _signed(attack_bonus), mods), sp["name"], mode=attack_mode(caster["conditions"], [], melee)[0])
+        roller.keep(swing, f"{sp['name']} attack (everyone in it)", "attack", caster,
+                    "Natural 20 — hits them all!" if swing["natural"] == 20 else "Natural 1 — misses them all" if swing["natural"] == 1 else f"{swing['total']} to hit")
+        if sp["kind"] == "damage" and sp["dice"]:
+            swing_dmg = roller.roll(with_mods(amount_expr(sp["dice"]), roll_mods(caster["conditions"], "dmg_mod")), sp["name"], crit=swing["natural"] == 20)
+            word = ((sp["damage_type"] + " ") if sp["damage_type"] else "") + "damage"
+            roller.keep(swing_dmg, f"{sp['name']}{at} — {word}" + (" — critical" if swing["natural"] == 20 else ""), "damage", caster,
+                        f"{max(0, swing_dmg['total'])} {word} to each one it hits")
     for t in people:
         t = ctx.combatant(t["id"])
         res = {"id": t["id"], "name": t["name"], "how": "auto", "amount": None, "effect": None, "text": ""}
         landed, crit, how, half = True, False, "", False
-        if lands == "attack":
+        if lands == "attack" and one_roll:
+            nat = swing["natural"]
+            crit = nat == 20
+            landed = crit or (nat != 1 and swing["total"] >= t["ac"])
+            how = f"{swing['total']} vs AC {t['ac']}" + (", natural 20" if crit else ", natural 1" if nat == 1 else "")
+            res.update(how="crit" if crit else "hit" if landed else "miss", roll=swing["total"], vs=t["ac"])
+        elif lands == "attack":
             mode, why = attack_mode(caster["conditions"], t["conditions"], melee)
             mods = roll_mods(caster["conditions"])
             r = roller.roll(with_mods("1d20" + _signed(attack_bonus), mods), sp["name"], mode=mode)
@@ -584,7 +604,9 @@ def cast(ctx, caster_id, data, viewer=None):
                 landed, half = False, sp["kind"] == "damage" and sp["save_half"]
         parts = []
         if sp["kind"] == "damage" and sp["dice"] and (landed or half):
-            if lands == "attack":
+            if lands == "attack" and one_roll:
+                amount = max(0, swing_dmg["total"])
+            elif lands == "attack":
                 expr = with_mods(amount_expr(sp["dice"]), roll_mods(caster["conditions"], "dmg_mod"))
                 d = roller.roll(expr, sp["name"], crit=crit)
                 amount = max(0, d["total"])
@@ -646,7 +668,7 @@ def cast(ctx, caster_id, data, viewer=None):
     ctx.log("spell", head + (": " + "; ".join(lines) if lines else ""))
     from .maps import attack_fx
     attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
-              "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"])
+              "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"], sp["area"] if not sp["zone"] else None)
     return {"cast_id": cast_id, "spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
             "spent": spent, "lands": lands, "targets": results, "summary": head + (": " + "; ".join(lines) if lines else ""),
             "rolls": roller.ids, "concentration": sp["concentration"], "move": move}

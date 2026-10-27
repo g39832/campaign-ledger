@@ -26,7 +26,7 @@
     role: "player",
     imageUrl: (m) => m.image_url,
     canMove: (t) => t.movable && !casting && !using,
-    reach: (t) => (t.own && S && S.character && S.character.move && S.character.move.my_turn ? S.character.move.left : null),
+    reach: (t) => { const mv = t.own && S && S.character && S.character.move; return mv && mv.my_turn ? { budget: mv.held ? 0 : mv.budget, from: mv.from } : null; },
     onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
       if (casting && t && t.character_id) pick(t.character_id);
       else if (using && t) pickFoe(t.combatant_id, t.display);
@@ -306,7 +306,7 @@
   function moveHint(mine, mv) {
     if (mv && !mv.my_turn) return "Wait for your turn to move. ";
     if (mv && mv.held) return "You're " + mv.held + " — you can't move. ";
-    if (mv && mine.movable) return "Drag your token to move: " + mv.left + " of " + mv.speed * (mv.dash ? 2 : 1) + " ft left. ";
+    if (mv && mine.movable) return "Drag your token to move: " + mv.left + " of " + mv.budget + " ft left" + (mv.used ? " (you can still readjust)" : "") + ". ";
     if (mv && !mv.left) return "No movement left this turn" + (mv.dash ? ". " : " (Dash for more). ");
     return mine.movable ? "Drag your token to move. " : "The DM has locked movement. ";
   }

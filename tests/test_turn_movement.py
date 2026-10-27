@@ -34,7 +34,7 @@ def test_only_on_your_turn_and_only_your_speed(api, battlemap):
     assert not tok(pa.get("/api/play/state")["map"], "Aria")["movable"]
     to_turn(api, eid, "Aria")
     st = pa.get("/api/play/state")
-    assert st["character"]["move"] == {"my_turn": True, "speed": 30, "used": 0, "dash": False, "left": 30, "held": None}
+    assert st["character"]["move"] == {"my_turn": True, "speed": 30, "used": 0, "dash": False, "left": 30, "held": None, "budget": 30, "from": None}
     assert tok(st["map"], "Aria")["movable"] is True
     r = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 7, "y": 0}, 403)        # 35 ft
     assert "35 ft" in r["error"] and "30 ft" in r["error"]
@@ -43,7 +43,7 @@ def test_only_on_your_turn_and_only_your_speed(api, battlemap):
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 7, "y": 4}, 403)            # 15 ft, only 10 left
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 6, "y": 4})
     st = pa.get("/api/play/state")
-    assert st["character"]["move"]["left"] == 0 and tok(st["map"], "Aria")["movable"] is False
+    assert st["character"]["move"]["left"] == 0 and tok(st["map"], "Aria")["movable"] is True  # used it all, can still readjust
     # Dash: another 30 ft, once
     pa.post("/api/play/me/dash", {})
     assert pa.get("/api/play/state")["character"]["move"]["left"] == 30
@@ -51,7 +51,7 @@ def test_only_on_your_turn_and_only_your_speed(api, battlemap):
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 12, "y": 4})
     # the DM's map follows the same rules in a fight; Free move ignores them
     err = api.post(f"/api/tokens/{me['id']}/move", {"x": 25, "y": 0}, 403)
-    assert "Aria has" in err["error"]
+    assert "Aria can only go" in err["error"]
     api.post(f"/api/tokens/{me['id']}/move", {"x": 25, "y": 0, "free": True})
     # next round: a fresh 30 ft
     to_turn(api, eid, "Bandit 1")
@@ -145,3 +145,21 @@ def test_held_in_place_means_no_movement_anywhere(api, battlemap):
     api.post(f"/api/combatants/{b1['id']}/conditions", {"name": "Restrained"})
     bt = tok(api.get(f"/api/maps/{mid}"), "Bandit 1")
     api.post(f"/api/tokens/{bt['id']}/move", {"x": bt["x"] - 1, "y": bt["y"]}, 403)
+
+
+def test_they_can_readjust_after_placing_themselves(api, battlemap):
+    """Movement is measured from where they started their turn: dragging again to fix the spot
+    (even back toward the start) is fine, as long as they end within their speed of it."""
+    pa, eid = battlemap["pa"], battlemap["eid"]
+    me = setup(api, battlemap)
+    to_turn(api, eid, "Aria")
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 6, "y": 0})                 # 30 ft: all of it
+    st = pa.get("/api/play/state")
+    assert st["character"]["move"]["left"] == 0 and tok(st["map"], "Aria")["movable"] is True, "she can still readjust"
+    r = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 3, "y": 2})             # changed her mind: 15 ft from the start
+    assert r["move"]["left"] == 15 and r["move"]["from"] == [0, 0]
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 6, "y": 6})                 # 30 ft from the start (diagonal)
+    err = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 7, "y": 6}, 403)      # 35 ft from the start: too far
+    assert "35 ft from where you started this turn" in err["error"]
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 0, "y": 0})                 # all the way back: fine
+    assert pa.get("/api/play/state")["character"]["move"]["left"] == 30

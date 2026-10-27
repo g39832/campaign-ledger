@@ -13,7 +13,7 @@
     role: "dm",
     imageUrl: (m) => (m.image ? "/api/uploads/" + m.image : null),
     // in a fight, dragging whoever's turn it is shows how far they can still go (not with Free move)
-    reach: (t) => (!freeMove && S && S.move && t.combatant_id === S.move.cb_id ? S.move.left : null),
+    reach: (t) => (!freeMove && S && S.move && t.combatant_id === S.move.cb_id ? { budget: S.move.budget, from: S.move.from } : null),
     onSelect: (t) => {
       if (aim) { aimAt(t); view.selectedId = selectedToken; view.draw(); return; } // picking a target, not a new token
       selectedToken = t ? t.id : null; renderSelected(); renderTokens();
@@ -467,7 +467,7 @@
   const areaText = (ar) => ar.size + " ft " + SHAPE_WORD[ar.kind] + (ar.range ? " · range " + ar.range + " ft" : "");
   /* Area attacks (Wide Slash: 10 ft cone, range 20): the area appears by the attacker pointing
      at the nearest enemy; drag on the map to aim it (it can't go past the range), see who's
-     caught, then Confirm. Everyone in it rolls to hit (house rule) and takes the damage. */
+     caught, then Confirm. One attack roll against each one's AC (house rule), one damage roll for all it hits. */
   function startAim(c, a) {
     const me = S.tokens.find((t) => t.combatant_id === c.id);
     if (!me) { toast("Put " + c.name + " on the map first.", "error"); return; }
@@ -505,20 +505,23 @@
     if (a.cast) { castNow(c, a, targets.map((x) => x.id)); return; }
     view.aim = null; aim = null; setTool("select"); renderSelected();
     useMove(c, a);
+    // one attack roll for the whole area, checked against each one's AC; one damage roll
+    let swing = null;
+    if (a.toHit) { swing = await a.toHit(); if (!swing) return; }
+    const nat = swing && swing.result && swing.result.natural;
     let amount = null;
-    if (a.dmg) { const d = await a.dmg(false); if (!d) return; amount = Math.max(0, d.total); }
+    if (a.dmg) { const d = await a.dmg(nat === 20 && !a.heal); if (!d) return; amount = Math.max(0, d.total); }
     const lines = [], hits = [];
     for (const target of targets) {
       let how = "", crit = false;
-      if (a.toHit) {
-        const r = await rollToHit(a, target);
-        if (!r) continue;
-        if (!r.hit) { lines.push("missed " + target.name + " (" + r.text + ")"); hits.push([target.id, "miss"]); continue; }
-        how = " (" + r.text + ")"; crit = r.crit;
+      if (swing) {
+        crit = nat === 20;
+        const hit = crit || (nat !== 1 && swing.total >= target.ac), text = swing.total + " vs AC " + target.ac + (nat === 1 ? ", natural 1" : crit ? ", natural 20" : "");
+        if (!hit) { lines.push("missed " + target.name + " (" + text + ")"); hits.push([target.id, "miss"]); continue; }
+        how = " (" + text + ")";
       }
       hits.push([target.id, crit ? "crit" : "hit"]);
-      let n = amount;
-      if (crit && a.dmg && !a.heal) { const d = await a.dmg(true); if (d) n = Math.max(0, d.total); }
+      const n = amount;
       if (a.effect) putEffect(c, target, a.effect);
       if (n != null) {
         await hpTo(target, a.heal ? "heal" : "damage", n, c);
@@ -540,7 +543,7 @@
   }
   // everyone watching sees the attack: a slash, a bite, a fire bolt... (how: hit, crit, miss, saved)
   function showFx(c, a, hits) {
-    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", targets: hits.map(([id, how]) => ({ id, how })) })
+    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", area: a.aimArea || null, targets: hits.map(([id, how]) => ({ id, how })) })
       .then((d) => view.setPings(d.pings)).catch(() => { /* the animation is a nicety */ });
   }
   function useMove(c, a) {
@@ -685,7 +688,7 @@
         : h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Nobody's in it yet."),
       a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, [L.spellWhat(a.cast.spell), L.spellLands(a.cast.spell, c.spellcasting, toHitRule())].filter(Boolean).join(" · ")) : null,
       a.cast ? slotPicker(c, a.cast.spell) : null,
-      a.toHit && !a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "Each one rolls a d20 against their AC; a hit takes the damage (a natural 20 doubles the dice).") : null,
+      a.toHit && !a.cast ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.85rem" }, "One attack roll, checked against each one's AC; everyone it hits takes the same damage (a natural 20 crits them all).") : null,
       h("div", { class: "row", style: "gap:8px" },
         h("button", { type: "button", class: "btn btn-primary", disabled: !inArea.length && !(a.cast && a.cast.spell.terrain), onclick: confirmAim }, icon("check", "sm"),
           " Confirm" + (inArea.length && !(a.cast && a.cast.spell.terrain) ? " · " + inArea.length : "")),
