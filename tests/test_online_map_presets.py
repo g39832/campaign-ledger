@@ -93,10 +93,16 @@ def test_pings_from_dm_and_players(app, api, camp):
     api.post(f"/api/maps/{mid}/ping", {"x": 1, "y": 1})
     assert [x["by"] for x in api.get(f"/api/maps/{mid}")["pings"]] == ["Sam", "DM"]
     assert [x["by"] for x in p.get("/api/play/state")["map"]["pings"]] == ["Sam", "DM"]
-    for _ in range(5):
-        p.post("/api/play/ping", {"x": 1, "y": 1})
-    assert len([x for x in api.get(f"/api/maps/{mid}")["pings"] if x["by"] == "Sam"]) == 3, "no spamming"
-    p.post("/api/play/ping", {"x": 999, "y": 1}, 400)
+    p.post("/api/play/ping", {"x": 1, "y": 1}, 429)  # a cooldown between a player's pings
+    import app.play as play
+    play.PING_COOLDOWN, keep = 0, play.PING_COOLDOWN
+    try:
+        for _ in range(5):
+            p.post("/api/play/ping", {"x": 1, "y": 1})
+        assert len([x for x in api.get(f"/api/maps/{mid}")["pings"] if x["by"] == "Sam"]) == 3, "no spamming"
+        p.post("/api/play/ping", {"x": 999, "y": 1}, 400)
+    finally:
+        play.PING_COOLDOWN = keep
 
 
 def test_tunnel_visitors_are_not_the_dm_and_are_rate_limited_separately(app, api, camp):

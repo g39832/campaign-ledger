@@ -95,6 +95,10 @@ def player(app, api, hero):
 
 def test_players_update_their_own_character(api, player):
     camp, h, p = player
+    p.post("/api/play/me/hp", {"op": "heal", "amount": 4}, 403)                 # off unless the DM allows it
+    settings = camp["settings"]
+    settings["players"]["edit_hp"] = True
+    api.patch(f"/api/campaigns/{camp['id']}", {"changes": {"settings": {"to": settings}}})
     assert p.post("/api/play/me/hp", {"op": "heal", "amount": 4})["character"]["current_hp"] == 14
     assert p.post("/api/play/me/hp", {"op": "set", "hp": 12, "max_hp": 999})["character"]["max_hp"] == 40, "players can't change max HP"
     assert api.get(f"/api/characters/{h['id']}")["character"]["current_hp"] == 12

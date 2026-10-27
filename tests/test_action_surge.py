@@ -30,8 +30,8 @@ def test_surge_counts_down_and_ends_with_the_turn(api, battlemap):
     s = surge_of(st)
     assert s["extra_moves"] == 2 and s["name"] == "Action Surge"
     assert any("Aria uses Action Surge: 2 extra moves this turn" in e["message"] for e in st["log"])
-    # attack rolls are moves: two of them use both extra moves
-    for left in (1, 0):
+    # attack rolls are moves: the usual two come first, then the two extra
+    for left in (2, 2, 1, 0):
         api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "combatant_id": aria["id"]}}, 201)
         assert surge_of(api.get(f"/api/encounters/{eid}"))["extra_moves"] == left
     # the damage roll of an attack that has a to-hit isn't another move
@@ -52,8 +52,9 @@ def test_surge_counts_casts_too(api, battlemap):
     eid, by = setup(api, battlemap)
     api.post(f"/api/combatants/{by['Aria']['id']}/surge", {"index": 1})
     spec = {"name": "Shove", "effect": "debuff", "condition": "Prone", "hit": "attack", "attack_bonus": 5, "move": True}
-    st = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": spec, "targets": [by["Bandit 1"]["id"]]})
-    assert surge_of(st)["extra_moves"] == 1
+    for left in (2, 2, 1):
+        st = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": spec, "targets": [by["Bandit 1"]["id"]]})
+        assert surge_of(st)["extra_moves"] == left
 
 
 def test_player_surges_only_on_their_turn(api, battlemap):
@@ -66,9 +67,57 @@ def test_player_surges_only_on_their_turn(api, battlemap):
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
     r = pa.post("/api/play/me/surge", {"index": 1})
     assert any("2 extra moves left" in c for c in r["character"]["conditions"])
-    pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": battlemap["a"]["id"]}}, 201)
+    for _ in range(3):
+        pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": battlemap["a"]["id"]}}, 201)
     me = pa.get("/api/play/state")["character"]
     assert any("1 extra move left" in c for c in me["conditions"])
+    assert me["actions"] == {"used": 3, "limit": 4, "left": 1, "extra": 2}
+    pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": battlemap["a"]["id"]}}, 201)
+    err = pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": battlemap["a"]["id"]}}, 403)
+    assert "4 actions" in err["error"]
+
+
+def test_two_actions_a_turn_without_surge(api, battlemap):
+    eid, by = setup(api, battlemap)
+    pa, aid = battlemap["pa"], battlemap["a"]["id"]
+    assert pa.get("/api/play/state")["character"]["actions"] == {"used": 0, "limit": 2, "left": 2, "extra": 0}
+    for _ in range(2):
+        pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": aid}}, 201)
+    pa.post("/api/rolls", {"check": {"type": "damage", "key": 0, "character_id": aid}}, 201)   # damage of a hit isn't an action
+    err = pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": aid}}, 403)
+    assert "2 actions" in err["error"] and "Action Surge" in err["error"]
+    pa.post("/api/play/me/disengage", {}, 403)                                               # Disengage is an action too
+    # the DM can still roll for her
+    api.post("/api/rolls", {"check": {"type": "attack", "key": 0, "combatant_id": by["Aria"]["id"]}}, 201)
+    # Action Surge on top: two more
+    pa.post("/api/play/me/surge", {"index": 1})
+    pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": aid}}, 201)
+    # her next turn: two again
+    for _ in range(3):
+        api.post(f"/api/encounters/{eid}/next")
+    assert pa.get("/api/play/state")["character"]["actions"]["left"] == 2
+
+
+def test_players_roll_only_on_their_turn(api, battlemap):
+    eid, by = setup(api, battlemap)
+    pa, aid = battlemap["pa"], battlemap["a"]["id"]
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
+    for check in ({"type": "ability", "key": "str"}, {"type": "skill", "key": "athletics"}, {"type": "attack", "key": 0}):
+        err = pa.post("/api/rolls", {"check": dict(check, character_id=aid)}, 403)
+        assert "not your turn" in err["error"]
+    pa.post("/api/rolls", {"expression": "1d20"}, 403)
+    for check in ({"type": "save", "key": "dex"}, {"type": "initiative"}):                 # these come on anyone's turn
+        pa.post("/api/rolls", {"check": dict(check, character_id=aid)}, 201)
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
+    pa.post("/api/rolls", {"check": {"type": "skill", "key": "athletics", "character_id": aid}}, 201)
+    pa.post("/api/rolls", {"expression": "1d20"}, 201)
+
+
+def test_players_cant_change_their_own_hp(api, battlemap):
+    pa = battlemap["pa"]
+    assert pa.get("/api/play/state")["character"]["can"]["edit_hp"] is False
+    for op in ({"op": "damage", "amount": 5}, {"op": "heal", "amount": 5}, {"op": "set", "hp": 1}):
+        pa.post("/api/play/me/hp", op, 403)
 
 
 def test_a_row_without_extra_moves_cant_surge(api, battlemap):

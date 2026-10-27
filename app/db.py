@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 MIGRATIONS = {
     1: """
@@ -349,6 +349,10 @@ MIGRATIONS = {
     # v6: monsters can have spells (one per line, like their attacks).
     6: """
     ALTER TABLE creatures ADD COLUMN spells TEXT NOT NULL DEFAULT '';
+    """,
+    # v7: how far each hero has moved this turn (players move only as far as their speed).
+    7: """
+    ALTER TABLE combatants ADD COLUMN moved TEXT NOT NULL DEFAULT '';
     """,
 }
 

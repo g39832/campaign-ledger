@@ -10,6 +10,8 @@
     ["nature", "Nature"], ["perception", "Perception"], ["performance", "Performance"], ["persuasion", "Persuasion"], ["religion", "Religion"],
     ["sleight_of_hand", "Sleight of Hand"], ["stealth", "Stealth"], ["survival", "Survival"]];
   let S = null, stamp = "", mapStamp = "";
+  const PING_COOLDOWN_MS = 5000;
+  let lastPing = 0;
   let casting = null; // { spell, chosen: Set of character ids, slot, busy, result } while the player picks who a spell is for
 
   try { const t = localStorage.getItem("player-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
@@ -25,6 +27,10 @@
     canMove: (t) => t.movable && !casting,
     onSelect: (t) => { if (casting && t && t.character_id) pick(t.character_id); }, // tap a token to cast on them
     onPing: async (x, y) => {
+      // one ping every few seconds (the server keeps the same cooldown)
+      const wait = Math.ceil((lastPing + PING_COOLDOWN_MS - Date.now()) / 1000);
+      if (wait > 0) { toast("Wait " + wait + " s before pinging again.", "error"); return; }
+      lastPing = Date.now();
       try { const d = await api("POST", "/api/play/ping", { x, y }); view.setPings(d.pings); if (window.FX) FX.sound("ping"); }
       catch (e) { toast(e.message, "error"); }
     },
@@ -163,6 +169,32 @@
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; render(); } });
 
+  // in a fight: your own turn only, as far as your speed
+  function moveHint(mine, mv) {
+    if (mv && !mv.my_turn) return "Wait for your turn to move. ";
+    if (mv && mine.movable) return "Drag your token to move: " + mv.left + " of " + mv.speed * (mv.dash ? 2 : 1) + " ft left. ";
+    if (mv && !mv.left) return "No movement left this turn" + (mv.dash ? ". " : " (Dash for more). ");
+    return mine.movable ? "Drag your token to move. " : "The DM has locked movement. ";
+  }
+  // your moves, shown like the DM's move cards on the map: what each one does, then its buttons
+  function moveCard(ic, name, info, ...kids) {
+    return h("div", { class: "fight-act move-card" }, icon(ic, "sm"), h("b", null, name),
+      info ? h("span", { class: "faint move-info" }, info) : null, h("div", { class: "move-btns" }, kids));
+  }
+  const attackInfo = (a) => [a.bonus ? "attack roll " + a.bonus : "", a.damage, a.extra_moves ? "+" + a.extra_moves + " extra moves this turn" : "",
+    a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : ""].filter(Boolean).join(" · ");
+  const spellInfo = (s, c, d) => { const v = L.spellView(s), ar = v.area && v.area.size ? v.area : null;
+    return [v.aura ? "" : L.levelWord(v), ar ? ar.size + " ft " + (ar.kind || "") + (ar.range ? " · range " + ar.range + " ft" : "") : "", L.spellWhat(v),
+      L.spellLands(v, d.spell || (v.dc ? { dc: v.dc } : null), c.roll_to_hit), v.cooldown ? v.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · "); };
+
+  async function dash() {
+    const d = await me("dash", {});
+    if (!d) return;
+    toast("Dashed: you can move " + d.character.move.left + " ft this turn.", "ok");
+    if (window.FX) { FX.float($("#me"), "Dash", "ac"); FX.sound("ac"); }
+    setPTool("select");
+  }
+
   async function disengage() {
     const d = await me("disengage", {});
     if (!d) return;
@@ -184,7 +216,7 @@
       const mine = S.mapTokens.find((t) => t.own);
       if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
-      else if (view.tool === "select") $("#hint").textContent = (mine ? (mine.movable ? "Drag your token to move. " : "The DM has locked movement. ") : "Drag to look around. ") + "Double-tap to ping.";
+      else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
@@ -223,6 +255,8 @@
           h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "initiative" }, ev) }, icon("dice-5", "sm"), " Initiative " + signed(d.initiative)),
           c.current_hp === 0 && !["dead", "stable"].includes(c.status) ? h("button", { type: "button", class: "btn btn-sm btn-primary",
             title: "10 or more is a success. A friend standing right next to you on the map gives you a bonus.", onclick: () => me("death-save", {}) }, icon("dice-5", "sm"), " Roll death save") : null,
+          c.move && c.move.my_turn ? h("button", { type: "button", class: "btn btn-sm" + (c.move.dash ? " is-armed" : ""), disabled: c.move.dash,
+            title: "Double your movement this turn", onclick: dash }, icon("zap", "sm"), c.move.dash ? " Dashed" : " Dash") : null,
           c.in_fight ? h("button", { type: "button", class: "btn btn-sm" + (c.disengaged ? " is-armed" : ""), disabled: c.disengaged,
             title: "Move away this turn without opportunity attacks", onclick: disengage }, icon("compass", "sm"), c.disengaged ? " Disengaged — move away" : " Disengage") : null,
           d.spell ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell_attack" }, ev) }, "Spell attack " + signed(d.spell.attack)) : null),
@@ -230,13 +264,12 @@
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"),
           c.my_turn === false ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Attacks unlock on your turn.") : null,
-          ...c.attacks.map((a) => a.recharging ? h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
-          h("b", { class: "grow" }, a.name || "Attack"),
+          c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
+            c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
+          ...c.attacks.map((a) => a.recharging ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
           h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, a.recharging - (c.my_turn ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
-          : c.my_turn === false ? h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
-          h("b", { class: "grow" }, a.name || "Attack"), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
-          : h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
-          h("b", { class: "grow" }, a.name || "Attack"),
+          : c.my_turn === false ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
+          : moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
           a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
           a.extra_moves || a.stance > 1 ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On yourself, for the rest of your turn",
             onclick: () => me("surge", { index: a.index }).then((d) => {
@@ -251,8 +284,7 @@
             a.heal ? "Heal" : a.dmg_mult > 1 ? "Dmg ×" + a.dmg_mult : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
           casting ? castBox() : null,
-          ...c.spells.map((s) => h("div", { class: "roll-row", style: "align-items:center;margin-bottom:4px" },
-          h("b", { class: "grow" }, s.name),
+          ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
           s.kind === "damage" && s.dice ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,

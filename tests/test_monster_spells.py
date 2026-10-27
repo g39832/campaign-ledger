@@ -56,8 +56,9 @@ def test_migration_to_v6_adds_monster_spells(data_dir):
     path = os.path.join(data_dir, "dnd_tracker.sqlite3")
     conn = sqlite3.connect(path)
     conn.execute("ALTER TABLE creatures DROP COLUMN spells")
+    conn.execute("ALTER TABLE combatants DROP COLUMN moved")
     conn.execute("PRAGMA user_version = 5")
     conn.commit(); conn.close()
     api = Api(create_app({"DATA_DIR": data_dir}).test_client())
-    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == appdb.SCHEMA_VERSION == 6
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == appdb.SCHEMA_VERSION >= 6
     api.post("/api/creatures", {"name": "Bat", "max_hp": 1, "ac": 12, "spells": "Screech 1d4"}, 201)

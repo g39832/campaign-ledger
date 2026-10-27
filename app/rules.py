@@ -64,7 +64,7 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "ally_death_save_bonus": 2,  # house rule: a downed hero with an ally standing next to them adds this to death saves  # every attack and harmful spell rolls d20 + bonus against the target's AC (house rule; off = saves)
     },
     "players": {
-        "edit_hp": True,      # players may apply damage/healing/temp HP to their own character
+        "edit_hp": False,     # players may apply damage/healing/temp HP to their own character (the DM's call)
         "spend_slots": True,  # players may spend and regain their own spell slots
         "hit_dice": True,     # players may spend hit dice (short rest healing)
         "cast_spells": True,  # players may cast their healing and buff spells on the party

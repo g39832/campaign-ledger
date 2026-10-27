@@ -513,6 +513,8 @@ def _tick(ctx, owner_id, phase):
 
 def on_turn(ctx, cid, phase):
     from .spells import on_turn as spell_turn
+    if phase == "start":  # a fresh turn: full movement and actions again
+        ctx.conn.execute("UPDATE combatants SET moved = '' WHERE id = ?", (cid,))
     spell_turn(ctx, cid, phase)
 
 
@@ -732,10 +734,15 @@ def surge(ctx, cid, index, by_player=False):
 
 
 def used_a_move(ctx, cid, what):
-    """A move was made: if they have extra moves from Action Surge, one is spent."""
+    """A move was made on their own turn: one of their actions is used, and once the usual
+    two are gone, one of Action Surge's extra moves."""
+    from .movement import ACTIONS_PER_TURN, spend_action
     try:
         c = ctx.combatant(cid)
     except F.NotFound:
+        return
+    n = spend_action(ctx.conn, cid)
+    if n is None or n <= ACTIONS_PER_TURN:
         return
     conds = c["conditions"]
     x = next((k for k in conds if k.get("extra_moves") is not None and not k.get("expired")

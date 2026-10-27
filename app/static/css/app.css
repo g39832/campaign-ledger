@@ -1248,3 +1248,11 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 
 /* an aura switch (a magic item): clearly on or off */
 .aura-btn.is-on { font-weight: 700; }
+
+/* a player's own moves on their phone, laid out like the DM's move cards */
+.move-card { cursor: default; margin-bottom: 6px; }
+.move-card:hover { border-color: var(--line-strong, var(--line)); background: var(--raised, transparent); }
+.move-card .move-info { margin-left: 0; flex-basis: 100%; }
+.move-card .move-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex-basis: 100%; }
+.move-card .move-btns:empty { display: none; }
+.actions-left.is-out { color: var(--hp-low, #c44); }

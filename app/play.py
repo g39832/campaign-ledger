@@ -4,6 +4,7 @@ Every response in this module is built for a player: no DM notes, no hidden
 combatants or tokens, nothing under fog of war, no other campaign's data.
 """
 import json
+import math
 import secrets
 import socket
 import time
@@ -186,6 +187,16 @@ def _own_character(conn, char_id):
         s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and s["cooldown"] else 0
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
+    out["move"] = None
+    out["actions"] = None
+    if fight is not None:
+        from .movement import actions
+        out["actions"] = actions(conn, fight["cb_id"])
+    live = conn.execute("SELECT m.* FROM campaigns ca JOIN maps m ON m.id = ca.live_map_id WHERE ca.id = ?", (c["campaign_id"],)).fetchone()
+    if live is not None:
+        from .movement import fight_turn
+        turn = fight_turn(conn, map_dict(live), char_id)
+        out["move"] = turn and {k: turn[k] for k in ("my_turn", "speed", "used", "dash", "left")}
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
                                    "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign
@@ -278,9 +289,14 @@ def api_move(token_id):
             raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
         if blocked_path(md, t["size"], t["x"], t["y"], x, y):
             raise F.ApiError("Solid rock is in the way — you can't move there", status=403)
+        from .movement import check_move
+        turn = check_move(conn, md, owner, t["x"], t["y"], x, y)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         _bump(conn, m["id"])
-    return jsonify({"ok": True, "x": x, "y": y})
+    return jsonify({"ok": True, "x": x, "y": y, "move": turn})
+
+
+PING_COOLDOWN = 5  # seconds between one player's pings
 
 
 @bp.post("/api/play/ping")
@@ -295,6 +311,11 @@ def api_play_ping():
         raise F.ApiError("There's no map shared right now")
     m = map_dict(conn.execute("SELECT * FROM maps WHERE id = ?", (camp["live_map_id"],)).fetchone())
     x, y = _ping_xy(data, m)
+    last = current_app.extensions.setdefault("ping_last", {})
+    wait = PING_COOLDOWN - (time.time() - last.get(ident["id"], 0))
+    if wait > 0:
+        raise F.ApiError(f"Wait {math.ceil(wait)} s before pinging again", status=429, wait=round(wait, 1))
+    last[ident["id"]] = time.time()
     add_ping(m["id"], x, y, ident["name"], "#8fd3ff")
     return jsonify({"pings": recent_pings(m["id"])})
 
@@ -387,7 +408,7 @@ def api_me_death():
 def api_me_death_save():
     from .rest import death_save
     from .rolls import roll_dict
-    ident, char_id = _own("edit_hp")
+    ident, char_id = _own(None)  # rolling a death save isn't changing your own HP
     data = request.get_json(silent=True) or {}
     with tx() as conn:
         roll_id = death_save(conn, ident, char_id, data.get("op_id"))
@@ -464,6 +485,24 @@ def api_me_surge():
     return jsonify({"character": _own_character(get_db(), char_id)})
 
 
+@bp.post("/api/play/me/dash")
+def api_me_dash():
+    """The Dash action: twice their speed to move this turn."""
+    from .movement import dash
+    from .rest import active_combatant
+    ident, char_id = _own(None)
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("Dash is for fights, and there's no fight running")
+        dash(conn, cb["id"])
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
 @bp.post("/api/play/me/disengage")
 def api_me_disengage():
     """The Disengage action: Disengaged until the end of their own turn, then it
@@ -475,7 +514,12 @@ def api_me_disengage():
         cb = active_combatant(conn, char_id)
         if cb is None:
             raise F.ApiError("Disengage is for fights, and there's no fight running")
+        from .movement import check_action, spend_action
         ctx = Ctx(conn, cb["encounter_id"])
+        if ctx.enc["status"] == "active" and ctx.enc["current_id"] != cb["id"]:
+            raise F.ApiError("Disengage is for your own turn", status=403)
+        check_action(conn, cb["id"], "Disengage")
+        spend_action(conn, cb["id"])
         add_conditions(ctx, [cb["id"]], DISENGAGED, rounds=1, note="No opportunity attacks while moving this turn", auto_expire=True)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
         live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
@@ -533,6 +577,8 @@ def api_me_cast():
                     cbs[t] = row["id"]
         if mine and len(cbs) == len(targets):
             ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
+            from .movement import check_action
+            check_action(conn, mine["id"], "spells")
             result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [cbs[t] for t in targets], "slot": data.get("slot")}, ident)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         else:
@@ -568,6 +614,8 @@ def _summon_from_phone(ident, char_id, index, data):
         ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
         if ctx.enc["current_id"] != mine["id"]:
             raise F.ApiError("You can cast it on your own turn", status=403)
+        from .movement import check_action
+        check_action(conn, mine["id"], "spells")
         result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [], "slot": data.get("slot")}, ident)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
         live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]

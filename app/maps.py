@@ -215,6 +215,10 @@ def player_view(conn, map_id, player):
         out = {k: t[k] for k in ("id", "kind", "x", "y", "size", "color", "display", "is_current", "portrait")}
         out["status"] = t["status"] if t["status"] in ("dead", "defeated", "unconscious", "fled") else None
         out["movable"] = own and (bool(m["players_can_move"]) or _disengaged(conn, t["character_id"]))
+        if out["movable"]:
+            from .movement import fight_turn
+            turn = fight_turn(conn, m, t["character_id"])
+            out["movable"] = turn is None or (turn["my_turn"] and turn["left"] > 0)
         out["own"] = own
         if is_party:
             out.update(hp=t["hp"], max_hp=t["max_hp"], conditions=t["conditions"], character_id=t["character_id"])
