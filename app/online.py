@@ -9,7 +9,6 @@ Requests that arrive through the tunnel carry Cloudflare's headers, so they are
 never treated as the DM (see auth.is_local_request); friends join with the
 campaign's join code like they would on Wi-Fi.
 """
-import atexit
 import os
 import re
 import shutil
@@ -49,24 +48,8 @@ def _running():
     return p is not None and p.poll() is None
 
 
-def _read(proc):
-    for line in iter(proc.stdout.readline, ""):
-        line = line.strip()
-        if not line:
-            continue
-        with _lock:
-            _state["lines"] = (_state["lines"] + [line])[-40:]
-            m = URL_RE.search(line)
-            if m and not _state["url"]:
-                _state["url"] = m.group(0)
-            if "failed" in line.lower() and "error" in line.lower() and not _state["url"]:
-                _state["error"] = line[-300:]
-    with _lock:
-        if _state["proc"] is proc and not _state["url"] and not _state["error"]:
-            _state["error"] = "The tunnel stopped before it got an address. Check your internet connection and try again."
-
-
-METRICS_PORTS = range(20241, 20246)  # where cloudflared answers questions about itself, on this computer only
+# where cloudflared answers questions about itself, on this computer only ("20241-20245")
+METRICS_PORTS = range(*(lambda a, b: (int(a), int(b) + 1))(*os.environ.get("DND_TUNNEL_PORTS", "20241-20245").split("-")))
 _seen = {"at": 0.0, "found": None}
 
 
@@ -107,6 +90,11 @@ def status():
         old = left_running()
         if old:
             out.update(running=True, url=old[0], error=None, kept=True)
+    elif not out["url"]:
+        found = left_running()
+        if found:
+            with _lock:
+                _state["url"] = out["url"] = found[0]
     return out
 
 
@@ -136,7 +124,7 @@ def stop_left_running():
     _seen.update(at=0.0, found=None)
 
 
-atexit.register(stop)
+# No stop when the app exits: the tunnel outlives an app restart on purpose. Stop on the Players page ends it.
 
 
 def _dm_only():
@@ -159,20 +147,44 @@ def api_start():
     if not _running() and left_running():  # still up from before a restart: same link
         return jsonify(status() | {"already": True})
     with _lock:
-        if _running():
-            return jsonify(status() | {"already": True})
+        if _running() or _state.get("starting"):
+            busy = True
+        else:
+            busy, _state["starting"] = False, True
+    if busy:
+        return jsonify(status() | {"already": True})
+    try:
         port = current_app.config.get("PORT", 5050)
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                text=True, encoding="utf-8", errors="replace", creationflags=flags)
-        _state.update(proc=proc, url=None, error=None, started=time.time(), lines=[])
-    threading.Thread(target=_read, args=(proc,), daemon=True).start()
-    # Usually the address shows up within a few seconds; the page keeps asking after this.
-    for _ in range(40):
+        # On its own (not tied to this app's window or output), so the tunnel and its link keep
+        # going when the app restarts for an update. It writes to a log file; the link comes from
+        # cloudflared itself (see left_running).
+        log = os.path.join(current_app.config.get("DATA_DIR", "."), "cloudflared.log")
+        flags = 0
+        if os.name == "nt":
+            flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+        args = [exe, "tunnel", "--no-autoupdate", "--logfile", log, "--url", f"http://127.0.0.1:{port}"]
+        try:
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, creationflags=flags)
+        except OSError:  # not allowed to break away from the app's job: start it plainly
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                                    creationflags=flags & ~getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0))
         with _lock:
-            if _state["url"] or _state["error"] or proc.poll() is not None:
-                break
+            _state.update(proc=proc, url=None, error=None, started=time.time(), lines=[], log=log)
+    finally:
+        with _lock:
+            _state["starting"] = False
+    # Usually the address shows up within a few seconds; the page keeps asking after this.
+    for _ in range(60):
+        if proc.poll() is not None:
+            with _lock:
+                _state["error"] = "The tunnel stopped before it got an address. Check your internet connection and try again."
+            break
+        _seen["at"] = 0.0
+        found = left_running()
+        if found:
+            with _lock:
+                _state["url"] = found[0]
+            break
         time.sleep(0.25)
     return jsonify(status())
 
