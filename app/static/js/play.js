@@ -26,7 +26,10 @@
     role: "player",
     imageUrl: (m) => m.image_url,
     canMove: (t) => t.movable && !casting && !using,
-    reach: (t) => { const mv = t.own && S && S.character && S.character.move; return mv && mv.my_turn ? { budget: mv.held ? 0 : mv.budget, from: mv.from } : null; },
+    reach: (t) => {
+      const k = t.pet && acting(), mv = k && k.id === t.combatant_id ? k.move : t.own && S && S.character && S.character.move;
+      return mv && mv.my_turn ? { budget: mv.held ? 0 : mv.budget, from: mv.from } : null;
+    },
     onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
       if (casting && t && t.character_id) pick(t.character_id);
       else if (using && !using.aim && t) pickFoe(t.combatant_id, t.display);
@@ -153,11 +156,14 @@
   // and any effect, and says what happened. Never at yourself or your party.
   const foes = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind === "enemy" && !["dead", "defeated", "fled"].includes(o.status));
   // friendly fire: teammates (and allies like Yamato's clone) can be hit too, never yourself
-  const myCb = () => { const e = S.encounter, me = S.character; return e && me ? (e.order.find((o) => o.character_id === me.id) || {}).id : null; };
+  const myCb = () => { const k = acting(); if (k) return k.id; const e = S.encounter, me = S.character; return e && me ? (e.order.find((o) => o.character_id === me.id) || {}).id : null; };
   const teammates = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind !== "enemy" && o.id !== myCb() && !["dead", "defeated", "fled"].includes(o.status));
+  // their clone, when it's the clone's turn: they run it (move it, its attacks, end its turn)
+  const acting = () => (S && S.character && (S.character.clones || []).find((k) => k.my_turn)) || null;
+  const actorToken = () => { const k = acting(), toks = (S && S.mapTokens) || []; return k ? toks.find((t) => t.combatant_id === k.id) : toks.find((t) => t.own); };
   function startUse(what, index, name, single, max, reach) {
     casting = null;
-    using = { what, index, name, single, max: max || 0, reach: reach || null, chosen: new Set(), busy: false, result: null };
+    using = { what, index, name, single, max: max || 0, reach: reach || null, chosen: new Set(), busy: false, result: null, as: acting() ? acting().id : null };
     render();
     const box = $("#use-box");
     if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -182,7 +188,7 @@
   }
   // a physical move reaches enemies right next to you: feet to them on the map (null: can't tell, no map)
   function feetTo(cbId) {
-    const toks = (S && S.mapTokens) || [], me = toks.find((t) => t.own), them = toks.find((t) => t.combatant_id === cbId);
+    const toks = (S && S.mapTokens) || [], me = actorToken(), them = toks.find((t) => t.combatant_id === cbId);
     if (!me || !them || !S.map) return null;
     const gx = Math.max(0, them.x - (me.x + me.size), me.x - (them.x + them.size)), gy = Math.max(0, them.y - (me.y + me.size), me.y - (them.y + them.size));
     const per = !S.map.scale_unit || S.map.scale_unit === "ft" ? Number(S.map.scale_value) || 5 : 5;
@@ -194,7 +200,7 @@
     if (!k || k.busy || !k.chosen.size) return;
     k.busy = true; render();
     try {
-      const d = await api("POST", "/api/play/me/use", { what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() });
+      const d = await api("POST", "/api/play/me/use", Object.assign({ what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() }, k.as ? { as: k.as } : {}));
       if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []); // hit or miss once the dice land
       k.result = d.cast || null;
       const hows = d.cast ? d.cast.targets.map((t) => t.how) : [];
@@ -379,14 +385,24 @@
 
   // End turn: tap once to arm, again to end it (so a stray tap doesn't skip a turn)
   let endArmed = false;
-  function endTurnBtn() {
+  function endTurnBtn(k) {
     return h("button", { type: "button", class: "btn btn-primary end-turn-btn" + (endArmed ? " is-armed" : ""),
       title: "Hand the turn on to whoever's next", onclick: async () => {
         if (!endArmed) { endArmed = true; render(); setTimeout(() => { if (endArmed) { endArmed = false; render(); } }, 4000); return; }
         endArmed = false; using = null; casting = null;
-        const d = await me("end-turn", {});
-        if (d) { toast("Turn ended.", "ok"); if (window.FX) FX.sound("ac"); }
-      } }, icon("check", "sm"), endArmed ? " Tap again to end your turn" : " End my turn");
+        const d = await me("end-turn", k ? { as: k.id } : {});
+        if (d) { toast((k ? k.name + "'s turn" : "Turn") + " ended.", "ok"); if (window.FX) FX.sound("ac"); }
+      } }, icon("check", "sm"), endArmed ? (k ? " Tap again to end " + k.name + "'s turn" : " Tap again to end your turn") : k ? " End " + k.name + "'s turn" : " End my turn");
+  }
+  // the clone's moves on its turn: just its own attacks (Yamato's clone: Slash)
+  function cloneMoves(k) {
+    const noActs = !!(k.actions && !k.actions.left);
+    const out = (k.attacks || []).map((a) => h("button", { type: "button", class: "fight-act", disabled: noActs,
+      onclick: () => startUse("attack", a.index, a.name, true, 0, a.reach) }, icon("swords", "sm"), h("b", null, a.name),
+      h("span", { class: "faint" }, a.damage + " · reaches " + a.reach + " ft")));
+    return h("div", { class: "fight-acts your-moves", style: "margin-top:10px" },
+      h("div", { class: "lbl" }, noActs ? "No actions left this turn" : k.name + "'s moves — tap one, then tap who"),
+      out.length ? out : h("p", { class: "faint" }, k.name + " has no attacks."));
   }
   /* On their turn: every move they can use right now, as cards like the DM's map panel. Tap one,
      then tap who on the map (or in the list that opens right here). */
@@ -441,8 +457,10 @@
     if (m) {
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
       if (ms !== mapStamp && !view.drag) { mapStamp = ms; view.setData(m, S.mapTokens); }
-      const mine = S.mapTokens.find((t) => t.own);
-      if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
+      const mine = S.mapTokens.find((t) => t.own), k = acting(), pet = k && S.mapTokens.find((t) => t.combatant_id === k.id);
+      if (k && view.tool === "select" && !using) $("#hint").textContent = (pet ? (k.move && k.move.held ? k.name + " can't move. " : pet.movable
+        ? "Drag " + k.name + " to move it: " + k.move.left + " of " + k.move.budget + " ft left. " : k.name + " has no movement left. ") : "") + "Double-tap to ping.";
+      else if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
       else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
@@ -454,9 +472,12 @@
         o.hp != null ? h("span", { class: "faint num" }, o.hp + "/" + o.max_hp) : o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem" }, o.health) : null,
         o.status ? h("span", { class: "faint", style: "font-size:.8rem" }, o.status) : null)))
         : h("p", { class: "faint", style: "margin:0" }, "No fight right now."),
-      e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!" : e.current + "'s turn") : null,
+      e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!"
+        : acting() ? "It's " + acting().name + "'s turn — you control it!" : e.current + "'s turn") : null,
       S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null,
       S.character && S.character.my_turn ? yourMoves(S.character) : null,
+      acting() ? h("div", { style: "margin-top:8px" }, endTurnBtn(acting())) : null,
+      acting() ? cloneMoves(acting()) : null,
       using ? useBox() : casting ? castBox() : null);
 
     const c = S.character;

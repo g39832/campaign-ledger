@@ -265,6 +265,8 @@ def player_view(conn, map_id, player):
     current = enc["current_id"] if enc and enc["status"] == "active" else None
     fog = m["fog_enabled"]
     tokens = []
+    from .spells import my_clones
+    clones = {k["id"]: k for k in my_clones(conn, player["character_id"])[0]} if player.get("character_id") else {}
     for t in tokens_for(conn, map_id, current):
         if t["hidden"] or t["combatant_hidden"]:
             continue
@@ -280,6 +282,11 @@ def player_view(conn, map_id, player):
             turn = fight_turn(conn, m, t["character_id"])
             out["movable"] = turn is None or (turn["my_turn"] and turn["budget"] > 0)  # used it all: they can still readjust
         out["own"] = own
+        if t["combatant_id"] in clones:  # their clone: they move it on its turn
+            from .movement import turn_info
+            turn = turn_info(conn, t["combatant_id"])
+            out["pet"] = True
+            out["movable"] = bool(m["players_can_move"]) and bool(turn and turn["my_turn"] and turn["budget"] > 0)
         if is_party:
             out.update(hp=t["hp"], max_hp=t["max_hp"], conditions=t["conditions"], character_id=t["character_id"])
         elif t["hp"] is not None and t["max_hp"]:

@@ -329,6 +329,19 @@ def spell_over(ctx, cast_id):
             ctx.log("spell", f"{mark.get('spell') or 'The spell'} has ended — {o['name']} is no longer concentrating")
 
 
+def summon_limit(conn, caster, sp):
+    """How many of this creature the caster can have out at once: every spell on their sheet that
+    summons it adds its count (Yamato: Phantasmal Force and Echo Knight, one clone each, so two)."""
+    from .rules import spell_info
+    total = 0
+    if caster.get("character_id"):
+        row = conn.execute("SELECT spells FROM characters WHERE id = ?", (caster["character_id"],)).fetchone()
+        for s in json.loads((row and row["spells"]) or "[]"):
+            if isinstance(s, dict) and str(s.get("summon") or "").strip().lower() == sp["summon"].strip().lower():
+                total += spell_info(s)["summon_count"]
+    return max(total, sp["summon_count"])
+
+
 def summon(ctx, caster, sp):
     """Bring a creature from the library into the fight on the caster's side (a clone,
     a familiar). It acts right after the caster, and its token goes next to theirs on
@@ -342,12 +355,14 @@ def summon(ctx, caster, sp):
         raise F.ApiError(f"There's no “{sp['summon']}” in the creature library — make it on the Creatures page first")
     standing = [c for c in ctx.combatants() if c.get("follows") == caster["id"] and c["statblock"].get("base_name") == cr["name"]
                 and c["status"] not in ("dead", "defeated", "fled")]
-    if len(standing) >= sp["summon_count"]:
-        raise F.ApiError(f"{', '.join(c['name'] for c in standing)} {'is' if len(standing) == 1 else 'are'} still standing")
+    limit = summon_limit(ctx.conn, caster, sp)
+    if len(standing) >= limit:
+        raise F.ApiError(f"{' and '.join(c['name'] for c in standing)} {'is' if len(standing) == 1 else 'are'} still standing"
+                         + (f" — {limit} at a time" if limit > 1 else ""))
     block = F.decode_row(cr, F.CREATURE)
     statblock = {k: block[k] for k in F.CREATURE if k != "name"}
     statblock.update(base_name=cr["name"], follows=caster["id"], summoned_by=caster["name"])
-    names = _instance_names(ctx, cr["name"], sp["summon_count"] - len(standing))
+    names = _instance_names(ctx, cr["name"], min(sp["summon_count"], limit - len(standing)))
     new_ids = []
     for n in names:
         cur = ctx.conn.execute(
@@ -790,6 +805,38 @@ def remember(ctx, cast_id, snap, out, caster_id, player_id=None):
     out["undo"] = cast_id
 
 
+def my_clones(conn, char_id):
+    """The summons (Yamato's clones) following this hero in their running fight, still standing:
+    their player runs them on their turns. ([combatants], fight row or None)"""
+    from .combat import Ctx
+    fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
+                         "WHERE cb.character_id = ? AND e.status = 'active' ORDER BY e.updated_at DESC LIMIT 1", (char_id,)).fetchone()
+    if fight is None:
+        return [], None
+    return [c for c in Ctx(conn, fight["eid"]).combatants() if c.get("follows") == fight["cb_id"]
+            and c["status"] not in ("dead", "defeated", "fled")], fight
+
+
+def clone_attacks(c):
+    """A clone's attacks from its stat block ("Slash 2d8", "Claw +4 to hit 1d6+2"), as the spell
+    engine reads them: d20 + bonus against AC, then the damage. Melee: 5 ft unless it says reach."""
+    import re
+    from . import dice
+    out = []
+    for line in str((c.get("statblock") or {}).get("attacks") or "").splitlines():
+        expr = dice.damage_expression(line)
+        if not expr:
+            continue
+        name = re.split(r"[+\-]?\d", line, maxsplit=1)[0].strip(" :—-") or "Attack"
+        hit = re.search(r"([+-]\s*\d+)\s*to\s*hit", line, re.I)
+        reach = re.search(r"\breach\s*(\d+)", line, re.I)
+        out.append({"index": len(out), "name": name, "damage": expr, "bonus": int(hit.group(1).replace(" ", "")) if hit else 0,
+                    "reach": int(reach.group(1)) if reach else 5,
+                    "spec": {"name": name, "effect": "damage", "dice": expr, "level": 0, "damage_type": "", "hit": "attack",
+                             "attack_bonus": int(hit.group(1).replace(" ", "")) if hit else 0, "cooldown": 0, "dmg_mult": 1, "notes": "", "move": True}})
+    return out
+
+
 def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
     """Put the fight back the way it was before this cast."""
     rec = _undo_store().get(str(cast_id))
@@ -797,7 +844,8 @@ def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
         raise F.ApiError("That can't be taken back any more")
     conn, eid = ctx.conn, ctx.enc["id"]
     if player_id is not None:
-        mine = conn.execute("SELECT 1 FROM combatants WHERE id = ? AND character_id = ?", (rec["caster"], char_id)).fetchone()
+        mine = conn.execute("SELECT 1 FROM combatants WHERE id = ? AND character_id = ?", (rec["caster"], char_id)).fetchone() \
+            or any(c["id"] == rec["caster"] for c in my_clones(conn, char_id)[0])
         if not mine:
             raise F.ApiError("You can only take back your own spells", status=403)
     last = conn.execute("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?", (eid,)).fetchone()[0] or 0

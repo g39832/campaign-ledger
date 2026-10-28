@@ -735,17 +735,19 @@
         const p = this.pos(e);
         this.pointers.set(e.pointerId, p);
         if (this.pointers.size === 2) { // pinch
+          this.pingTap = null;
           const [a, b] = [...this.pointers.values()];
           this.drag = { pinch: true, d0: Math.hypot(a[0] - b[0], a[1] - b[1]), s0: this.view.s, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], view0: { ...this.view } };
           this.preview.clear(); this.ruler = null; this.areaDraft = null;
           return;
         }
-        // a quick second tap on a phone counts as a double-click
+        // a quick second tap on a phone or tablet counts as a double-click (a ping), but only if the
+        // finger lifts without moving: tap a token, then drag it, and it just moves
         const now = performance.now();
+        this.pingTap = null;
         if (e.pointerType === "touch" && this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 24 && this.tool !== "area" && this.tool !== "aim") {
-          this.lastTap = null; this.ping(...p); return;
-        }
-        this.lastTap = { t: now, p };
+          this.lastTap = null; this.pingTap = p;
+        } else this.lastTap = { t: now, p };
         const tool = e.button === 1 || e.button === 2 ? "pan" : this.tool;
         if (tool === "select") {
           const t = this.tokenAt(...p);
@@ -796,6 +798,7 @@
         if (!this.pointers.has(e.pointerId)) return;
         const p = this.pos(e);
         this.pointers.set(e.pointerId, p);
+        if (this.pingTap && Math.hypot(p[0] - this.pingTap[0], p[1] - this.pingTap[1]) > 10) this.pingTap = null;
         const d = this.drag;
         if (!d) return;
         if (d.pinch && this.pointers.size === 2) {
@@ -850,6 +853,8 @@
         const d = this.drag;
         if (d && d.pinch) { if (!this.pointers.size) this.drag = null; return; }
         this.drag = null;
+        const pingAt = this.pingTap; this.pingTap = null;
+        if (pingAt && !(d && d.moved)) { if (d && d.pan) this.view = d.view0; this.preview.clear(); this.ruler = null; this.ping(...pingAt); this.draw(); return; }
         if (d && d.token && d.moved && this.opts.onMove) {
           const tok = d.token; tok.x = d.at[0]; tok.y = d.at[1];
           this.opts.onMove(tok, d.at[0], d.at[1]);

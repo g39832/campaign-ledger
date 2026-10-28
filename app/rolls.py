@@ -248,6 +248,9 @@ def watching(conn, viewer, t=None):
         return None
     enc = conn.execute("SELECT status, current_id FROM encounters WHERE id = ?", (cb["encounter_id"],)).fetchone()
     if enc["status"] == "active" and enc["current_id"] != cb["id"]:
+        from .spells import my_clones
+        if any(k["id"] == enc["current_id"] for k in my_clones(conn, viewer["character_id"])[0]):
+            return None  # their clone's turn: they're running it, so it's theirs too
         return "dm" if t in OFF_TURN_ROLLS else "private"
     return None
 

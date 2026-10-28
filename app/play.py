@@ -213,6 +213,12 @@ def _own_character(conn, char_id):
         from .movement import fight_turn
         turn = fight_turn(conn, map_dict(live), char_id)
         out["move"] = turn and {k: turn[k] for k in ("my_turn", "speed", "used", "dash", "left", "held", "budget", "from")}
+    from .movement import actions as acts_of, turn_info
+    from .spells import clone_attacks, my_clones
+    clones, cf = my_clones(conn, char_id)
+    out["clones"] = [{"id": k["id"], "name": k["name"], "hp": k["hp"], "max_hp": k["max_hp"], "my_turn": cf["current_id"] == k["id"],
+                      "actions": acts_of(conn, k["id"]), "move": (lambda t: t and {x: t[x] for x in ("my_turn", "speed", "used", "left", "held", "budget", "from")})(turn_info(conn, k["id"])),
+                      "attacks": [{x: a[x] for x in ("index", "name", "damage", "reach")} for a in clone_attacks(k)]} for k in clones]
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
                                    "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign
@@ -291,16 +297,19 @@ def api_move(token_id):
         m = conn.execute("SELECT * FROM maps WHERE id = ?", (t["map_id"],)).fetchone()
         camp = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()
         owner = t["character_id"] or t["cb_char"]
-        if (m["campaign_id"] != ident["campaign_id"] or camp["live_map_id"] != m["id"] or not owner
-                or owner != ident["character_id"] or t["hidden"]):
+        from .spells import my_clones
+        clone = t["combatant_id"] if ident["character_id"] and not owner and t["combatant_id"] in {
+            k["id"] for k in my_clones(conn, ident["character_id"])[0]} else None
+        if (m["campaign_id"] != ident["campaign_id"] or camp["live_map_id"] != m["id"] or not (owner or clone)
+                or (not clone and owner != ident["character_id"]) or t["hidden"]):
             raise F.ApiError("You can only move your own character's token", status=403)
-        if not m["players_can_move"] and not is_disengaged(conn, owner):
+        if not m["players_can_move"] and not (owner and is_disengaged(conn, owner)):
             raise F.ApiError("The DM has locked token movement", status=403)
         md = map_dict(m)
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(md, t["size"], x, y)
-        stuck = held_in_place(conn, owner)
+        stuck = held_in_place(conn, owner) if owner else None
         if stuck:
             raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
         if blocked_path(md, t["size"], t["x"], t["y"], x, y):
@@ -310,8 +319,9 @@ def api_move(token_id):
         who = taken_by(conn, m["id"], token_id, t["size"], x, y)
         if who:  # no two on the same square
             raise F.ApiError(f"{who} is already standing there", status=403)
-        from .movement import check_move
-        turn = check_move(conn, md, owner, t["x"], t["y"], x, y)
+        from .movement import _check, check_move, turn_info
+        turn = _check(conn, md, turn_info(conn, clone), t["x"], t["y"], x, y, None) if clone \
+            else check_move(conn, md, owner, t["x"], t["y"], x, y)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         entered = _zone_check(conn, md)
         _record_move(uctx, snap, t)
@@ -537,6 +547,11 @@ def api_me_end_turn():
         cb = active_combatant(conn, char_id)
         if cb is None:
             raise F.ApiError("There's no fight running")
+        if data.get("as"):  # their clone's turn
+            from .spells import my_clones
+            cb = next(({"id": k["id"], "encounter_id": cb["encounter_id"]} for k in my_clones(conn, char_id)[0] if k["id"] == data["as"]), None)
+            if cb is None:
+                raise F.ApiError("That clone isn't in the fight any more", status=403)
         ctx = Ctx(conn, cb["encounter_id"])
         if claim_op(conn, data.get("op_id")):
             if ctx.enc["current_id"] != cb["id"]:
@@ -730,11 +745,22 @@ def api_me_use():
     conn = get_db()
     c = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
     rows = c["attacks"] if what == "attack" else c["spells"]
+    clone = None
+    if data.get("as"):  # their clone attacks, on its turn, with its own attacks (Slash)
+        from .spells import clone_attacks, my_clones
+        clone = next((k for k in my_clones(conn, char_id)[0] if k["id"] == data["as"]), None)
+        if clone is None:
+            raise F.ApiError("That clone isn't in the fight any more", status=403)
+        if what != "attack":
+            raise F.ApiError(f"{clone['name']} can only use its attacks")
+        rows = clone_attacks(clone)
     try:
         row = (rows or [])[int(data.get("index"))]
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That isn't on your sheet any more")
-    if what == "attack":
+    if clone:
+        spell = row["spec"]
+    elif what == "attack":
         spell = _attack_spec(row, c)
         if is_healing(row):
             raise F.ApiError("Healing moves go on your party — ask the DM to apply it")
@@ -751,6 +777,8 @@ def api_me_use():
         mine = active_combatant(conn, char_id)
         if mine is None:
             raise F.ApiError("Attacks on enemies are for fights, and there's no fight running")
+        if clone:
+            mine = {"id": clone["id"], "encounter_id": mine["encounter_id"]}
         ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
         if ctx.enc["current_id"] != mine["id"]:
             raise F.ApiError("It's not your turn yet — you can attack when your turn comes round", status=403)
@@ -766,7 +794,7 @@ def api_me_use():
         if what == "attack":  # physical moves: only at enemies right next to you (or within their reach)
             from .movement import check_reach
             from .rules import melee_reach
-            check_reach(conn, mine["encounter_id"], mine["id"], targets, melee_reach(row), (row.get("name") or "That attack").strip())
+            check_reach(conn, mine["encounter_id"], mine["id"], targets, row["reach"] if clone else melee_reach(row), (row.get("name") or "That attack").strip())
         from .spells import remember, snapshot as undo_snapshot
         snap = undo_snapshot(ctx)
         result = engine_cast(ctx, mine["id"], {"spell": spell, "targets": targets, "slot": data.get("slot")}, ident)
