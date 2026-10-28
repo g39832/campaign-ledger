@@ -121,11 +121,25 @@ def test_tunnel_visitors_are_not_the_dm_and_are_rate_limited_separately(app, api
 def test_online_status_is_dm_only(app, api, monkeypatch):
     from app import online
     monkeypatch.setattr(online, "find_cloudflared", lambda: None)
+    monkeypatch.setattr(online, "left_running", lambda: None)
     s = api.get("/api/online")
     assert s == s | {"installed": False, "running": False, "url": None} and "winget" in s["install_hint"]
     api.post("/api/online/start", {}, 400)
     r = app.test_client().get("/api/online", headers={"CF-Connecting-IP": "203.0.113.5", "Host": "x.trycloudflare.com"})
     assert r.status_code == 401
+
+
+def test_a_tunnel_left_running_keeps_its_link(app, api, monkeypatch):
+    """The app restarted, but the tunnel it started is still up: the same link shows, and Go online
+    doesn't make a new one."""
+    from app import online
+    monkeypatch.setattr(online, "find_cloudflared", lambda: "cloudflared.exe")
+    monkeypatch.setattr(online, "left_running", lambda: ("https://same-link.trycloudflare.com", 20241))
+    monkeypatch.setattr(online.subprocess, "Popen", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no new tunnel")))
+    s = api.get("/api/online")
+    assert s["running"] and s["url"] == "https://same-link.trycloudflare.com" and s["kept"]
+    s = api.post("/api/online/start", {})
+    assert s["already"] and s["url"] == "https://same-link.trycloudflare.com"
 
 
 def test_add_monsters_straight_onto_a_map(api, camp):

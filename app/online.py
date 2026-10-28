@@ -66,10 +66,36 @@ def _read(proc):
             _state["error"] = "The tunnel stopped before it got an address. Check your internet connection and try again."
 
 
+METRICS_PORTS = range(20241, 20246)  # where cloudflared answers questions about itself, on this computer only
+_seen = {"at": 0.0, "found": None}
+
+
+def left_running():
+    """A tunnel this app started before it was restarted keeps running (and its link keeps
+    working): find it, so the Players page shows that same link instead of making a new one.
+    (url, metrics port) or None. Checked at most every 10 seconds."""
+    import json
+    import urllib.request
+    if time.time() - _seen["at"] < 10:
+        return _seen["found"]
+    found = None
+    for port in METRICS_PORTS:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/quicktunnel", timeout=0.5) as r:
+                host = json.load(r).get("hostname")
+            if host:
+                found = (f"https://{host}", port)
+                break
+        except Exception:
+            continue
+    _seen.update(at=time.time(), found=found)
+    return found
+
+
 def status():
     with _lock:
         running = _running()
-        return {
+        out = {
             "installed": bool(find_cloudflared()),
             "install_hint": INSTALL_HINT,
             "running": running,
@@ -77,6 +103,11 @@ def status():
             "error": _state["error"],
             "started": _state["started"] if running else None,
         }
+    if not running:
+        old = left_running()
+        if old:
+            out.update(running=True, url=old[0], error=None, kept=True)
+    return out
 
 
 def stop():
@@ -89,6 +120,20 @@ def stop():
             p.wait(5)
         except subprocess.TimeoutExpired:
             p.kill()
+
+
+def stop_left_running():
+    """Stop a tunnel kept from before a restart: the cloudflared listening on its metrics port."""
+    old = left_running()
+    if not old or os.name != "nt":
+        return
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    for line in out.splitlines():
+        bits = line.split()
+        if len(bits) >= 5 and bits[1] == f"127.0.0.1:{old[1]}" and bits[3] == "LISTENING":
+            subprocess.run(["taskkill", "/PID", bits[4], "/F"], capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    _seen.update(at=0.0, found=None)
 
 
 atexit.register(stop)
@@ -111,6 +156,8 @@ def api_start():
     exe = find_cloudflared()
     if not exe:
         raise F.ApiError("cloudflared isn't installed yet. Open PowerShell and run: " + INSTALL_HINT + " — then try again.")
+    if not _running() and left_running():  # still up from before a restart: same link
+        return jsonify(status() | {"already": True})
     with _lock:
         if _running():
             return jsonify(status() | {"already": True})
@@ -134,4 +181,5 @@ def api_start():
 def api_stop():
     _dm_only()
     stop()
+    stop_left_running()
     return jsonify(status())

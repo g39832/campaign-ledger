@@ -258,6 +258,10 @@ def _disengaged(conn, char_id):
     return is_disengaged(conn, char_id)
 
 
+def ft_per_square_of(m):
+    return int(m.get("scale_value") or 5) if (m.get("scale_unit") or "ft") == "ft" else 5
+
+
 def player_view(conn, map_id, player):
     """Everything a player may see of a map — and nothing else."""
     m = map_dict(_map_row(conn, map_id))

@@ -341,6 +341,13 @@
       for (const sh of shapes) this.drawShape(sh, cp, ox, oy, false);
       if (this.areaDraft) this.drawShape(this.areaDraft, cp, ox, oy, true);
       if (this.aim) this.drawAim(cp, ox, oy);
+      if (this.mark) { // a square picked on the map (where a summoned clone appears)
+        const [mx, my] = this.mark;
+        ctx.save();
+        ctx.fillStyle = "rgba(140, 200, 255, .28)"; ctx.strokeStyle = "rgba(140, 200, 255, .95)"; ctx.lineWidth = cp * 0.08; ctx.setLineDash([cp * 0.18, cp * 0.1]);
+        ctx.fillRect(ox + mx * cp, oy + my * cp, cp, cp); ctx.strokeRect(ox + mx * cp + cp * 0.04, oy + my * cp + cp * 0.04, cp * 0.92, cp * 0.92);
+        ctx.restore();
+      }
       this.drawZones(cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawReach(this.drag.token, cp, ox, oy);
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
@@ -745,7 +752,7 @@
         // finger lifts without moving: tap a token, then drag it, and it just moves
         const now = performance.now();
         this.pingTap = null;
-        if (e.pointerType === "touch" && this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 24 && this.tool !== "area" && this.tool !== "aim") {
+        if (e.pointerType === "touch" && this.lastTap && now - this.lastTap.t < 320 && Math.hypot(p[0] - this.lastTap.p[0], p[1] - this.lastTap.p[1]) < 24 && this.tool !== "area" && this.tool !== "aim" && this.tool !== "place") {
           this.lastTap = null; this.pingTap = p;
         } else this.lastTap = { t: now, p };
         const tool = e.button === 1 || e.button === 2 ? "pan" : this.tool;

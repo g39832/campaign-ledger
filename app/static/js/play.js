@@ -35,6 +35,11 @@
       else if (using && !using.aim && t) pickFoe(t.combatant_id, t.display);
     },
     onAim: () => { if (using && using.aim) { caughtByAim(); render(); } }, // the cone was turned: who's in it now
+    onPlace: (x, y) => { // a clone: the square it appears on
+      if (!casting || !casting.spell.summon || casting.busy || casting.result) return;
+      if ((S.mapTokens || []).some((t) => x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size)) { toast("Someone's already standing there — pick an empty square.", "error"); return; }
+      casting.at = [x, y]; view.mark = [x, y]; view.draw(); render();
+    },
     onPing: async (x, y) => {
       // one ping every few seconds (the server keeps the same cooldown)
       const wait = Math.ceil((lastPing + PING_COOLDOWN_MS - Date.now()) / 1000);
@@ -168,8 +173,17 @@
     const box = $("#use-box");
     if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
+  function startHelp(a) {
+    startUse("attack", a.index, a.name || "Heal", true, 0, null);
+    using.help = true; render();
+  }
+  const mySide = () => ((S.encounter && S.encounter.order) || []).filter((o) => o.kind !== "enemy" && !["dead", "defeated", "fled"].includes(o.status));
   function pickFoe(cbId, label) {
     if (!using || using.busy || using.result) return;
+    if (using.help) { // healing or a boost: anyone on your side, you too
+      if (!mySide().some((o) => o.id === cbId)) { toast(using.name + " is for your side — pick a teammate or yourself.", "error"); return; }
+      using.chosen = new Set([cbId]); useNow(); return;
+    }
     if (cbId === myCb()) { toast("You can't attack yourself.", "error"); return; }
     const mate = teammates().find((o) => o.id === cbId);
     if (!mate && !foes().some((o) => o.id === cbId)) { toast((label || "That") + " isn't in the fight.", "error"); return; }
@@ -197,10 +211,11 @@
   const tooFar = (cbId) => { if (!using || !using.reach) return 0; const d = feetTo(cbId); return d != null && d > using.reach ? d : 0; };
   async function useNow() {
     const k = using;
-    if (!k || k.busy || !k.chosen.size) return;
+    if (!k || k.busy || (!k.chosen.size && !k.cells)) return;
     k.busy = true; render();
     try {
-      const d = await api("POST", "/api/play/me/use", Object.assign({ what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() }, k.as ? { as: k.as } : {}));
+      const d = await api("POST", "/api/play/me/use", Object.assign({ what: k.what, index: k.index, targets: [...k.chosen], op_id: L.uid() },
+        k.as ? { as: k.as } : {}, k.cells ? { cells: k.cells } : {}));
       if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []); // hit or miss once the dice land
       k.result = d.cast || null;
       const hows = d.cast ? d.cast.targets.map((t) => t.how) : [];
@@ -220,6 +235,13 @@
       h("div", { class: "row", style: "gap:8px" },
         h("button", { type: "button", class: "btn btn-sm", onclick: () => { using = null; render(); } }, "Done"),
         k.result.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet take-back", title: "A misclick? Undo it all", onclick: () => takeBack(k.result.undo) }, icon("undo-2", "sm"), " Take it back") : null));
+    if (k.aim && k.ground) return h("div", { id: "use-box", class: "fight-aim" },
+      h("div", { class: "fa-head" }, icon("castle", "sm"), h("b", null, k.name)),
+      h("p", { class: "fa-ask" }, "Drag on the map to move the square, then Cast it there."),
+      h("div", { class: "row" },
+        h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: k.busy, onclick: () => {
+          k.cells = MapView.shapeCells(view.aim.shape, S.map); stopAimUse(); k.aim = false; useNow(); } }, k.busy ? "Casting…" : "Cast it here"),
+        h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { stopAimUse(); using = null; render(); } }, "Cancel")));
     if (k.aim) {
       const order = (S.encounter && S.encounter.order) || [], inside = (k.inside || []).map((id) => order.find((o) => o.id === id)).filter(Boolean);
       return h("div", { id: "use-box", class: "fight-aim" },
@@ -236,6 +258,12 @@
             k.busy ? "Rolling…" : "Use on " + k.chosen.size),
           h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { stopAimUse(); using = null; render(); } }, "Cancel")));
     }
+    if (k.help) return h("div", { id: "use-box", class: "fight-aim" },
+      h("div", { class: "fa-head" }, icon("heart", "sm"), h("b", null, k.name)),
+      h("p", { class: "fa-ask" }, "Tap who it's for — on the map or here."),
+      h("div", { class: "roll-row", style: "margin-bottom:8px" }, mySide().map((o) => h("button", { type: "button", class: "btn btn-sm", disabled: k.busy,
+        onclick: () => pickFoe(o.id, o.name) }, o.id === myCb() ? o.name + " (you)" : o.name, o.hp != null ? h("span", { class: "faint num", style: "margin-left:4px" }, o.hp + "/" + o.max_hp) : null))),
+      h("div", { class: "row" }, h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { using = null; render(); } }, k.busy ? "Rolling…" : "Cancel")));
     const list = foes();
     return h("div", { id: "use-box", class: "fight-aim" },
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
@@ -292,7 +320,7 @@
     if (ar.kind !== "cone" && ar.kind !== "line") [shape.x, shape.y] = view.clampAim(shape.x, shape.y);
     view.aim.hits = new Set(MapView.tokensInShape(shape, S.map, S.mapTokens).map((t) => t.id));
     view.tool = "aim";
-    using = { what: "spell", index: s.index, name: s.name, single: false, aim: true, spared: new Set(), chosen: new Set(), busy: false, result: null };
+    using = { what: "spell", index: s.index, name: s.name, single: false, aim: true, spared: new Set(), chosen: new Set(), busy: false, result: null, ground: !!s.terrain };
     caughtByAim();
     render();
     $("#hint").textContent = s.name + ": drag on the map to point it" + (ar.kind === "cone" || ar.kind === "line" ? " (it comes out of you)" : "") + ", then Use.";
@@ -322,8 +350,10 @@
   function startCast(s) {
     const mine = S.character, chosen = new Set();
     if (s.targets === 1 && /\bself\b/i.test(s.notes || "") && mine) chosen.add(mine.id);
-    casting = { spell: L.spellView(s), index: s.index, chosen, slot: s.level || null, busy: false, result: null };
+    casting = { spell: L.spellView(s), index: s.index, chosen, slot: s.level || null, busy: false, result: null, at: null };
+    if (s.summon && S.map) { view.tool = "place"; view.mark = null; } // tap the map where it appears
     render();
+    if (s.summon && S.map) $("#hint").textContent = s.name + ": tap the square on the map where " + s.summon + " appears, then Cast.";
     const box = $("#cast-box");
     if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -341,7 +371,9 @@
     if (!k || k.busy || (!k.chosen.size && !k.spell.summon)) return;
     k.busy = true; render();
     try {
-      const d = await api("POST", "/api/play/cast", { spell: k.index, targets: [...k.chosen], slot: k.slot, op_id: L.uid() });
+      const d = await api("POST", "/api/play/cast", Object.assign({ spell: k.index, targets: [...k.chosen], slot: k.slot, op_id: L.uid() },
+        k.at && S.map ? { at: { map_id: S.map.id, x: k.at[0], y: k.at[1] } } : {}));
+      if (k.spell.summon) placeDone();
       if (d.cast && window.Dice && Dice.showAll) await Dice.showAll(d.cast.rolls || []);
       k.result = d.cast || null;
       const healing = k.spell.kind === "heal";
@@ -358,11 +390,15 @@
     const slots = mine && Object.fromEntries(Object.entries(mine.spell_slots || {}).filter(([, v]) => v && v.max > 0));
     return h("div", { id: "cast-box" }, L.castPanel({ spell: k.spell, people, chosen: k.chosen, busy: k.busy, result: k.result,
       slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false, casterName: mine && mine.name,
-      onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { casting = null; render(); },
+      onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { placeDone(); casting = null; render(); },
       onTakeBack: (r) => takeBack(r.undo) }),
-      S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
+      k.spell.summon && S.map && !k.result ? h("p", { class: "summon-spot", style: "font-size:.88rem;margin:6px 0 0;font-weight:600" },
+        k.at ? "It appears on the square you marked (tap another to change it)." : "Tap the square on the map where it appears — or Cast to have it appear next to you.")
+        : S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
   }
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { casting = null; render(); } });
+  window.appBusy = () => !!((using && !using.result) || (casting && !casting.result) || (window.Dice && Dice.isOpen && Dice.rolling && Dice.rolling()));
+  function placeDone() { view.mark = null; if (view.tool === "place") view.tool = "select"; view.draw(); }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && casting) { placeDone(); casting = null; render(); } });
 
   // in a fight: your own turn only, as far as your speed
   function moveHint(mine, mv) {
@@ -416,6 +452,8 @@
         () => me("surge", { index: a.index }).then((d) => { if (d) toast((a.name || "Action Surge") + "!", "ok"); }), { free: true }));
       else if (a.damage && !a.heal) out.push(card("swords", a.name || "Attack", attackInfo(a) + (a.reach ? " · reaches " + a.reach + " ft" : ""),
         () => startUse("attack", a.index, a.name || "Attack", !a.area, 0, a.reach)));
+      else if (a.heal || a.ac > 0) out.push(card(a.heal ? "heart" : "shield", a.name || "Heal", a.heal ? "heals " + a.damage.trim() + " · on you or a teammate"
+        : "+" + a.ac + " AC · on you or a teammate", () => startHelp(a), { heal: true }));
     });
     (c.spells || []).forEach((s) => {
       if (s.recharging) return;
@@ -424,6 +462,7 @@
       if (s.zone) out.push(card("sun", s.name, info, () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets))));
       else if (aimsAtFoes(s) && s.area && S.map) out.push(card(L.KIND_ICON[s.kind] || "zap", s.name, info, () => startAimUse(s)));
       else if (aimsAtFoes(s)) out.push(card(L.KIND_ICON[s.kind] || "zap", s.name, info, () => startUse("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets)));
+      else if (s.terrain && S.map) out.push(card("castle", s.name, info, () => startAimUse(s)));
       else if ((castable(s) || s.summon) && c.can.cast_spells !== false) out.push(card(L.KIND_ICON[s.kind] || "heart", s.name, info, () => startCast(s), { heal: true }));
     });
     if (!out.length) return null;
@@ -460,6 +499,7 @@
       const mine = S.mapTokens.find((t) => t.own), k = acting(), pet = k && S.mapTokens.find((t) => t.combatant_id === k.id);
       if (k && view.tool === "select" && !using) $("#hint").textContent = (pet ? (k.move && k.move.held ? k.name + " can't move. " : pet.movable
         ? "Drag " + k.name + " to move it: " + k.move.left + " of " + k.move.budget + " ft left. " : k.name + " has no movement left. ") : "") + "Double-tap to ping.";
+      else if (casting && !casting.result && casting.spell.summon) $("#hint").textContent = casting.spell.name + ": tap the square on the map where " + casting.spell.summon + " appears, then Cast.";
       else if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
       else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";

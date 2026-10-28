@@ -97,3 +97,35 @@ def test_rolls_on_the_clones_turn_are_his_to_show(api, battlemap):
     pa.post("/api/play/me/end-turn", {"op_id": "end-aria2"})
     r = pa.post("/api/rolls", {"expression": "1d20", "label": "check"}, 201)
     assert not r.get("watching") and r["roll"]["visibility"] == "public"
+
+
+def test_he_picks_where_the_clone_appears(api, battlemap):
+    eid, by = two_spells(api, battlemap)
+    pa, mid = battlemap["pa"], battlemap["mid"]
+    bandit = tok(api.get(f"/api/maps/{mid}"), "Bandit 1")
+    # not on someone, not off the map
+    err = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 0, "targets": [],
+                                                   "at": {"map_id": mid, "x": bandit["x"], "y": bandit["y"]}}, 400)
+    assert "already standing there" in err["error"]
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 0, "targets": [], "at": {"map_id": mid, "x": 50, "y": 1}}, 400)
+    # the DM picks a square
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 0, "targets": [], "at": {"map_id": mid, "x": 18, "y": 6}})
+    c1 = tok(api.get(f"/api/maps/{mid}"), "Yamato clone")
+    assert (c1["x"], c1["y"]) == (18, 6)
+    # his player picks the square for Echo Knight's clone
+    r = pa.post("/api/play/cast", {"spell": 2, "targets": [], "at": {"map_id": mid, "x": 12, "y": 0}})
+    assert "Yamato clone 2" in r["cast"]["summary"]
+    c2 = tok(api.get(f"/api/maps/{mid}"), "Yamato clone 2")
+    assert (c2["x"], c2["y"]) == (12, 0)
+
+
+def test_he_cant_pick_a_square_he_cant_see(api, battlemap):
+    eid, by = two_spells(api, battlemap)
+    pa, mid = battlemap["pa"], battlemap["mid"]
+    api.patch(f"/api/maps/{mid}", {"changes": {"fog_enabled": {"from": False, "to": True}}})
+    err = pa.post("/api/play/cast", {"spell": 0, "targets": [], "at": {"map_id": mid, "x": 15, "y": 5}}, 400)
+    assert "can't see" in err["error"]
+    assert not any(c["name"].startswith("Yamato clone") for c in api.get(f"/api/encounters/{eid}")["combatants"])
+    pa.post("/api/play/cast", {"spell": 0, "targets": [], "at": {"map_id": mid + 999, "x": 1, "y": 1}}, 400)
+    pa.post("/api/play/cast", {"spell": 0, "targets": []})       # no square: next to him, like before
+    assert any(c["name"].startswith("Yamato clone") for c in api.get(f"/api/encounters/{eid}")["combatants"])

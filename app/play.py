@@ -16,7 +16,7 @@ from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
 
-from .combat import dmg_mult, extra_moves, parse_area, stance_mult  # noqa: E402
+from .combat import _ac_in, dmg_mult, extra_moves, parse_area, stance_mult  # noqa: E402
 
 SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
 
@@ -71,6 +71,13 @@ def _player_required():
 def join_page():
     ident = current_identity()
     return render_template("join.html", ident=ident, prefill=request.args.get("code", ""))
+
+
+@bp.get("/api/join/build")
+def api_build():
+    """Which start of the server this is. Open pages check it now and then and reload
+    themselves after an update (a restart), so nobody has to refresh by hand."""
+    return jsonify({"build": current_app.config["BUILD"]})
 
 
 @bp.get("/api/join/lookup")
@@ -182,7 +189,7 @@ def _own_character(conn, char_id):
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a),
                        "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
-                       "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes"))), "reach": melee_reach(a)}
+                       "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes"))), "reach": melee_reach(a), "ac": _ac_in(a)}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
     fight = conn.execute("SELECT e.id AS eid, e.current_id, cb.id AS cb_id FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -722,6 +729,20 @@ def _attack_spec(row, c):
             "dmg_mult": dmg_mult(row) if stance_mult(row) == 1 else 1, "notes": str(row.get("notes") or "")[:300], "move": True}
 
 
+def _help_spec(row):
+    """A sheet row that helps the party, used from the phone like the DM's map does: healing
+    (Lux's Mend: 1d8) or a boost to AC (Sheild of faith: +2 AC). Built from the sheet."""
+    from . import dice
+    name = (row.get("name") or "Attack").strip() or "Attack"
+    if is_healing(row):
+        expr = dice.damage_expression(str(row.get("damage") or ""))
+        if not expr:
+            raise F.ApiError(f"{name} has no healing dice to roll — ask the DM")
+        return {"name": name, "effect": "heal", "dice": expr, "level": 0, "cooldown": parse_cooldown(row), "notes": "", "move": True}
+    return {"name": name, "effect": "buff", "condition": name, "ac": _ac_in(row), "level": 0, "cooldown": parse_cooldown(row),
+            "notes": str(row.get("notes") or "")[:300], "move": True}
+
+
 @bp.post("/api/play/me/use")
 def api_me_use():
     """A player uses one of their attacks or harmful spells, the way the DM does on the map:
@@ -758,18 +779,20 @@ def api_me_use():
         row = (rows or [])[int(data.get("index"))]
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That isn't on your sheet any more")
+    helping = False  # healing or a boost: on their own side (themselves too), never enemies
     if clone:
         spell = row["spec"]
+    elif what == "attack" and (is_healing(row) or _ac_in(row) > 0):
+        spell, helping = _help_spec(row), True
     elif what == "attack":
         spell = _attack_spec(row, c)
-        if is_healing(row):
-            raise F.ApiError("Healing moves go on your party — ask the DM to apply it")
     else:
         spell = int(data.get("index"))
         sp = spell_info(row)
-        if spell_helps(sp) or sp["terrain"] or sp["aura"] or sp["summon"]:
+        if (spell_helps(sp) and not sp["terrain"]) or sp["aura"] or sp["summon"]:
             raise F.ApiError(f"{sp['name']} isn't aimed at enemies")
-    if not targets and not (what == "spell" and sp["zone"]):  # a zone finds who's in it by itself
+    ground = what == "spell" and bool(sp["terrain"])  # Mend Earth: the squares it covers on the map
+    if not targets and not (what == "spell" and (sp["zone"] or ground)):  # a zone finds who's in it by itself
         raise F.ApiError("Pick who it's aimed at")
     with tx() as conn:
         if not claim_op(conn, data.get("op_id")):
@@ -782,25 +805,35 @@ def api_me_use():
         ctx = Ctx(conn, mine["encounter_id"], viewer=ident)
         if ctx.enc["current_id"] != mine["id"]:
             raise F.ApiError("It's not your turn yet — you can attack when your turn comes round", status=403)
-        # anyone else in the fight can be hit, teammates too (friendly fire: be careful), never yourself
-        if mine["id"] in targets:
-            raise F.ApiError("You can't attack yourself", status=403)
-        fair = {r["id"] for r in conn.execute(
-            "SELECT c.id FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ? AND c.hidden = 0 "
-            "AND COALESCE(ch.status, c.status) NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
-        if not set(targets) <= fair:
-            raise F.ApiError("They aren't in this fight", status=403)
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if helping:  # healing and boosts go on their side: teammates, allies like the clone, themselves
+            side = {r["id"] for r in conn.execute(
+                "SELECT c.id FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ? AND c.hidden = 0 "
+                "AND c.kind != 'enemy' AND COALESCE(ch.status, c.status) NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
+            if not set(targets) <= side:
+                raise F.ApiError(f"{spell['name']} is for your side — pick a teammate (or yourself)", status=403)
+        else:
+            # anyone else in the fight can be hit, teammates too (friendly fire: be careful), never yourself
+            if mine["id"] in targets:
+                raise F.ApiError("You can't attack yourself", status=403)
+            fair = {r["id"] for r in conn.execute(
+                "SELECT c.id FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id WHERE c.encounter_id = ? AND c.hidden = 0 "
+                "AND COALESCE(ch.status, c.status) NOT IN ('dead', 'defeated', 'fled')", (mine["encounter_id"],))}
+            if not set(targets) <= fair:
+                raise F.ApiError("They aren't in this fight", status=403)
         check_action(conn, mine["id"], row.get("name") or "that")
-        if what == "attack":  # physical moves: only at enemies right next to you (or within their reach)
+        extra = {}
+        if ground:
+            extra = _ground_cells(conn, live, mine, sp, data.get("cells"))
+        if what == "attack" and not helping:  # physical moves: only at enemies right next to you (or within their reach)
             from .movement import check_reach
             from .rules import melee_reach
             check_reach(conn, mine["encounter_id"], mine["id"], targets, row["reach"] if clone else melee_reach(row), (row.get("name") or "That attack").strip())
         from .spells import remember, snapshot as undo_snapshot
         snap = undo_snapshot(ctx)
-        result = engine_cast(ctx, mine["id"], {"spell": spell, "targets": targets, "slot": data.get("slot")}, ident)
+        result = engine_cast(ctx, mine["id"], dict({"spell": spell, "targets": targets, "slot": data.get("slot")}, **extra), ident)
         remember(ctx, result["cast_id"], snap, result, mine["id"], ident["id"])
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
-        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
         if live:
             _bump(conn, live)
     conn = get_db()
@@ -812,6 +845,33 @@ def api_me_use():
         t["text"] = AC_NOTE.sub("", t.get("text") or "")
         t.pop("ac", None)
     return jsonify({"character": _own_character(conn, char_id), "cast": result})
+
+
+def _ground_cells(conn, live, mine, sp, cells):
+    """Moni's Mend Earth from the phone: the squares she aimed it at, on the map everyone sees,
+    no farther from her than its range (plus its own size)."""
+    from .maps import ft_per_square_of
+    if not live:
+        raise F.ApiError("The DM needs to share the map first")
+    if not isinstance(cells, list) or not cells or len(cells) > 400:
+        raise F.ApiError("Aim it on the map first")
+    md = map_dict(conn.execute("SELECT * FROM maps WHERE id = ?", (live,)).fetchone())
+    me = conn.execute("SELECT t.x, t.y, t.size FROM map_tokens t LEFT JOIN combatants cb ON cb.id = t.combatant_id WHERE t.map_id = ? "
+                      "AND (t.combatant_id = ? OR (cb.character_id IS NOT NULL AND cb.character_id = (SELECT character_id FROM combatants WHERE id = ?)) "
+                      "OR (t.character_id IS NOT NULL AND t.character_id = (SELECT character_id FROM combatants WHERE id = ?))) LIMIT 1",
+                      (live, mine["id"], mine["id"], mine["id"])).fetchone()
+    area = sp["area"] if isinstance(sp.get("area"), dict) else parse_area(sp.get("area")) or parse_area(sp.get("notes"))
+    if me is not None and area:
+        per = ft_per_square_of(md)
+        reach = (area["range"] + area["size"]) / per + (me["size"] or 1)
+        for cell in cells:
+            try:
+                x, y = int(cell[0]), int(cell[1])
+            except (TypeError, ValueError, IndexError):
+                raise F.ApiError("Aim it on the map first")
+            if max(abs(x - me["x"]), abs(y - me["y"])) > reach:
+                raise F.ApiError(f"That's out of range — {sp['name']} reaches {area['range']} ft")
+    return {"map_id": live, "cells": cells}
 
 
 def _summon_from_phone(ident, char_id, index, data):
@@ -834,10 +894,22 @@ def _summon_from_phone(ident, char_id, index, data):
         check_action(conn, mine["id"], "spells")
         from .spells import remember, snapshot as undo_snapshot
         snap = undo_snapshot(ctx)
-        result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [], "slot": data.get("slot")}, ident)
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        at = data.get("at")  # the square they tapped, on the map they can see
+        if isinstance(at, dict):
+            if not live or at.get("map_id") != live:
+                raise F.ApiError("Pick the square on the map you can see")
+            from .maps import fog_get
+            md = map_dict(conn.execute("SELECT * FROM maps WHERE id = ?", (live,)).fetchone())
+            try:
+                hidden = md["fog_enabled"] and not fog_get(md, int(at.get("x")), int(at.get("y")))
+            except (TypeError, ValueError):
+                raise F.ApiError("Pick a square on the map for it")
+            if hidden:
+                raise F.ApiError("You can't see that square — pick one you can see")
+        result = engine_cast(ctx, mine["id"], {"spell": index, "targets": [], "slot": data.get("slot"), "at": at if isinstance(at, dict) else None}, ident)
         remember(ctx, result["cast_id"], snap, result, mine["id"], ident["id"])
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
-        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
         if live:
             _bump(conn, live)
     conn = get_db()

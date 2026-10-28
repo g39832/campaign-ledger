@@ -1,4 +1,5 @@
 import os
+import time
 
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
@@ -17,6 +18,7 @@ def create_app(config=None):
         DATABASE=os.path.join(data_dir, "dnd_tracker.sqlite3"),
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,
         AUTO_SNAPSHOT=True,
+        BUILD=str(int(time.time() * 1000)),  # new every time the server starts: open pages reload onto the update
     )
     if config:
         app.config.update(config)

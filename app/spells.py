@@ -342,11 +342,29 @@ def summon_limit(conn, caster, sp):
     return max(total, sp["summon_count"])
 
 
-def summon(ctx, caster, sp):
+def summon(ctx, caster, sp, at=None):
     """Bring a creature from the library into the fight on the caster's side (a clone,
-    a familiar). It acts right after the caster, and its token goes next to theirs on
-    any battle map of this fight. While one is still standing, another can't be made
-    (up to the spell's count). Returns a line for the log."""
+    a familiar). It acts right after the caster, and its token goes where the caster picked
+    on the map (at: {map_id, x, y}), or next to theirs, on any battle map of this fight.
+    While one is still standing, another can't be made (up to the spell's count). Returns a line for the log."""
+    from .maps import BLOCKING as _BLOCK, map_dict as _md
+    spot = None
+    if isinstance(at, dict) and at.get("map_id") is not None:
+        try:
+            spot = (int(at["map_id"]), int(at["x"]), int(at["y"]))
+        except (TypeError, ValueError, KeyError):
+            raise F.ApiError("Pick a square on the map for it")
+        m = ctx.conn.execute("SELECT * FROM maps WHERE id = ? AND encounter_id = ?", (spot[0], ctx.enc["id"])).fetchone()
+        if m is None:
+            raise F.ApiError("That map isn't this fight's")
+        md = _md(m)
+        if not (0 <= spot[1] < md["cols"] and 0 <= spot[2] < md["rows"]):
+            raise F.ApiError("That square is off the map")
+        if md["terrain"].get(f"{spot[1]},{spot[2]}") in _BLOCK:
+            raise F.ApiError("Nobody can stand there — pick an open square")
+        if any(int(round(r["x"])) <= spot[1] < int(round(r["x"])) + (r["size"] or 1) and int(round(r["y"])) <= spot[2] < int(round(r["y"])) + (r["size"] or 1)
+               for r in ctx.conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ?", (spot[0],))):
+            raise F.ApiError("Someone's already standing there — pick an empty square")
     from .combat import _instance_names, _next_sort, _resort
     from .maps import BLOCKING, _bump, _open_spots, map_dict
     cr = ctx.conn.execute("SELECT * FROM creatures WHERE lower(name) = lower(?) AND (campaign_id IS NULL OR campaign_id = ?) "
@@ -383,7 +401,10 @@ def summon(ctx, caster, sp):
             continue
         taken = {(int(round(r["x"])), int(round(r["y"]))) for r in ctx.conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (m["id"],))}
         taken.add((int(round(me["x"])), int(round(me["y"]))))
-        spots = _open_spots(md, taken, me["x"], me["y"], len(new_ids))
+        if spot and spot[0] == m["id"]:  # where they picked, then (for more than one) next to it
+            spots = [spot[1:]] + _open_spots(md, taken | {spot[1:]}, spot[1], spot[2], len(new_ids) - 1)
+        else:
+            spots = _open_spots(md, taken, me["x"], me["y"], len(new_ids))
         for cid, (x, y) in zip(new_ids, spots):
             ctx.conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
                              "VALUES (?,?,'npc',?,?,?,1,0,?,?)", (uuid.uuid4().hex, m["id"], cid, x, y, now_iso(), now_iso()))
@@ -675,7 +696,7 @@ def cast(ctx, caster_id, data, viewer=None):
     if sp["terrain"]:
         lines.insert(0, change_ground(ctx, sp, data))
     if sp["summon"]:
-        lines.insert(0, summon(ctx, caster, sp))
+        lines.insert(0, summon(ctx, caster, sp, data.get("at")))
     from .combat import used_a_move
     used_a_move(ctx, caster["id"], sp["name"])
     if sp["per_fight"]:

@@ -27,6 +27,11 @@
       else run("POST", "/api/maps/" + MID + "/fog", { cells, reveal: tool === "reveal" });
     },
     onPlace: (x, y) => {
+      if (pendingSummon) {
+        const p = pendingSummon;
+        if ((S.tokens || []).some((t) => x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size)) { toast("Someone's already standing there — pick an empty square.", "error"); return; }
+        pendingSummon = null; summonAt = { map_id: MID, x, y }; castNow(p.c, p.a, []); return;
+      }
       if (pendingMonster) { dropMonsters(x, y); return; }
       run("POST", "/api/maps/" + MID + "/tokens", { kind: "marker", label: "Marker", x, y, hidden: true },
         () => toast("Marker placed (hidden from players). Rename it or change it to a trap on the right.", "ok"));
@@ -45,6 +50,8 @@
   let enc = null, encLoading = false; // the map's encounter with full combatant details, for the fight panel
   let hpAmt = "";
   let pendingMonster = null; // the monster waiting to be clicked onto the map
+  let pendingSummon = null, summonAt = null; // a clone waiting for the square it appears on
+  window.appBusy = () => !!(aim || pendingSummon || pendingMonster); // an update waits until this is done
 
   // Free move: the DM repositions anyone, ignoring turns and speed (off: fights follow the rules)
   let freeMove = false;
@@ -113,6 +120,7 @@
   };
   function setTool(t) {
     if (t !== "place" && pendingMonster) { pendingMonster = null; renderMonsters(); }
+    if (t !== "place" && pendingSummon) pendingSummon = null;
     if (t !== "select" && t !== "aim" && aim) { aim = null; view.aim = null; renderSelected(); }
     view.tool = t;
     $$("[data-tool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.tool === t); b.setAttribute("aria-pressed", b.dataset.tool === t); });
@@ -181,6 +189,7 @@
     renderMonsters();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pendingMonster) { pendingMonster = null; setTool("select"); renderMonsters(); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pendingSummon) { pendingSummon = null; aim = null; setTool("select"); renderSelected(); } });
   loadMonsters();
 
   // ---- spell areas -------------------------------------------------------------------------
@@ -398,6 +407,7 @@
     const slot = aim && aim.cast ? aim.slot : null, free = aim && aim.cast ? aim.free : false;
     // a spell that changes the ground (Mend Earth) sends the squares it covers
     const ground = a.cast.spell.terrain && view.aim ? { map_id: MID, cells: MapView.shapeCells(view.aim.shape, S.map) } : {};
+    if (summonAt) { ground.at = summonAt; summonAt = null; }
     aim = null; view.aim = null; setTool("select"); renderSelected(); view.draw();
     L.castSpell(EID(), Object.assign({ caster_id: c.id, targets: ids, slot: slot || null, free: !!free }, ground, a.cast.body), (d) => {
       if (!d || !d.cast) { renderSelected(); return; }
@@ -565,7 +575,12 @@
       const s = a.cast.spell;
       aim = { by: c.id, act: a, done: new Set(), cast: true, slot: s.level || null, free: false };
       if (L.spellHelps(s) && a.single && /\bself\b/i.test(s.notes || "")) { castNow(c, a, [c.id]); return; } // Shield: on yourself, straight away
-      if (s.summon && !s.dice) { castNow(c, a, []); return; } // a clone: nobody to pick, it appears next to the caster
+      if (s.summon && !s.dice) { // a clone: tap the square where it appears
+        pendingSummon = { c, a }; setTool("place"); view.mark = null;
+        $("#hint").textContent = a.name + ": click the square where " + s.summon + " appears. Esc cancels.";
+        renderSelected();
+        return;
+      }
       setTool("select");
       $("#hint").textContent = a.name + ": tap " + (a.single ? "who it's on" : "each one it reaches, then Cast") + " on the map. Esc cancels.";
       renderSelected();

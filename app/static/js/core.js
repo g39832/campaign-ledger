@@ -784,7 +784,36 @@
       if (e.key === "Escape") $$("details[data-menu][open]").forEach((d) => d.removeAttribute("open"));
     });
     Save.render();
+    watchForUpdates();
   });
+
+  /* After an update (the server restarted), every open page reloads itself onto the new version:
+     players don't have to refresh. It waits while someone is typing, something is still saving,
+     or the page says it's busy (aiming a spell, rolling). */
+  function watchForUpdates() {
+    let build = null, waiting = false;
+    const busy = () => {
+      const a = document.activeElement;
+      return (a && (a.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName)))
+        || Save.items.length || Save.running || Binder.anyPending() || (window.appBusy && window.appBusy());
+    };
+    const check = async () => {
+      try {
+        const r = await fetch("/api/join/build", { cache: "no-store", credentials: "same-origin" });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (build === null) { build = d.build; return; }
+        if (d.build !== build) waiting = true;
+      } catch (e) { return; /* the server is restarting: try again next time */ }
+      if (waiting && !busy()) {
+        waiting = false;
+        toast("Updated to the newest version — reloading…", "ok");
+        setTimeout(() => location.reload(), 1200);
+      }
+    };
+    check();
+    setInterval(check, 8000);
+  }
 
   window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

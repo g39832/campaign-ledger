@@ -742,3 +742,10 @@ def test_a_player_who_logged_off_frees_their_character(app, api, joined):
     other.post("/api/join", {"code": joined["code"], "name": "Sam again", "character_id": joined["a"]["id"]})
     assert other.get("/api/play/state")["character"]["name"] == "Aria"
     assert joined["pa"].c.get("/api/play/state").status_code == 401
+
+
+def test_open_pages_can_tell_when_the_server_was_updated(app, api, joined):
+    """Every page checks this now and then and reloads itself after an update (a restart)."""
+    b = api.get("/api/join/build")["build"]
+    assert b and joined["pa"].get("/api/join/build")["build"] == b
+    assert app.test_client().get("/api/join/build").status_code == 200   # the join page too
