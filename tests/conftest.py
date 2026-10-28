@@ -9,6 +9,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def no_real_tunnels(monkeypatch):
+    """Tests never see (or stop) a real online tunnel running on this computer for a game."""
+    from app import online
+    monkeypatch.setattr(online, "METRICS_PORTS", range(0))
+    online._seen.update(at=0.0, found=None)
+
+
 @pytest.fixture
 def data_dir(tmp_path):
     """Every test gets its own throwaway data folder; real data is never touched."""
