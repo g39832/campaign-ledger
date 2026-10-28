@@ -14,7 +14,7 @@
   <div class="round-box"><span class="lbl">Round</span><span class="n" id="round">0</span></div>
   <div class="turn-now"><span class="lbl">Now acting</span><span class="who" id="now">—</span></div>
   <div class="controls">
-    <button class="btn" type="button" id="undo" title="Undo the most recent HP change">{{ icon("undo-2", "sm") }} <span>Undo HP</span></button>
+    <button class="btn" type="button" id="undo" title="Undo the last action">{{ icon("undo-2", "sm") }} <span>Undo last action</span></button>
     <button class="btn" type="button" id="prev">{{ icon("skip-back", "sm") }} Prev<span class="kbd">P</span></button>
     <button class="btn btn-primary btn-lg" type="button" id="next">Next turn {{ icon("skip-forward", "sm") }}<span class="kbd">N</span></button>
     <button class="btn" type="button" id="start">{{ icon("play", "sm") }} Start combat</button>
@@ -79,4 +79,4 @@
 <script type="application/json" id="boot-conditions">{{ CONDITIONS | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/combat.js') }}?v=104"></script>{% endblock %}
+<script src="{{ url_for('static', filename='js/combat.js') }}?v=105"></script>{% endblock %}

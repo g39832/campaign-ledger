@@ -31,6 +31,29 @@ SOLID = {"wall", "rock"}
 MENDABLE = {"rock", "rubble", "difficult", "pit"}
 
 
+def _snap_for_undo(conn, m):
+    """Before a token moves in a running fight: how it all was, for Undo last action."""
+    if not m.get("encounter_id"):
+        return None, None
+    enc = conn.execute("SELECT status FROM encounters WHERE id = ?", (m["encounter_id"],)).fetchone()
+    if not enc or enc["status"] != "active":
+        return None, None
+    from .combat import Ctx
+    from .spells import snapshot
+    ctx = Ctx(conn, m["encounter_id"])
+    return snapshot(ctx), ctx
+
+
+def _record_move(ctx, snap, t):
+    if ctx is None:
+        return
+    from .spells import record
+    name = conn_name = ctx.conn.execute(
+        "SELECT COALESCE(ch.name, cb.name, t.label, 'a token') AS n FROM map_tokens t LEFT JOIN combatants cb ON cb.id = t.combatant_id "
+        "LEFT JOIN characters ch ON ch.id = COALESCE(t.character_id, cb.character_id) WHERE t.id = ?", (t["id"],)).fetchone()["n"]
+    record(ctx, snap, f"{conn_name} moved")
+
+
 def taken_by(conn, map_id, token_id, size, x, y):
     """Who already stands on the squares a token would take at (x, y), or None. Markers and
     traps don't count, nor do the fallen (dead or defeated)."""
@@ -143,13 +166,15 @@ def encounter_summary(conn, enc_id):
     enc = conn.execute("SELECT id, name, status, round, current_id, rev FROM encounters WHERE id = ?", (enc_id,)).fetchone()
     if enc is None:
         return None
+    from .spells import last_action
+    undo_last = last_action(enc_id)
     order = conn.execute(
         """SELECT c.id, COALESCE(ch.name, c.name) AS name, c.init_roll, c.kind, c.hidden,
                   COALESCE(ch.status, c.status) AS status, COALESCE(ch.current_hp, c.current_hp) AS hp,
                   COALESCE(ch.max_hp, c.max_hp) AS max_hp, c.character_id
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""", (enc_id,)).fetchall()
-    return dict(enc) | {"order": [dict(o) for o in order]}
+    return dict(enc) | {"order": [dict(o) for o in order], "undo_last": undo_last}
 
 
 def _unlinked_party(conn, map_id):
@@ -990,6 +1015,7 @@ def api_move_token(token_id):
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(m, t["size"], x, y)
+        snap, ctx = _snap_for_undo(conn, m)
         if not data.get("free"):  # in a fight: only on their turn and as far as their speed
             from .movement import check_dm_move
             check_dm_move(conn, m, t, x, y)
@@ -999,6 +1025,7 @@ def api_move_token(token_id):
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         from .play import _zone_check
         _zone_check(conn, m)  # an enemy walking into Spirit Guardians gets hit by it
+        _record_move(ctx, snap, t)
         _bump(conn, map_id)
     return jsonify(dm_state(map_id))
 

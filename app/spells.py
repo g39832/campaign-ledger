@@ -769,8 +769,10 @@ def snapshot(ctx):
     chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots "
                                            "FROM characters WHERE id IN (SELECT character_id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))]
     maps = [dict(r) for r in conn.execute("SELECT id, terrain FROM maps WHERE encounter_id = ?", (eid,))]
+    toks = [dict(r) for r in conn.execute("SELECT t.id, t.x, t.y FROM map_tokens t JOIN maps m ON m.id = t.map_id WHERE m.encounter_id = ?", (eid,))]
+    enc = dict(conn.execute("SELECT round, current_id, status FROM encounters WHERE id = ?", (eid,)).fetchone())
     one = lambda sql: conn.execute(sql, (eid,)).fetchone()[0] or 0
-    return {"cbs": cbs, "chars": chars, "maps": maps,
+    return {"cbs": cbs, "chars": chars, "maps": maps, "toks": toks, "enc": enc,
             "tok": one("SELECT MAX(t.id) FROM map_tokens t JOIN maps m ON m.id = t.map_id WHERE m.encounter_id = ?"),
             "hp": one("SELECT MAX(id) FROM hp_changes WHERE encounter_id = ?"),
             "log": one("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?")}
@@ -778,6 +780,7 @@ def snapshot(ctx):
 
 def remember(ctx, cast_id, snap, out, caster_id, player_id=None):
     import time
+    record(ctx, snap)  # the DM's Undo last action can take it back too
     last = ctx.conn.execute("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?", (ctx.enc["id"],)).fetchone()[0] or 0
     store = _undo_store()
     store[cast_id] = {"eid": ctx.enc["id"], "caster": caster_id, "player": player_id, "log": last, "snap": snap,
@@ -800,7 +803,15 @@ def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
     last = conn.execute("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?", (eid,)).fetchone()[0] or 0
     if last != rec["log"]:
         raise F.ApiError("Too late to take it back — something else has happened in the fight since")
-    snap = rec["snap"]
+    restore(ctx, rec["snap"])
+    ctx.log("spell", f"{by_name} took back {rec['spell']}")
+    _undo_store().pop(str(cast_id), None)
+    return rec["spell"]
+
+
+def restore(ctx, snap):
+    """Put the fight back exactly as the snapshot had it."""
+    conn, eid = ctx.conn, ctx.enc["id"]
     keep = {c["id"] for c in snap["cbs"]}
     gone = [r["id"] for r in conn.execute("SELECT id FROM combatants WHERE encounter_id = ?", (eid,)) if r["id"] not in keep]
     for cid in gone:  # a summoned clone goes away again
@@ -819,11 +830,59 @@ def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
         conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (m["terrain"], m["id"]))
         conn.execute("DELETE FROM map_tokens WHERE map_id = ? AND id > ?", (m["id"], snap["tok"]))
         _bump(conn, m["id"])
+    for t in snap.get("toks") or []:
+        conn.execute("UPDATE map_tokens SET x = ?, y = ? WHERE id = ?", (t["x"], t["y"], t["id"]))
+    if snap.get("enc"):
+        e = snap["enc"]
+        conn.execute("UPDATE encounters SET round = ?, current_id = ?, status = ? WHERE id = ?", (e["round"], e["current_id"], e["status"], eid))
+        ctx.enc.update(e)
     conn.execute("DELETE FROM hp_changes WHERE encounter_id = ? AND id > ?", (eid, snap["hp"]))
     conn.execute("DELETE FROM combat_log WHERE encounter_id = ? AND id > ?", (eid, snap["log"]))
-    ctx.log("spell", f"{by_name} took back {rec['spell']}")
-    _undo_store().pop(str(cast_id), None)
-    return rec["spell"]
+
+
+# ---- Undo last action (the DM): every change in a fight keeps the state from just before it
+
+def _history(eid):
+    from flask import current_app
+    return current_app.extensions.setdefault("fight_undo", {}).setdefault(eid, [])
+
+
+def record(ctx, snap, label=None):
+    """After a change in the fight: remember how it was before, so the DM can undo it."""
+    if snap is None:
+        return
+    row = ctx.conn.execute("SELECT message FROM combat_log WHERE encounter_id = ? AND id > ? ORDER BY id DESC LIMIT 1",
+                           (ctx.enc["id"], snap["log"])).fetchone()
+    label = (row["message"] if row else None) or label
+    if not label:
+        return  # nothing worth undoing happened
+    h = _history(ctx.enc["id"])
+    h.append({"snap": snap, "label": label[:140]})
+    del h[:-25]
+
+
+def last_action(eid):
+    h = _history(eid)
+    return h[-1]["label"] if h else None
+
+
+@bp.post("/encounters/<int:eid>/undo-last")
+def api_undo_last(eid):
+    """The DM's Undo last action: back to just before the most recent change in the fight."""
+    from .combat import Ctx, encounter_state
+    from .maps import _bump
+    h = _history(eid)
+    if not h:
+        raise F.ApiError("Nothing to undo")
+    with tx() as conn:
+        ctx = Ctx(conn, eid)
+        step = h.pop()
+        restore(ctx, step["snap"])
+        ctx.log("system", f"The DM undid: {step['label']}")
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
+        for m in conn.execute("SELECT id FROM maps WHERE encounter_id = ?", (eid,)).fetchall():
+            _bump(conn, m["id"])
+    return jsonify(encounter_state(eid) | {"undone": step["label"]})
 
 
 @bp.post("/encounters/<int:eid>/casts/<cast_id>/undo")

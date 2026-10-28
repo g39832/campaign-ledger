@@ -83,9 +83,9 @@
     $("#end").hidden = st === "ended";
     $("#next").disabled = $("#prev").disabled = st !== "active";
     const u = $("#undo");
-    u.disabled = !S.undo;
-    u.title = S.undo ? "Undo: " + S.undo.label : "No HP change to undo";
-    $("span", u).textContent = "Undo HP";
+    u.disabled = !S.undo_last;
+    u.title = S.undo_last ? "Undo: " + S.undo_last : "Nothing to undo";
+    $("span", u).textContent = "Undo last action";
     $("#count").textContent = S.combatants.length ? S.combatants.filter((c) => !OUT.has(c.status)).length + " standing of " + S.combatants.length : "";
     document.title = e.name + (st === "active" ? " · Round " + e.round : "") + " · Campaign Ledger";
   }
@@ -99,7 +99,7 @@
   if ($("#open-map")) $("#open-map").addEventListener("click", makeMap);
   armed($("#end"), () => run("POST", "/api/encounters/" + EID + "/end"), "End combat? Click again");
   $("#undo").addEventListener("click", () => {
-    act("POST", "/api/encounters/" + EID + "/undo", {}, apply, {
+    act("POST", "/api/encounters/" + EID + "/undo-last", {}, (d) => { if (d && d.undone) toast("Undone: " + d.undone, "ok"); apply(d); }, {
       onError: (err) => {
         if (err.status === 409 && err.data.needs_force) {
           toast(err.message, "error", { ms: 12000, action: { label: "Undo anyway", run: () => run("POST", "/api/encounters/" + EID + "/undo", { force: true }) } });

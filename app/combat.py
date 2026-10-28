@@ -175,8 +175,14 @@ def encounter_state(enc_id, conn=None, log_limit=400):
         "log": log,
         "log_total": total_log,
         "undo": dict(undo) if undo else None,
+        "undo_last": _last_action(enc_id),
         "settings": settings,
     }
+
+
+def _last_action(enc_id):
+    from .spells import last_action
+    return last_action(enc_id)
 
 
 def list_encounters(campaign_id):
@@ -261,7 +267,10 @@ def mutate(enc_id, fn, op_id=None):
     with tx() as conn:
         ctx = Ctx(conn, enc_id)
         if claim_op(conn, op_id):
+            from .spells import record, snapshot
+            snap = snapshot(ctx)
             fn(ctx)
+            record(ctx, snap)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), enc_id))
             conn.execute("UPDATE campaigns SET updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["campaign_id"]))
     return jsonify(encounter_state(enc_id))

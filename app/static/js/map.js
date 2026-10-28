@@ -242,6 +242,9 @@
       h("span", { class: "tb-now" }, h("span", { class: "faint" }, "Round " + e.round + " · "), h("b", null, cur ? cur.name : "—"), cur ? "'s turn" : ""),
       h("button", { type: "button", class: "btn btn-sm", id: "tb-prev", title: "Previous turn (P)", onclick: () => encAct("prev") }, icon("skip-back", "sm"), " Prev", h("span", { class: "kbd" }, "P")),
       h("button", { type: "button", class: "btn btn-sm btn-primary", id: "tb-next", title: "Next turn (N)", onclick: () => encAct("next") }, "Next turn ", icon("skip-forward", "sm"), h("span", { class: "kbd" }, "N")),
+      h("button", { type: "button", class: "btn btn-sm", id: "tb-undo", disabled: !e.undo_last, title: e.undo_last ? "Undo: " + e.undo_last : "Nothing to undo",
+        onclick: () => act("POST", "/api/encounters/" + e.id + "/undo-last", {}, (d) => { if (d && d.undone) toast("Undone: " + d.undone, "ok"); lastResult = null; enc = null; refresh(true); },
+          { onError: (err) => toast(err.message, "error") }) }, icon("undo-2", "sm"), " Undo last action"),
     ] : e.status === "ended" ? [
       h("span", { class: "tb-now faint" }, "Combat over"),
       h("button", { type: "button", class: "btn btn-sm", onclick: () => encAct("reopen") }, icon("rotate-ccw", "sm"), " Reopen"),

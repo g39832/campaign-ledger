@@ -293,7 +293,8 @@ def api_move(token_id):
             raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
         if blocked_path(md, t["size"], t["x"], t["y"], x, y):
             raise F.ApiError("Solid rock is in the way — you can't move there", status=403)
-        from .maps import taken_by
+        from .maps import _record_move, _snap_for_undo, taken_by
+        snap, uctx = _snap_for_undo(conn, md)
         who = taken_by(conn, m["id"], token_id, t["size"], x, y)
         if who:  # no two on the same square
             raise F.ApiError(f"{who} is already standing there", status=403)
@@ -301,6 +302,7 @@ def api_move(token_id):
         turn = check_move(conn, md, owner, t["x"], t["y"], x, y)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         entered = _zone_check(conn, md)
+        _record_move(uctx, snap, t)
         _bump(conn, m["id"])
     return jsonify({"ok": True, "x": x, "y": y, "move": turn, "zone": entered})
 
@@ -527,8 +529,11 @@ def api_me_end_turn():
         if claim_op(conn, data.get("op_id")):
             if ctx.enc["current_id"] != cb["id"]:
                 raise F.ApiError("It isn't your turn", status=403)
+            from .spells import record, snapshot
+            snap = snapshot(ctx)
             ctx.log("turn", f"{ident['name']} ended {ctx.combatant(cb['id'])['name']}'s turn")
             next_turn(ctx)
+            record(ctx, snap)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
             live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
             if live:
