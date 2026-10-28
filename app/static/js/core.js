@@ -244,6 +244,31 @@
             : " Cast" + (n && !s.summon ? " on " + n : "")),
         h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
   }
+  /* Dice colors: ready-made sets, or any die and number color. o: {style: {body, ink} | null, onChange(style | null)}. */
+  const DICE_SETS = [["Classic", null], ["Blood red", "#8e1b1b", "#fbe9d0"], ["Royal purple", "#4b2a6b", "#f2e6ff"], ["Forest", "#2f5d34", "#f1ecd8"],
+    ["Ocean", "#1f4e79", "#e8f4ff"], ["Gold & black", "#1b1712", "#e6c45a"], ["Bone", "#e8dcc2", "#2b2118"], ["Ice", "#bfe3f2", "#12324a"], ["Ember", "#c2571a", "#1d0f05"]];
+  function diceColors(o) {
+    const st = o.style && o.style.body ? o.style : null;
+    const canvas = h("canvas", { class: "dc-preview", "aria-hidden": "true" });
+    const pick = (style) => { o.onChange(style); };
+    const same = (a, b) => (!a && !b) || (a && b && a.body === b.body && a.ink === b.ink);
+    const box = h("div", { class: "dice-colors" },
+      h("div", { class: "dc-row" },
+        h("div", { class: "dc-sets", role: "group", "aria-label": "Dice color sets" }, DICE_SETS.map(([name, body, ink]) => {
+          const style = body ? { body, ink } : null;
+          return h("button", { type: "button", class: "dc-set" + (same(style, st) ? " is-on" : ""), "aria-pressed": String(!!same(style, st)), title: name,
+            onclick: () => pick(style) }, h("span", { class: "dc-swatch", style: body ? "background:" + body + ";color:" + ink : "" }, body ? "20" : "★"), h("span", null, name));
+        })),
+        h("div", { class: "dc-own" },
+          h("label", { class: "dc-color" }, h("input", { type: "color", value: (st && st.body) || "#a5382a", "aria-label": "Die color",
+            onchange: (e) => pick({ body: e.target.value, ink: (st && st.ink) || "#ffffff" }) }), h("span", null, "Die")),
+          h("label", { class: "dc-color" }, h("input", { type: "color", value: (st && st.ink) || "#fbf1de", "aria-label": "Number color",
+            onchange: (e) => pick({ body: (st && st.body) || "#a5382a", ink: e.target.value }) }), h("span", null, "Numbers")),
+          canvas)));
+    // roll the preview die once it's on the page
+    requestAnimationFrame(() => { if (canvas.isConnected && window.Dice && Dice.preview) Dice.preview(canvas, st); });
+    return box;
+  }
   const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
   function castResult(r, onUndo, onTakeBack) {
     return h("div", { class: "cast-result", role: "status" },
@@ -818,5 +843,5 @@
     setInterval(check, 8000);
   }
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

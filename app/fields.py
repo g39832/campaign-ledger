@@ -252,6 +252,7 @@ CHARACTER = {
     "skill_profs": Json("dict"),
     "skill_bonus": Json("dict"),
     "skill_set": Json("dict"),  # a skill's total typed in by hand: it replaces the worked-out number
+    "dice_style": Json("dict"),  # the character's dice colors: {body, ink} (empty: the classic mixed set)
     "attacks": Json("list"),
     "spellcasting_ability": Choice("", "str", "dex", "con", "int", "wis", "cha"),
     "spell_slots": Json("dict"),

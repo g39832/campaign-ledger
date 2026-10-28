@@ -153,17 +153,18 @@
   // Each displayed die: which solid, which face must end on top, and how it is labelled.
   function diceFromRoll(roll) {
     const out = [];
+    const custom = roll.dice && /^#[0-9a-f]{6}$/i.test(roll.dice.body || "") && /^#[0-9a-f]{6}$/i.test(roll.dice.ink || "") ? roll.dice : null; // the roller's own colors
     for (const t of roll.result.terms) {
       if (t.type !== "dice") continue;
       t.rolls.forEach((r) => {
         if (t.sides === 100) {
           const tens = Math.floor((r.value % 100) / 10), units = r.value % 10;
-          out.push({ sides: 10, face: tens === 0 ? 10 : tens, text: (f) => String((f % 10) * 10).padStart(2, "0"), shown: String(tens * 10).padStart(2, "0"), kept: r.kept, style: "pct", value: r.value, group: 100 });
-          out.push({ sides: 10, face: units === 0 ? 10 : units, text: (f) => String(f % 10), shown: String(units), kept: r.kept, style: 10, value: r.value, group: 100 });
+          out.push({ sides: 10, face: tens === 0 ? 10 : tens, text: (f) => String((f % 10) * 10).padStart(2, "0"), shown: String(tens * 10).padStart(2, "0"), kept: r.kept, style: "pct", value: r.value, group: 100, custom });
+          out.push({ sides: 10, face: units === 0 ? 10 : units, text: (f) => String(f % 10), shown: String(units), kept: r.kept, style: 10, value: r.value, group: 100, custom });
         } else if ([4, 6, 8, 10, 12, 20].includes(t.sides)) {
-          out.push({ sides: t.sides, face: r.value, text: (f) => String(f), shown: String(r.value), kept: r.kept, style: t.sides, value: r.value });
+          out.push({ sides: t.sides, face: r.value, text: (f) => String(f), shown: String(r.value), kept: r.kept, style: t.sides, value: r.value, custom });
         } else { // d2/d3: shown on a d6 with the number painted on
-          out.push({ sides: 6, face: r.value, text: (f) => (f <= t.sides ? String(f) : String(((f - 1) % t.sides) + 1)), shown: String(r.value), kept: r.kept, style: 6, value: r.value });
+          out.push({ sides: 6, face: r.value, text: (f) => (f <= t.sides ? String(f) : String(((f - 1) % t.sides) + 1)), shown: String(r.value), kept: r.kept, style: 6, value: r.value, custom });
         }
       });
     }
@@ -325,7 +326,7 @@
       return done;
     }
     drawDie(d, q, cx, cy, s, dim) {
-      const ctx = this.ctx, st = STYLE[d.s.style];
+      const ctx = this.ctx, st = d.s.custom || STYLE[d.s.style];
       const L0 = V.norm([-0.45, 0.55, 0.8]);
       const rv = d.solid.verts.map((v) => Q.rot(q, v));
       const faces = d.solid.faces.map((f) => ({ f, n: Q.rot(q, f.n), c: Q.rot(q, f.c) }))
@@ -647,6 +648,13 @@
     },
   };
 
+  /* A little die in someone's colors (the dice-color picker's preview). style: {body, ink} or null. */
+  Dice.preview = function (canvas, style) {
+    const tray = canvas._tray || (canvas._tray = new Tray(canvas));
+    const face = 20;
+    return tray.play(diceFromRoll({ dice: style, result: { terms: [{ type: "dice", sides: 20, rolls: [{ value: face, kept: true }] }] } }),
+      { duration: prefs.speed === "none" ? 0 : 1100, size: 30, total: null });
+  };
   window.Dice = Dice;
   window.DiceInternals = { SOLIDS, diceFromRoll, Tray, Q, V };
   document.addEventListener("DOMContentLoaded", () => Dice.init());

@@ -70,6 +70,16 @@
     b.bind(el, f, { int: isInt, nullable: NULLABLE.has(f), onInput: derive });
   });
 
+  // ---- dice colors ------------------------------------------------------------------
+  function renderDice() {
+    const box = $("#dice-colors");
+    if (!box) return;
+    const st = model.dice_style && model.dice_style.body ? model.dice_style : null;
+    box.replaceChildren(L.diceColors({ style: st, onChange: (style) => { b.set("dice_style", style || {}, true); renderDice(); } }));
+    const hint = $("#dice-hint"); if (hint) hint.textContent = st ? "custom" : "classic";
+  }
+  renderDice();
+
   // ---- nested JSON fields ---------------------------------------------------------
   const clone = (o) => JSON.parse(JSON.stringify(o ?? null));
   function setIn(field, key, value) {

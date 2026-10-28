@@ -98,6 +98,7 @@
     setTimeout(() => view.fit(), 50);
   });
   let rollsOpen = !window.matchMedia("(max-width: 1100px)").matches; // saving throws and skills: folded on phones
+  let diceOpen = false; // the dice colors picker, folded away until they open it
   if (window.Dice) Dice.overlayHost = $("#stage");
 
   const roll = (check, e, crit) => Dice.roll({ check: Object.assign({ character_id: S.character.id }, check), crit: !!crit }, e, { wait: true });
@@ -606,6 +607,14 @@
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
             : s.kind === "debuff" && !c.my_turn ? h("span", { class: "tag", title: "On your turn" }, L.spellWhat(s) || "debuff") : null))] : null,
+        h("details", { class: "roll-fold dice-fold", open: diceOpen, ontoggle: (e) => { diceOpen = e.target.open; } },
+          h("summary", { class: "lbl" }, "My dice colors"),
+          h("p", { class: "faint", style: "margin:6px 0 8px;font-size:.88rem" }, "Everyone sees your rolls in these dice."),
+          L.diceColors({ style: c.dice_style, onChange: async (style) => {
+            try { await api("POST", "/api/play/me/dice", Object.assign({ op_id: L.uid() }, style || {})); toast("Dice colors saved.", "ok"); }
+            catch (e) { toast(e.message, "error"); }
+            load(true);
+          } })),
         h("details", { class: "roll-fold", open: rollsOpen, ontoggle: (e) => { rollsOpen = e.target.open; } },
           h("summary", { class: "lbl" }, "Saving throws & skills"),
           h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),

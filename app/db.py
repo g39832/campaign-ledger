@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 MIGRATIONS = {
     1: """
@@ -357,6 +357,9 @@ MIGRATIONS = {
     # v8: skills typed in by hand ({"perception": 7}) instead of worked out from the abilities.
     8: """
     ALTER TABLE characters ADD COLUMN skill_set TEXT NOT NULL DEFAULT '{}';
+    """,
+    9: """
+    ALTER TABLE characters ADD COLUMN dice_style TEXT NOT NULL DEFAULT '{}';
     """,
 }
 

@@ -29,8 +29,60 @@ MODES = ("normal", "advantage", "disadvantage")
 AC_NOTE = re.compile(r"\s*\(AC \d+\)|\s*vs AC \d+")
 
 
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def clean_dice_style(style):
+    """{body, ink} as #rrggbb colors, or None (the classic dice). Numbers that would be hard to
+    read on the die (too little contrast) become black or white instead."""
+    if not isinstance(style, dict) or not HEX.match(str(style.get("body") or "")):
+        return None
+    body = style["body"].lower()
+    ink = str(style.get("ink") or "").lower()
+
+    def lum(hx):
+        def ch(v):
+            v = v / 255
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        n = int(hx[1:], 16)
+        return 0.2126 * ch(n >> 16) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255)
+
+    def contrast(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + 0.05) / (lo + 0.05)
+    if not HEX.match(ink) or contrast(body, ink) < 3:
+        ink = "#111111" if contrast(body, "#111111") >= contrast(body, "#ffffff") else "#ffffff"
+    return {"body": body, "ink": ink}
+
+
+def dice_style_for(row):
+    """Whose dice a roll is drawn with: the character who rolled (or whose fight entry or player
+    did). Looked up once per character per request."""
+    from flask import g
+    try:
+        keys = row.keys()
+        char_id = row["character_id"] if "character_id" in keys else None
+        conn = get_db()
+        if not char_id and "combatant_id" in keys and row["combatant_id"]:
+            r = conn.execute("SELECT character_id FROM combatants WHERE id = ?", (row["combatant_id"],)).fetchone()
+            char_id = r and r["character_id"]
+        if not char_id and "player_id" in keys and row["player_id"] and not row["combatant_id"]:
+            r = conn.execute("SELECT character_id FROM players WHERE id = ?", (row["player_id"],)).fetchone()
+            char_id = r and r["character_id"]
+        if not char_id:
+            return None
+        cache = g.setdefault("dice_styles", {})
+        if char_id not in cache:
+            r = conn.execute("SELECT dice_style FROM characters WHERE id = ?", (char_id,)).fetchone()
+            cache[char_id] = clean_dice_style(json.loads(r["dice_style"] or "{}")) if r else None
+        return cache[char_id]
+    except Exception:  # never let a color stop a roll from showing
+        return None
+
+
 def roll_dict(row, viewer=None):
     d = dict(row)
+    d["dice"] = dice_style_for(row)
     d["result"] = json.loads(d["result"])
     d.pop("op_id", None)
     if viewer and viewer.get("role") == "player":  # players never see a target's AC (older rolls still say "Hit (AC 12)")

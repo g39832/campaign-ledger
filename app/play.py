@@ -184,6 +184,8 @@ def _own_character(conn, char_id):
                          + (f" · speed ×{x['speed_mult']}" if x.get("speed_mult") else "")
                          + (f" · +{x['max_hp']} max HP" if x.get("max_hp") else "")
                          for x in c["conditions"]]
+    from .rolls import clean_dice_style
+    out["dice_style"] = clean_dice_style(c.get("dice_style"))
     out["ac_bonus"] = ac_bonus(c["conditions"])
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
@@ -421,6 +423,25 @@ def api_me_hp():
     with tx() as conn:
         change_character_hp(conn, char_id, body, by=ident["name"])
     return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/dice")
+def api_me_dice():
+    """The player picks their character's dice colors: {body, ink} as #rrggbb, or {} for the
+    classic dice. Everyone sees that character's rolls in them."""
+    from .rolls import HEX, clean_dice_style
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    body, ink = data.get("body"), data.get("ink")
+    if body in (None, ""):
+        style = {}
+    elif not HEX.match(str(body)) or (ink not in (None, "") and not HEX.match(str(ink))):
+        raise F.ApiError("Pick colors from the color picker")
+    else:
+        style = {"body": str(body).lower(), "ink": str(ink or "").lower()}
+    with tx() as conn:
+        conn.execute("UPDATE characters SET dice_style = ?, updated_at = ? WHERE id = ?", (json.dumps(style), now_iso(), char_id))
+    return jsonify({"dice_style": clean_dice_style(style), "character": _own_character(get_db(), char_id)})
 
 
 @bp.post("/api/play/me/slot")
