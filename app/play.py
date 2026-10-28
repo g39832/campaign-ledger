@@ -83,11 +83,20 @@ def api_lookup():
         raise F.NotFound("No game with that code. Check it with your DM.")
     conn = get_db()
     claimed = {r["character_id"] for r in conn.execute(
-        "SELECT character_id FROM players WHERE campaign_id = ? AND revoked = 0 AND character_id IS NOT NULL", (camp["id"],))}
+        "SELECT character_id FROM players WHERE campaign_id = ? AND revoked = 0 AND character_id IS NOT NULL AND last_seen >= ?",
+        (camp["id"], _gone_since()))}
     chars = conn.execute("SELECT id, name, class_name, level FROM characters WHERE campaign_id = ? AND archived = 0 "
                          "AND kind = 'pc' ORDER BY name COLLATE NOCASE", (camp["id"],)).fetchall()
     return jsonify({"campaign": camp["name"],
                     "characters": [dict(c) | {"claimed": c["id"] in claimed} for c in chars]})
+
+
+GONE_AFTER_MINUTES = 3  # a player not seen for this long has logged off: their character is free again
+
+
+def _gone_since():
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(minutes=GONE_AFTER_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 @bp.post("/api/join")
@@ -109,11 +118,14 @@ def api_join():
                           (char_id, camp["id"])).fetchone()
         if ch is None:
             raise F.ApiError("That character isn't in this game")
-        if conn.execute("SELECT 1 FROM players WHERE character_id = ? AND revoked = 0", (char_id,)).fetchone():
-            raise F.ApiError("Someone has already joined as that character. Ask your DM to free it up.")
+        if conn.execute("SELECT 1 FROM players WHERE character_id = ? AND revoked = 0 AND last_seen >= ?", (char_id, _gone_since())).fetchone():
+            raise F.ApiError("Someone is playing that character right now. If it's you on another device, close it there "
+                             "(or tap Leave this game) and try again in a few minutes — or ask your DM to free it up.")
     raw = secrets.token_urlsafe(32)
     ts = now_iso()
     with tx() as conn:
+        if char_id:  # whoever had this character before has logged off: they're signed out
+            conn.execute("UPDATE players SET revoked = 1 WHERE character_id = ? AND revoked = 0", (char_id,))
         conn.execute("INSERT INTO players (campaign_id, name, character_id, token_hash, created_at, last_seen) "
                      "VALUES (?,?,?,?,?,?)", (camp["id"], name, char_id or None, token_hash(raw), ts, ts))
     resp = jsonify({"joined": camp["name"]})

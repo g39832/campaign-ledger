@@ -1314,3 +1314,7 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 
 /* Take it back: undo a misclicked cast */
 .take-back { margin-top: 6px; }
+
+/* a player's moves under "It's your turn" */
+.your-moves .fight-act { min-height: 48px; }
+.your-moves .fight-act .faint { flex-basis: 100%; margin-left: 0; }

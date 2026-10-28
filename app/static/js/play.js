@@ -29,8 +29,9 @@
     reach: (t) => { const mv = t.own && S && S.character && S.character.move; return mv && mv.my_turn ? { budget: mv.held ? 0 : mv.budget, from: mv.from } : null; },
     onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
       if (casting && t && t.character_id) pick(t.character_id);
-      else if (using && t) pickFoe(t.combatant_id, t.display);
+      else if (using && !using.aim && t) pickFoe(t.combatant_id, t.display);
     },
+    onAim: () => { if (using && using.aim) { caughtByAim(); render(); } }, // the cone was turned: who's in it now
     onPing: async (x, y) => {
       // one ping every few seconds (the server keeps the same cooldown)
       const wait = Math.ceil((lastPing + PING_COOLDOWN_MS - Date.now()) / 1000);
@@ -213,6 +214,22 @@
       h("div", { class: "row", style: "gap:8px" },
         h("button", { type: "button", class: "btn btn-sm", onclick: () => { using = null; render(); } }, "Done"),
         k.result.undo ? h("button", { type: "button", class: "btn btn-sm btn-quiet take-back", title: "A misclick? Undo it all", onclick: () => takeBack(k.result.undo) }, icon("undo-2", "sm"), " Take it back") : null));
+    if (k.aim) {
+      const order = (S.encounter && S.encounter.order) || [], inside = (k.inside || []).map((id) => order.find((o) => o.id === id)).filter(Boolean);
+      return h("div", { id: "use-box", class: "fight-aim" },
+        h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
+        h("p", { class: "fa-ask" }, "Drag on the map to point it. Everyone in it is hit — teammates too, so tap them to spare them."),
+        inside.length ? h("div", { class: "roll-row", style: "margin-bottom:8px" }, inside.map((o) => {
+          const mate = o.kind !== "enemy", spared = k.spared.has(o.id);
+          return h("button", { type: "button", class: "btn btn-sm" + (spared ? "" : " is-armed"), disabled: k.busy, style: spared ? "text-decoration:line-through;opacity:.6" : null,
+            onclick: () => { spared ? k.spared.delete(o.id) : k.spared.add(o.id); caughtByAim(); render(); } },
+            (mate && !spared ? "⚠ " : "") + o.name, mate ? h("span", { class: "tag is-bad", style: "font-size:.72rem;margin-left:4px" }, "ally") : null);
+        })) : h("p", { class: "faint" }, "Nobody's in it yet — drag on the map to point it."),
+        h("div", { class: "row" },
+          h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: k.busy || !k.chosen.size, onclick: () => { stopAimUse(); k.aim = false; useNow(); } },
+            k.busy ? "Rolling…" : "Use on " + k.chosen.size),
+          h("button", { type: "button", class: "btn btn-sm", disabled: k.busy, onclick: () => { stopAimUse(); using = null; render(); } }, "Cancel")));
+    }
     const list = foes();
     return h("div", { id: "use-box", class: "fight-aim" },
       h("div", { class: "fa-head" }, icon("swords", "sm"), h("b", null, k.name)),
@@ -251,11 +268,47 @@
     } catch (e) { toast(e.message, "error"); }
     load(true);
   }
+  /* An area (Wide Slash's cone): it comes out of your token; drag on the map to turn it, see who
+     it catches (teammates too: friendly fire, tap them to spare them), then Use. */
+  function startAimUse(s) {
+    const me = (S.mapTokens || []).find((t) => t.own), ar = L.spellView(s).area;
+    if (!S.map || !me || !ar) { startUse("spell", s.index, s.name, false, s.targets); return; }
+    casting = null;
+    const from = [me.x + me.size / 2, me.y + me.size / 2], fromR = me.size / 2;
+    const foes = (S.mapTokens || []).filter((t) => t.combatant_id && !t.own && foes_ids().has(t.combatant_id));
+    const near = foes.sort((p, q) => Math.hypot(p.x - me.x, p.y - me.y) - Math.hypot(q.x - me.x, q.y - me.y))[0];
+    const to = near ? [near.x + near.size / 2, near.y + near.size / 2] : [from[0] + 1, from[1]];
+    const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
+    const shape = { kind: ar.kind, size: ar.size, width: 5, dir: Math.round(ang * 180 / Math.PI / 5) * 5, label: s.name };
+    if (ar.kind === "cone" || ar.kind === "line") { const r = shape.dir * Math.PI / 180; shape.x = from[0] + Math.cos(r) * fromR; shape.y = from[1] + Math.sin(r) * fromR; }
+    else { shape.x = to[0]; shape.y = to[1]; }
+    view.aim = { shape, from, fromR, range: ar.range || 0, hits: new Set() };
+    if (ar.kind !== "cone" && ar.kind !== "line") [shape.x, shape.y] = view.clampAim(shape.x, shape.y);
+    view.aim.hits = new Set(MapView.tokensInShape(shape, S.map, S.mapTokens).map((t) => t.id));
+    view.tool = "aim";
+    using = { what: "spell", index: s.index, name: s.name, single: false, aim: true, spared: new Set(), chosen: new Set(), busy: false, result: null };
+    caughtByAim();
+    render();
+    $("#hint").textContent = s.name + ": drag on the map to point it" + (ar.kind === "cone" || ar.kind === "line" ? " (it comes out of you)" : "") + ", then Use.";
+    view.draw();
+    const box = $("#use-box");
+    if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  const foes_ids = () => new Set(foes().map((o) => o.id));
+  function caughtByAim() {
+    const u = using, mine = myCb();
+    if (!u || !view.aim) return;
+    const ids = [...view.aim.hits].map((id) => (S.mapTokens || []).find((t) => t.id === id)).filter((t) => t && t.combatant_id && t.combatant_id !== mine)
+      .map((t) => t.combatant_id);
+    u.inside = ids;
+    u.chosen = new Set(ids.filter((id) => !u.spared.has(id)));
+  }
+  function stopAimUse() { view.aim = null; view.tool = "select"; view.draw(); }
   const useBtn = (what, index, name, single, max, reach) => h("button", { type: "button", class: "btn btn-sm btn-primary" + (using && using.what === what && using.index === index ? " is-armed" : ""),
     disabled: !!(S.character && S.character.actions && !S.character.actions.left),
     title: "Then tap an enemy", onclick: () => startUse(what, index, name, single, max, reach) }, icon("swords", "sm"), " Use");
   const aimsAtFoes = (s) => (s.kind === "damage" || s.kind === "debuff") && !s.terrain && !s.aura && !s.summon && !L.spellHelps(s);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && using && !using.busy) { using = null; render(); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && using && !using.busy) { if (using.aim) stopAimUse(); using = null; render(); } });
 
   // ---- casting a healing or buff spell on someone in the party ------------------------------
   // Tap the spell, tap who it's for (here or their token on the map), then Cast. The server rolls it.
@@ -335,6 +388,32 @@
         if (d) { toast("Turn ended.", "ok"); if (window.FX) FX.sound("ac"); }
       } }, icon("check", "sm"), endArmed ? " Tap again to end your turn" : " End my turn");
   }
+  /* On their turn: every move they can use right now, as cards like the DM's map panel. Tap one,
+     then tap who on the map (or in the list that opens right here). */
+  function yourMoves(c) {
+    const out = [], noActs = !!(c.actions && !c.actions.left);
+    const card = (ic, name, info, run, opts) => h("button", { type: "button", class: "fight-act" + (opts && opts.heal ? " is-heal" : ""),
+      disabled: noActs && !(opts && opts.free), onclick: run }, icon(ic, "sm"), h("b", null, name), info ? h("span", { class: "faint" }, info) : null);
+    (c.attacks || []).forEach((a) => {
+      if (a.recharging) return;
+      if (a.extra_moves || a.stance > 1) out.push(card("zap", a.name || "Action Surge", [a.extra_moves ? "+" + a.extra_moves + " moves" : "", a.stance > 1 ? "damage ×" + a.stance : ""].filter(Boolean).join(" · ") + " this turn",
+        () => me("surge", { index: a.index }).then((d) => { if (d) toast((a.name || "Action Surge") + "!", "ok"); }), { free: true }));
+      else if (a.damage && !a.heal) out.push(card("swords", a.name || "Attack", attackInfo(a) + (a.reach ? " · reaches " + a.reach + " ft" : ""),
+        () => startUse("attack", a.index, a.name || "Attack", !a.area, 0, a.reach)));
+    });
+    (c.spells || []).forEach((s) => {
+      if (s.recharging) return;
+      const info = spellInfo(s, c, c.derived || {});
+      if (s.aura) return; // switched on and off from the spells below
+      if (s.zone) out.push(card("sun", s.name, info, () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets))));
+      else if (aimsAtFoes(s) && s.area && S.map) out.push(card(L.KIND_ICON[s.kind] || "zap", s.name, info, () => startAimUse(s)));
+      else if (aimsAtFoes(s)) out.push(card(L.KIND_ICON[s.kind] || "zap", s.name, info, () => startUse("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets)));
+      else if ((castable(s) || s.summon) && c.can.cast_spells !== false) out.push(card(L.KIND_ICON[s.kind] || "heart", s.name, info, () => startCast(s), { heal: true }));
+    });
+    if (!out.length) return null;
+    return h("div", { class: "fight-acts your-moves", style: "margin-top:10px" },
+      h("div", { class: "lbl" }, noActs ? "No actions left this turn" : "Your moves — tap one, then tap who"), out);
+  }
   async function dash() {
     const d = await me("dash", {});
     if (!d) return;
@@ -376,7 +455,9 @@
         o.status ? h("span", { class: "faint", style: "font-size:.8rem" }, o.status) : null)))
         : h("p", { class: "faint", style: "margin:0" }, "No fight right now."),
       e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!" : e.current + "'s turn") : null,
-      S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null);
+      S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null,
+      S.character && S.character.my_turn ? yourMoves(S.character) : null,
+      using ? useBox() : casting ? castBox() : null);
 
     const c = S.character;
     if (!c) {
@@ -414,7 +495,7 @@
           h("b", null, signed(d.mods[k])), h("span", null, label)))),
         c.attacks.length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Attacks"),
           c.my_turn === false ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" }, "Attacks unlock on your turn.") : null,
-          using && using.what === "attack" ? useBox() : null,
+
           c.my_turn ? h("div", { style: "margin:0 0 8px" }, endTurnBtn()) : null,
           c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
             c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
@@ -436,12 +517,13 @@
           a.damage && !(c.my_turn && !a.heal) ? h("button", { type: "button", class: "btn btn-sm" + (a.heal ? " btn-heal" : ""), onclick: (ev) => roll({ type: "damage", key: a.index }, ev) },
             a.heal ? "Heal" : a.dmg_mult > 1 ? "Dmg ×" + a.dmg_mult : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
-          casting ? castBox() : null,
-          using && using.what === "spell" ? useBox() : null,
+
           ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
           c.my_turn && s.zone && !s.recharging ? h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !!(c.actions && !c.actions.left),
             title: "It rises around you: enemies in it are hit, and it stays up",
             onclick: () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets)) }, icon("sun", "sm"), " Use") : // no map: tap who's in it
+          c.my_turn && aimsAtFoes(s) && !s.recharging && s.area && S.map ? h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !!(c.actions && !c.actions.left),
+            title: "Aim it on the map, then Use", onclick: () => startAimUse(s) }, icon("swords", "sm"), " Use") :
           c.my_turn && aimsAtFoes(s) && !s.recharging ? useBtn("spell", s.index, s.name, s.targets === 1 || !s.area, s.targets) :
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,

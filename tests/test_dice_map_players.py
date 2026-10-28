@@ -241,7 +241,7 @@ def test_join_requires_code_and_unclaimed_character(app, joined):
     other = remote(app, "192.168.1.30")
     other.post("/api/join", {"code": "ZZZZZZ", "name": "X"}, 404)
     r = other.post("/api/join", {"code": joined["code"], "name": "X", "character_id": joined["a"]["id"]}, 400)
-    assert "already joined" in r["error"]
+    assert "playing that character right now" in r["error"]
 
 
 def test_players_only_reach_player_endpoints(joined):
@@ -724,3 +724,21 @@ def test_temporary_ac_from_spells_and_effects(api, client):
     assert (me["ac"], me["ac_bonus"]) == (9, 0)
     api.post(f"/api/encounters/{eid}/conditions", {"targets": [me["id"]], "name": "Shield", "ac": 99}, 400)
     assert "ac-bonus" in client.get(f"/characters/{lux['id']}").get_data(as_text=True)
+
+
+def test_a_player_who_logged_off_frees_their_character(app, api, joined):
+    """Closing the browser leaves them joined; after a few minutes unseen their character is
+    free again, so they (or a new phone) can join straight back in."""
+    from app.db import get_db
+    other = remote(app, "192.168.1.31")
+    r = other.post("/api/join", {"code": joined["code"], "name": "Sam again", "character_id": joined["a"]["id"]}, 400)
+    assert "playing that character right now" in r["error"]                       # Sam is still active
+    with app.app_context():
+        db = get_db()
+        db.execute("UPDATE players SET last_seen = '2000-01-01T00:00:00.000000Z' WHERE name = 'Sam'")
+        db.commit()
+    look = other.get(f"/api/join/lookup?code={joined['code']}")
+    assert not next(c for c in look["characters"] if c["name"] == "Aria")["claimed"]
+    other.post("/api/join", {"code": joined["code"], "name": "Sam again", "character_id": joined["a"]["id"]})
+    assert other.get("/api/play/state")["character"]["name"] == "Aria"
+    assert joined["pa"].c.get("/api/play/state").status_code == 401
