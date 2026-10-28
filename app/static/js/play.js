@@ -419,7 +419,7 @@
           c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
             c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
           ...c.attacks.map((a) => a.recharging ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
-          h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, a.recharging - (c.my_turn ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
+          h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, a.recharging - (c.my_turn ? 1 : 0)); if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
           : c.my_turn === false ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
           : moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
           a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
@@ -449,7 +449,7 @@
           s.hit && s.hit !== "attack" && !c.roll_to_hit ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
           s.aura ? L.auraButton(s, "/api/play/me/aura", () => load(true))
           : s.terrain ? h("span", { class: "tag", title: "Ask the DM: it's aimed on the battle map" }, icon("map", "sm"), " the DM aims it on the map")
-          : s.recharging ? h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, s.recharging - (c.my_turn ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })())
+          : s.recharging ? h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, s.recharging - (c.my_turn ? 1 : 0)); if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })())
           : castable(s) && c.can.cast_spells !== false
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))

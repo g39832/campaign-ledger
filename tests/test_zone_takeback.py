@@ -110,3 +110,59 @@ def test_dm_takes_back_and_players_only_their_own(api, battlemap, monkeypatch):
     a_hp = next(c for c in st["combatants"] if c["name"] == "Aria")["hp"]
     st = api.post(f"/api/encounters/{eid}/casts/{undo}/undo", {})
     assert st["taken_back"] == "Fire Bolt" and next(c for c in st["combatants"] if c["name"] == "Aria")["hp"] == a_hp + 7
+
+
+def test_enemies_coming_into_the_zone_are_hit_once(api, battlemap, monkeypatch):
+    """Spirit Guardians is up: an enemy who comes into it for the first time makes the save and
+    takes the damage if they fail; walking out and back in doesn't hit them again; teammates never."""
+    eid, mid, by, loaded = setup(api, battlemap, monkeypatch)
+    pa = battlemap["pa"]
+    loaded.next(1, 1, 1, 2)                               # cast: Bandit 1 (inside) fails, 3 damage
+    pa.post("/api/play/me/use", {"what": "spell", "index": 0, "targets": []})
+    b2 = hp(api, eid, "Bandit 2")
+    m = api.get(f"/api/maps/{mid}")
+    loaded.next(3, 2, 2, 2)                               # Bandit 2 walks in: save 3 (fails), 3d8 = 6
+    api.post(f"/api/tokens/{tok(m, 'Bandit 2')['id']}/move", {"x": 8, "y": 6, "free": True})
+    assert hp(api, eid, "Bandit 2") == b2 - 6
+    log = [e["message"] for e in api.get(f"/api/encounters/{eid}")["log"]]
+    assert any("Bandit 2 comes into Spirit Guardians" in x and "6 radiant damage" in x for x in log)
+    # out and back in: nothing more
+    api.post(f"/api/tokens/{tok(m, 'Bandit 2')['id']}/move", {"x": 20, "y": 6, "free": True})
+    api.post(f"/api/tokens/{tok(m, 'Bandit 2')['id']}/move", {"x": 8, "y": 6, "free": True})
+    assert hp(api, eid, "Bandit 2") == b2 - 6
+    # a teammate walking about in it is never hit
+    bram = hp(api, eid, "Bram")
+    api.post(f"/api/tokens/{tok(m, 'Bram')['id']}/move", {"x": 7, "y": 7, "free": True})
+    assert hp(api, eid, "Bram") == bram
+
+
+def test_moving_out_and_back_after_acting_isnt_free(api, battlemap):
+    """Readjusting is free until you use an action; then the movement so far is spent."""
+    from tests.test_turn_movement import setup as map_setup, to_turn
+    pa, eid = battlemap["pa"], battlemap["eid"]
+    aria = api.get(f"/api/characters/{battlemap['a']['id']}")["character"]
+    api.set_char(aria, attacks=[{"name": "Punch", "bonus": "+5", "damage": "1d4"}])
+    me = map_setup(api, battlemap)
+    to_turn(api, eid, "Aria")
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 4, "y": 0})                 # 20 ft out
+    pa.post("/api/rolls", {"check": {"type": "attack", "key": 0, "character_id": battlemap["a"]["id"]}}, 201)  # acts
+    mv = pa.get("/api/play/state")["character"]["move"]
+    assert mv["budget"] == 10 and mv["from"] == [4, 0], "20 ft spent; 10 left from where she attacked"
+    err = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 0, "y": 0}, 403)      # back to the start: 20 ft, only 10 left
+    assert "last used an action" in err["error"]
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 2, "y": 0})                 # 10 ft back: fine
+
+
+def test_magic_items_switch_on_once_until_a_long_rest(api, battlemap):
+    from tests.test_aura import ITEM, chars
+    camp = battlemap["camp"]
+    aria = api.get(f"/api/characters/{battlemap['a']['id']}")["character"]
+    api.set_char(aria, spells=[ITEM])
+    pa = battlemap["pa"]
+    pa.post("/api/play/me/aura", {"index": 0, "on": True})
+    pa.post("/api/play/me/aura", {"index": 0, "on": False})
+    err = pa.post("/api/play/me/aura", {"index": 0, "on": True}, 400)
+    assert "used already" in err["error"] and "long rest" in err["error"]
+    assert pa.get("/api/play/state")["character"]["spells"][0]["used"] is True
+    api.post(f"/api/characters/{aria['id']}/long-rest")
+    pa.post("/api/play/me/aura", {"index": 0, "on": True})                           # back after a long rest

@@ -518,9 +518,11 @@ def cast(ctx, caster_id, data, viewer=None):
         raise F.ApiError(f"Pick who {sp['name']} is cast on")
     if sp["targets"] and len(targets) > sp["targets"]:
         raise F.ApiError(f"{sp['name']} reaches at most {sp['targets']} {'creature' if sp['targets'] == 1 else 'creatures'}")
-    if sp["cooldown"] and not data.get("force"):
+    if (sp["cooldown"] or sp["per_fight"]) and not data.get("force"):
         from .rules import cooldown_left
         left = cooldown_left(caster["conditions"], sp["name"], ctx.enc["id"])
+        if left > 500:
+            raise F.ApiError(f"{sp['name']} has been used this fight — it's back in the next fight")
         if left:
             raise F.ApiError(f"{sp['name']} is recharging — ready after {max(1, left - 1)} more of {caster['name']}'s turns")
     if not spell_helps(sp) and caster["id"] in targets:  # nobody attacks themselves (heals and buffs on yourself are fine)
@@ -654,14 +656,17 @@ def cast(ctx, caster_id, data, viewer=None):
         lines.append(res["text"])
         results.append(res)
     if sp["zone"]:
-        lines.insert(0, raise_zone(ctx, caster, sp, cast_id) + ("" if results else " — no enemies in it right now"))
+        lines.insert(0, raise_zone(ctx, caster, sp, cast_id, [r["id"] for r in results], nums, slot) + ("" if results else " — no enemies in it right now"))
     if sp["terrain"]:
         lines.insert(0, change_ground(ctx, sp, data))
     if sp["summon"]:
         lines.insert(0, summon(ctx, caster, sp))
     from .combat import used_a_move
     used_a_move(ctx, caster["id"], sp["name"])
-    if sp["cooldown"]:
+    if sp["per_fight"]:
+        from .combat import ONCE_PER_FIGHT
+        start_cooldown(ctx, caster["id"], sp["name"], ONCE_PER_FIGHT)
+    elif sp["cooldown"]:
         # a zone recharges after it goes down: its rounds up, then the cooldown
         start_cooldown(ctx, caster["id"], sp["name"], sp["cooldown"] + (sp["rounds"] or 0 if sp["zone"] else 0))
     slot_word = f" with a level {slot} slot" if spent else at
@@ -676,7 +681,7 @@ def cast(ctx, caster_id, data, viewer=None):
             "rolls": roller.ids, "concentration": sp["concentration"], "move": move}
 
 
-def raise_zone(ctx, caster, sp, cast_id):
+def raise_zone(ctx, caster, sp, cast_id, hit=(), nums=None, slot=None):
     """Put the zone on the caster: it goes where they go, for its rounds (ending on their turn)."""
     from .movement import zone_half
     c = ctx.combatant(caster["id"])
@@ -686,8 +691,65 @@ def raise_zone(ctx, caster, sp, cast_id):
             "note": f"{(sp['area'] or {}).get('size', 15)} ft around {c['name']}" + (f" · enemies in it move at {'half' if sp['zone_speed'] == 0.5 else str(int(sp['zone_speed'] * 100)) + '%'} speed" if sp["zone_speed"] < 1 else ""),
             "rounds_left": rounds, "tick": "end", "tick_on": c["id"], "encounter_id": ctx.enc["id"], "auto_expire": True,
             "expired": False, "applied_round": ctx.enc["round"], "source": {"cast": cast_id, "caster": c["id"], "spell": sp["name"]}}
+    # an enemy who comes into it for the first time gets the same as the ones caught when it rose
+    nums = nums or {}
+    cond["zone"].update(hit=list(hit), dice=spell_dice(sp, sp["dice"], nums.get("mod"), slot) if sp["dice"] else "",
+                        type=sp["damage_type"], save=sp["hit"] if sp["hit"] in ABILITIES else "", dc=nums.get("dc"),
+                        save_half=bool(sp["save_half"]), kind=sp["kind"])
     ctx.set_vitals(c, conditions=conds + [cond])
     return f"{sp['name']} rises around {c['name']} for {rounds} round{'s' if rounds != 1 else ''}"
+
+
+def zone_entries(ctx):
+    """After someone moves: any enemy now standing in a zone (Spirit Guardians) for the first
+    time makes the save, and takes the damage if they fail (or half, if the spell says so).
+    Returns lines for the log."""
+    from .combat import apply_hp
+    from .maps import attack_fx
+    from .movement import _live_map, _token_of, in_zone
+    m = _live_map(ctx.conn, ctx.enc["id"])
+    if m is None or ctx.enc["status"] != "active":
+        return []
+    out = []
+    for owner in ctx.combatants():
+        for z in [x for x in owner["conditions"] if isinstance(x, dict) and x.get("zone") and not x.get("expired")
+                  and x.get("encounter_id") in (None, ctx.enc["id"]) and x["zone"].get("kind")]:
+            info, ot = z["zone"], _token_of(ctx.conn, m["id"], owner["id"])
+            if ot is None:
+                continue
+            hit, fresh = set(info.get("hit") or []), []
+            for t in ctx.combatants():
+                if t["id"] == owner["id"] or t["id"] in hit or t["hidden"] or (t["kind"] == "enemy") == (owner["kind"] == "enemy") \
+                        or t["status"] in ("dead", "defeated", "fled"):
+                    continue
+                tt = _token_of(ctx.conn, m["id"], t["id"])
+                if tt and in_zone(ot, int(info.get("half", 1)), tt):
+                    fresh.append(t)
+            if not fresh:
+                continue
+            roller, hows, lines = Roller(ctx, None), [], []
+            for t in fresh:
+                landed, half, how = True, False, ""
+                if info.get("save") and info.get("dc"):
+                    made, _total, how = roll_save(roller, t, info["save"], int(info["dc"]), z["name"])
+                    landed, half = not made, made and info.get("save_half")
+                text = f"{t['name']} comes into {z['name']}" + (f" — {'saved' if not landed else 'failed the save'} ({how})" if how else "")
+                if info.get("dice") and info.get("kind") == "damage" and (landed or half):
+                    r = roller.roll(info["dice"], z["name"])
+                    amount = max(0, r["total"]) // (2 if half else 1)
+                    word = ((info.get("type") or "") + " damage").strip()
+                    roller.keep(r, f"{z['name']} — {word}", "damage", owner, f"{amount} {word} to {t['name']}")
+                    apply_hp(ctx, t["id"], {"op": "damage", "amount": amount}, f"{z['name']}, {owner['name']}")
+                    text += f", {amount} {word}" + (" (half)" if half else "")
+                lines.append(text)
+                hows.append((t["id"], "failed" if landed else "saved"))
+                hit.add(t["id"])
+            info["hit"] = sorted(hit)
+            ctx.set_vitals(ctx.combatant(owner["id"]), conditions=[z if x.get("id") == z["id"] else x for x in ctx.combatant(owner["id"])["conditions"]])
+            attack_fx(ctx.conn, ctx.enc["id"], owner["id"], hows, z["name"], "damage", info.get("type") or "")
+            ctx.log("spell", "; ".join(lines))
+            out += lines
+    return out
 
 
 # ---- taking a cast back (a misclick) ------------------------------------------------------

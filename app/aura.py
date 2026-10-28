@@ -73,6 +73,8 @@ def toggle(conn, char_id, index, on):
         raise F.ApiError("That isn't on the sheet any more")
     if not sp["aura"]:
         raise F.ApiError(f"{sp['name']} isn't something you switch on and off")
+    if on and sp["used"] and not is_on(owner, sp["name"]):
+        raise F.ApiError(f"{sp['name'].strip()} has been used already — it can be switched on again after a long rest")
     key = aura_key(char_id, sp["name"])
     radius = (sp["area"] or {}).get("size") or 60
     changed = []
@@ -99,6 +101,10 @@ def toggle(conn, char_id, index, on):
             _touch(conn, cid)
             changed.append(ch["name"])
         where = f"within {radius} ft" if by_map else "in the party"
+        # once a day: it's used now (a long rest brings it back)
+        spells = list(owner.get("spells") or [])
+        spells[int(index)] = dict(spells[int(index)], used=True)
+        conn.execute("UPDATE characters SET spells = ?, updated_at = ? WHERE id = ?", (json.dumps(spells), now_iso(), char_id))
     else:
         changed = _take_off(conn, owner, lambda k: k == key)
         where = ""

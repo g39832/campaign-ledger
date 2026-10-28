@@ -31,6 +31,21 @@ SOLID = {"wall", "rock"}
 MENDABLE = {"rock", "rubble", "difficult", "pit"}
 
 
+def taken_by(conn, map_id, token_id, size, x, y):
+    """Who already stands on the squares a token would take at (x, y), or None. Markers and
+    traps don't count, nor do the fallen (dead or defeated)."""
+    for r in conn.execute(
+            "SELECT t.id, t.x, t.y, t.size, t.kind, COALESCE(ch.name, cb.name, t.label, 'someone') AS who, "
+            "COALESCE(ch.status, cb.status, '') AS status FROM map_tokens t LEFT JOIN combatants cb ON cb.id = t.combatant_id "
+            "LEFT JOIN characters ch ON ch.id = COALESCE(t.character_id, cb.character_id) WHERE t.map_id = ? AND t.id != ?",
+            (map_id, token_id)):
+        if r["kind"] == "marker" or r["status"] in ("dead", "defeated"):
+            continue
+        if x < r["x"] + r["size"] - 1e-6 and r["x"] < x + size - 1e-6 and y < r["y"] + r["size"] - 1e-6 and r["y"] < y + size - 1e-6:
+            return r["who"]
+    return None
+
+
 def blocked_path(m, size, x0, y0, x1, y1):
     """The first solid square a token of this size would cross going from (x0, y0) to
     (x1, y1) in a straight line, or None. Checked every half square along the way."""
@@ -978,7 +993,12 @@ def api_move_token(token_id):
         if not data.get("free"):  # in a fight: only on their turn and as far as their speed
             from .movement import check_dm_move
             check_dm_move(conn, m, t, x, y)
+            who = taken_by(conn, map_id, token_id, t["size"], x, y)
+            if who:  # no two on the same square (Free move can still put a token anywhere)
+                raise F.ApiError(f"{who} is already standing there", status=403)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
+        from .play import _zone_check
+        _zone_check(conn, m)  # an enemy walking into Spirit Guardians gets hit by it
         _bump(conn, map_id)
     return jsonify(dm_state(map_id))
 

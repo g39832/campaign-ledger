@@ -181,7 +181,7 @@ def test_parry_works_on_the_attackers_turn_with_the_turn_rules(api, battlemap, m
     aria, pa = by["Aria"], battlemap["pa"]
     api.post(f"/api/encounters/{eid}/start")
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
-    pa.post("/api/rolls", {"expression": "1d20"}, 403)                                   # not his turn: no rolling
+    assert pa.post("/api/rolls", {"expression": "1d20"}, 201)["roll"]["visibility"] == "private"  # not his turn: only he sees it
     claw = {"name": "Claw", "effect": "damage", "dice": "2d6", "hit": "attack", "attack_bonus": 10, "level": 0}
     loaded.next(15, 5, 5)
     api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Bandit 1"]["id"], "spell": claw, "targets": [aria["id"]]})
@@ -190,3 +190,26 @@ def test_parry_works_on_the_attackers_turn_with_the_turn_rules(api, battlemap, m
     loaded.next(18, 4)
     r = pa.post("/api/play/me/parry")
     assert r["parry"]["won"] and r["parry"]["taken"] == 5 and r["character"]["current_hp"] == 15
+
+
+def test_echo_knight_once_per_fight(api, battlemap):
+    """Echo Knight: the same clone as Phantasmal Force, as a cantrip, once per fight."""
+    eid, by = setup(api, battlemap)
+    aria = api.get(f"/api/characters/{battlemap['a']['id']}")["character"]
+    echo = {"name": "Echo Knight", "effect": "buff", "level": 0, "summon": "Yamato clone", "per_fight": True}
+    api.set_char(aria, spells=SPELLS + [echo])
+    api.post(f"/api/encounters/{eid}/start")
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
+    st = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 2, "targets": []})
+    assert "Yamato clone" in [c["name"] for c in st["combatants"]]
+    clone = next(c for c in st["combatants"] if c["name"] == "Yamato clone")
+    api.post(f"/api/combatants/{clone['id']}/hp", {"op": "damage", "amount": 5})   # the echo is gone...
+    err = api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 2, "targets": []}, 400)
+    assert "used this fight" in err["error"]                                         # ...but it's once per fight
+    for _ in range(4):
+        api.post(f"/api/encounters/{eid}/next")
+    api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
+    api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 2, "targets": []}, 400)  # still this fight
+    st = api.post(f"/api/encounters/{eid}/end")
+    a = next(c for c in st["combatants"] if c["name"] == "Aria")
+    assert not any(x.get("cooldown") == "Echo Knight" for x in a["conditions"]), "a new fight brings it back"

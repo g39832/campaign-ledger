@@ -514,7 +514,7 @@
     const atkRows = atks.length ? h("div", { class: "hit-attacks" }, atks.map((a) => cdLeft(a.name) ? h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
       h("span", { class: "tag", title: "Remove “" + a.name + " recharging” under Conditions to use it early" }, icon("hourglass", "sm"),
-        (() => { const w = Math.max(0, cdLeft(a.name) - (isTurnNow ? 1 : 0)); return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
+        (() => { const w = Math.max(0, cdLeft(a.name) - (isTurnNow ? 1 : 0)); if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
       : h("div", { class: "roll-row", style: "align-items:center" },
       h("b", { style: "min-width:7ch" }, a.name),
       a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
@@ -569,7 +569,7 @@
       : L.monsterSpells((c.statblock || {}).spells).map((s) => [s, { spell: s }]);
     const slots = c.linked ? Object.entries(c.spell_slots || {}).sort((a, b) => a[0] - b[0]) : [];
     const row = ([s, body]) => {
-      const helps = L.spellHelps(s), left = s.cooldown ? cdLeft(s.name) : 0;
+      const helps = L.spellHelps(s), left = s.cooldown || s.per_fight ? cdLeft(s.name) : 0;
       return h("div", { class: "spell-row does-" + s.kind },
         h("div", { class: "sr-main" },
           h("div", { class: "sr-name" }, h("b", null, s.name), h("span", { class: "tag" }, L.levelWord(s)),

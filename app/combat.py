@@ -412,7 +412,7 @@ def api_end(eid):
         # Conditions don't drag on into the next fight: Prone, Poisoned, Grappled..., recharging
         # moves, extra moves and the fight's spell effects all clear (concentration ends too).
         # What stays: switched-on auras (Moni's magic item) and spells lasting an hour or more (Aid).
-        stays = lambda x: x.get("aura") or ((x.get("rounds_left") or 0) >= 600 and not x.get("expired") and not x.get("concentration"))
+        stays = lambda x: x.get("aura") or ((x.get("rounds_left") or 0) >= 600 and not x.get("expired") and not x.get("concentration") and not x.get("cooldown"))
         cleared = []
         for c in ctx.combatants():
             fresh = ctx.combatant(c["id"])  # ending one caster's concentration can change someone else's list
@@ -901,6 +901,9 @@ def api_surge(cid):
     return mutate(eid, lambda ctx: surge(ctx, cid, data.get("index")), data.get("op_id"))
 
 
+ONCE_PER_FIGHT = 999  # a "cooldown" this long is once per fight; ending the fight clears it
+
+
 def start_cooldown(ctx, cid, name, turns):
     """A move was used: it can't be used again during the user's next `turns`
     turns. Kept as an effect on them that counts down at the end of each of their
@@ -908,13 +911,15 @@ def start_cooldown(ctx, cid, name, turns):
     if ctx.enc["status"] != "active" or not turns:
         return
     c = ctx.combatant(cid)
-    turns = max(1, min(20, int(turns)))
+    once = int(turns) >= ONCE_PER_FIGHT
+    turns = ONCE_PER_FIGHT if once else max(1, min(20, int(turns)))
     keep = [x for x in c["conditions"] if x.get("cooldown") != name]
-    cond = {"id": uuid.uuid4().hex[:12], "name": f"{name} recharging", "note": f"Ready again after {turns} of {c['name']}'s turns",
+    cond = {"id": uuid.uuid4().hex[:12], "name": f"{name} used this fight" if once else f"{name} recharging",
+            "note": "Once per fight: ready again in the next fight" if once else f"Ready again after {turns} of {c['name']}'s turns",
             "rounds_left": turns + 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
             "expired": False, "applied_round": ctx.enc["round"], "cooldown": name}
     ctx.set_vitals(c, conditions=keep + [cond])
-    ctx.log("condition", f"{c['name']} used {name} — recharging for {turns} turn{'s' if turns != 1 else ''}")
+    ctx.log("condition", f"{c['name']} used {name} — " + ("once per fight: ready again in the next fight" if once else f"recharging for {turns} turn{'s' if turns != 1 else ''}"))
 
 
 @bp.post("/combatants/<int:cid>/cooldown")

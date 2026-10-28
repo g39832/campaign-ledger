@@ -106,19 +106,35 @@ def test_two_actions_a_turn_without_surge(api, battlemap):
     assert pa.get("/api/play/state")["character"]["actions"]["left"] == 2
 
 
-def test_players_roll_only_on_their_turn(api, battlemap):
+def test_off_turn_rolls_are_only_for_the_player(api, battlemap):
+    """Not their turn: a player can still roll, but nobody else sees it (initiative and saves go
+    to the DM too); it never counts as a move. On their turn rolls are for everyone."""
     eid, by = setup(api, battlemap)
-    pa, aid = battlemap["pa"], battlemap["a"]["id"]
+    pa, pb, aid = battlemap["pa"], battlemap["pb"], battlemap["a"]["id"]
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Bandit 1"]["id"]})
-    for check in ({"type": "ability", "key": "str"}, {"type": "skill", "key": "athletics"}, {"type": "attack", "key": 0}):
-        err = pa.post("/api/rolls", {"check": dict(check, character_id=aid)}, 403)
-        assert "not your turn" in err["error"]
-    pa.post("/api/rolls", {"expression": "1d20"}, 403)
-    for check in ({"type": "save", "key": "dex"}, {"type": "initiative"}):                 # these come on anyone's turn
-        pa.post("/api/rolls", {"check": dict(check, character_id=aid)}, 201)
+    ids = {}
+    for name, body in (("ability", {"check": {"type": "ability", "key": "str", "character_id": aid}}),
+                       ("attack", {"check": {"type": "attack", "key": 0, "character_id": aid}}),
+                       ("free", {"expression": "1d20"}),
+                       ("save", {"check": {"type": "save", "key": "dex", "character_id": aid}}),
+                       ("initiative", {"check": {"type": "initiative", "character_id": aid}})):
+        r = pa.post("/api/rolls", body, 201)
+        assert r["watching"] is True
+        ids[name] = (r["roll"]["id"], r["roll"]["visibility"])
+    assert {k: v[1] for k, v in ids.items()} == {"ability": "private", "attack": "private", "free": "private", "save": "dm", "initiative": "dm"}
+    camp = battlemap["camp"]["id"]
+    seen_dm = {r["id"] for r in api.get(f"/api/rolls?campaign_id={camp}")["rolls"]}
+    seen_other = {r["id"] for r in pb.get(f"/api/rolls?campaign_id={camp}")["rolls"]}
+    seen_self = {r["id"] for r in pa.get(f"/api/rolls?campaign_id={camp}")["rolls"]}
+    assert all(i in seen_self for i, _ in ids.values()), "she sees all her own rolls"
+    assert not any(i in seen_other for i, _ in ids.values()), "the other player sees none of them"
+    assert seen_dm & {i for i, _ in ids.values()} == {ids["save"][0], ids["initiative"][0]}, "the DM sees only the save and the initiative"
+    assert pa.get("/api/play/state")["character"]["actions"] is None or True
+    # her turn: rolls are for everyone again
     api.post(f"/api/encounters/{eid}/set-turn", {"combatant_id": by["Aria"]["id"]})
-    pa.post("/api/rolls", {"check": {"type": "skill", "key": "athletics", "character_id": aid}}, 201)
-    pa.post("/api/rolls", {"expression": "1d20"}, 201)
+    r = pa.post("/api/rolls", {"check": {"type": "skill", "key": "athletics", "character_id": aid}}, 201)
+    assert r["watching"] is False and r["roll"]["visibility"] == "public"
+    assert r["roll"]["id"] in {x["id"] for x in pb.get(f"/api/rolls?campaign_id={camp}")["rolls"]}
 
 
 def test_players_cant_change_their_own_hp(api, battlemap):

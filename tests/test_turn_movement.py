@@ -163,3 +163,20 @@ def test_they_can_readjust_after_placing_themselves(api, battlemap):
     assert "35 ft from where you started this turn" in err["error"]
     pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 0, "y": 0})                 # all the way back: fine
     assert pa.get("/api/play/state")["character"]["move"]["left"] == 30
+
+
+def test_no_stacking_on_one_square(api, battlemap):
+    """A hero or monster can't be moved onto a square someone already stands on (phone or DM map);
+    the DM's Free move still can."""
+    pa, eid, mid = battlemap["pa"], battlemap["eid"], battlemap["mid"]
+    me = setup(api, battlemap)
+    m = api.get(f"/api/maps/{mid}")
+    bandit = tok(m, "Bandit 1")
+    api.post(f"/api/tokens/{bandit['id']}/move", {"x": 2, "y": 0, "free": True})
+    to_turn(api, eid, "Aria")
+    err = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 2, "y": 0}, 403)
+    assert "Bandit 1 is already standing there" in err["error"]
+    pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 1, "y": 0})                # next to it is fine
+    err = api.post(f"/api/tokens/{me['id']}/move", {"x": 2, "y": 0}, 403)          # the DM's map too
+    assert "already standing there" in err["error"]
+    api.post(f"/api/tokens/{me['id']}/move", {"x": 2, "y": 0, "free": True})       # Free move: anywhere

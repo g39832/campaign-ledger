@@ -386,7 +386,7 @@
   function spellAction(c, s, body) {
     const helps = L.spellHelps(s);
     return { name: s.name, icon: L.KIND_ICON[s.kind] || "zap", heal: helps, cast: { spell: s, body: body || { spell: s } },
-      aimArea: s.area || null, single: s.targets === 1, cooldown: s.cooldown || 0, cdName: s.name,
+      aimArea: s.area || null, single: s.targets === 1, cooldown: s.cooldown || (s.per_fight ? 999 : 0), cdName: s.name,
       info: [L.levelWord(s), s.area && !s.zone ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, c.spellcasting || (s.dc ? { dc: s.dc } : null), toHitRule())].filter(Boolean).join(" · ") };
   }
   /* Cast it: the server spends the slot, rolls to hit or the saves, the damage or healing,
@@ -744,7 +744,7 @@
           const left = x.cooldown ? cdLeft(c, x.cdName) : 0, wait = Math.max(0, left - (isTurn ? 1 : 0));
           const offTurn = enc.encounter.status === "active" && !isTurn, key = c.id + ":" + x.name, armedNow = offTurnArmed === key;
           if (left) return h("button", { type: "button", class: "fight-act is-recharging", disabled: true, title: x.name + " is recharging" },
-            icon("hourglass", "sm"), h("b", null, x.name), h("span", { class: "faint" }, wait ? "recharging · ready in " + wait + " turn" + (wait === 1 ? "" : "s") : "recharging · ready next turn"));
+            icon("hourglass", "sm"), h("b", null, x.name), h("span", { class: "faint" }, wait > 500 ? "used this fight · back next fight" : wait ? "recharging · ready in " + wait + " turn" + (wait === 1 ? "" : "s") : "recharging · ready next turn"));
           return h("button", { type: "button", class: "fight-act" + (x.heal ? " is-heal" : "") + (offTurn ? " is-offturn" : "") + (armedNow ? " is-armed" : ""),
             title: offTurn ? "It's not " + c.name + "'s turn — click twice to use it anyway (a reaction)" : null,
             onclick: () => {

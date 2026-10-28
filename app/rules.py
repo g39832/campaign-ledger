@@ -272,6 +272,9 @@ def long_rest_changes(char):
     }
     if char.get("status") in ("unconscious", "stable", "incapacitated"):
         changes["status"] = "ok"
+    spells = char.get("spells") or []
+    if any(isinstance(s, dict) and s.get("used") for s in spells):  # magic items can be switched on again
+        changes["spells"] = [dict(s, used=False) if isinstance(s, dict) and s.get("used") else s for s in spells]
     return changes
 
 
@@ -563,6 +566,8 @@ def spell_info(spell):
         "force_save": bool(spell.get("force_save")),
         # switched on and off (a magic item's aura): lasts until switched off, reaches allies in its area
         "aura": bool(spell.get("aura")),
+        "used": bool(spell.get("used")),
+        "per_fight": bool(spell.get("per_fight")),  # once per fight (Echo Knight): back in the next fight  # a magic item switched on already: back after a long rest
         "speed_mult": _num(spell.get("speed_mult"), 1, 10, 1),
         # an area around the caster that stays up for its rounds (Spirit Guardians): enemies in it
         # when it's cast are hit once; while it's up, enemies in it move at zone_speed (½ = half)

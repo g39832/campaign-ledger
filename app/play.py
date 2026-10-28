@@ -188,7 +188,7 @@ def _own_character(conn, char_id):
     from .aura import is_on
     for s in out["spells"]:
         s["aura_on"] = s["aura"] and is_on(c, s["name"])
-        s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and s["cooldown"] else 0
+        s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and (s["cooldown"] or s["per_fight"]) else 0
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
     out["move"] = None
@@ -293,11 +293,33 @@ def api_move(token_id):
             raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
         if blocked_path(md, t["size"], t["x"], t["y"], x, y):
             raise F.ApiError("Solid rock is in the way — you can't move there", status=403)
+        from .maps import taken_by
+        who = taken_by(conn, m["id"], token_id, t["size"], x, y)
+        if who:  # no two on the same square
+            raise F.ApiError(f"{who} is already standing there", status=403)
         from .movement import check_move
         turn = check_move(conn, md, owner, t["x"], t["y"], x, y)
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
+        entered = _zone_check(conn, md)
         _bump(conn, m["id"])
-    return jsonify({"ok": True, "x": x, "y": y, "move": turn})
+    return jsonify({"ok": True, "x": x, "y": y, "move": turn, "zone": entered})
+
+
+def _zone_check(conn, md):
+    """Someone moved: an enemy who just came into a zone (Spirit Guardians) gets hit by it."""
+    if not md.get("encounter_id"):
+        return []
+    from .combat import Ctx
+    from .movement import active_zones
+    from .spells import zone_entries
+    enc = conn.execute("SELECT status FROM encounters WHERE id = ?", (md["encounter_id"],)).fetchone()
+    if not enc or enc["status"] != "active" or not active_zones(conn, md["encounter_id"]):
+        return []
+    ctx = Ctx(conn, md["encounter_id"])
+    lines = zone_entries(ctx)
+    if lines:
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), md["encounter_id"]))
+    return lines
 
 
 PING_COOLDOWN = 5  # seconds between one player's pings

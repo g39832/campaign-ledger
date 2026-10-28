@@ -49,8 +49,10 @@ def test_players_attack_only_on_their_turn_and_moves_recharge(api, fight):
     p.post("/api/rolls", {"check": {"type": "damage", "key": 0, "character_id": yid}}, 201)  # its damage after the hit is fine
     api.post(f"/api/encounters/{eid}/next")  # the Ogre's turn
     assert p.get("/api/play/state")["character"]["my_turn"] is False
-    r = attack(p, yid, 1, 403)
-    assert "not your turn" in r["error"]
+    before = p.get("/api/play/state")["character"]["attacks"][1]["recharging"]
+    r = attack(p, yid, 1, 201)  # not his turn: a roll just for him, it doesn't use the move
+    assert r["roll"]["visibility"] == "private" and r["watching"] is True
+    assert p.get("/api/play/state")["character"]["attacks"][1]["recharging"] == before
     p.post("/api/rolls", {"check": {"type": "save", "key": "dex", "character_id": yid}}, 201)  # saves are any time
     # three more of Yamato's turns, then it's ready
     for turn in range(3):

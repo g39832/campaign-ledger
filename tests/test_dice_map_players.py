@@ -330,8 +330,8 @@ def test_no_duplicate_character_tokens(api, battlemap):
 
 def test_token_moves_never_touch_combat(api, battlemap):
     before = api.get(f"/api/encounters/{battlemap['eid']}")
-    for t in battlemap["state"]["tokens"]:
-        api.post(f"/api/tokens/{t['id']}/move", {"x": 5, "y": 5})
+    for i, t in enumerate(battlemap["state"]["tokens"]):
+        api.post(f"/api/tokens/{t['id']}/move", {"x": 5, "y": i})   # each on its own square (no stacking)
     after = api.get(f"/api/encounters/{battlemap['eid']}")
     key = lambda s: [(c["id"], c["hp"], c["init_roll"], c["sort_order"], c["status"]) for c in s["combatants"]]
     assert key(before) == key(after)

@@ -233,6 +233,25 @@ def player_off_turn(conn, char_id, t=None):
     return cb
 
 
+def watching(conn, viewer, t=None):
+    """A player who isn't taking their turn (it's someone else's turn in a fight, or they joined
+    without a character) can still roll, but nobody else sees it: their rolls are just for them.
+    Initiative, saves and death saves go to the DM too (they need them). Returns the visibility
+    to use, or None when it's a normal roll."""
+    if viewer["role"] != "player":
+        return None
+    if not viewer.get("character_id"):
+        return "private"
+    from .rest import active_combatant
+    cb = active_combatant(conn, viewer["character_id"])
+    if cb is None:
+        return None
+    enc = conn.execute("SELECT status, current_id FROM encounters WHERE id = ?", (cb["encounter_id"],)).fetchone()
+    if enc["status"] == "active" and enc["current_id"] != cb["id"]:
+        return "dm" if t in OFF_TURN_ROLLS else "private"
+    return None
+
+
 def _player_turn_rules(conn, viewer, check):
     """In a running fight a player rolls (and attacks) only on their own turn, and a move
     that's recharging can't be used. Returns (combatant id, move, turns) when this roll uses
@@ -322,6 +341,7 @@ def api_roll():
             campaign_id = camp["id"] if camp else None
 
     check = data.get("check")
+    hidden = None
     ids = {"character_id": None, "combatant_id": None, "encounter_id": None}
     subject = ""
     if check:
@@ -333,7 +353,8 @@ def api_roll():
         expr, label, kind, subject, got = build_check(conn, check)
         ids.update(got)
         expr, label, mode = with_effects(conn, got, check.get("type"), expr, label, mode)
-        used = _player_turn_rules(conn, viewer, check) if viewer["role"] == "player" else None
+        hidden = watching(conn, viewer, check.get("type"))
+        used = _player_turn_rules(conn, viewer, check) if viewer["role"] == "player" and not hidden else None
         if data.get("label"):
             label = str(data["label"])[:120]
     else:
@@ -341,14 +362,15 @@ def api_roll():
         label = str(data.get("label") or "")[:120]
         kind = data.get("kind") if data.get("kind") in ("damage", "heal", "attack", "save", "custom") else "custom"
         subject = str(data.get("subject") or "")[:120]
-        if viewer["role"] == "player":
-            player_off_turn(conn, viewer.get("character_id"), "save" if kind == "save" else None)
+        hidden = watching(conn, viewer, "save" if kind == "save" else None)
     if viewer["role"] == "dm" and data.get("encounter_id"):
         ids["encounter_id"] = int(data["encounter_id"])
     if ids.get("character_id") and campaign_id is not None:
         row = conn.execute("SELECT campaign_id FROM characters WHERE id = ?", (ids["character_id"],)).fetchone()
         if row and row["campaign_id"] != campaign_id:
             campaign_id = row["campaign_id"]
+    if hidden and visibility != "private":  # not their turn: only they (and for initiative or saves, the DM) see it
+        visibility = hidden
     try:
         result = dice.roll(expr, mode=mode, crit=bool(data.get("crit")) and kind == "damage")
     except dice.DiceError as e:
@@ -366,7 +388,7 @@ def api_roll():
 
     with tx() as conn:
         probe = dict(ids)
-        is_move = bool(check) and _is_a_move(conn, check, probe)
+        is_move = bool(check) and not hidden and _is_a_move(conn, check, probe)
         if is_move:  # two actions a turn, whether the player or the DM rolls it
             from .movement import check_hero_action
             check_hero_action(conn, probe["combatant_id"], label or "that")
@@ -389,7 +411,7 @@ def api_roll():
             used_a_move(ctx, probe["combatant_id"], label)
             conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
-    return jsonify({"roll": roll_dict(row, viewer)}), 201
+    return jsonify({"roll": roll_dict(row, viewer), "watching": bool(hidden)}), 201
 
 
 def _apply_initiative(conn, ids, total, result):

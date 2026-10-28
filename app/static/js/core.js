@@ -259,6 +259,7 @@
   }
   /* An aura (Moni's magic item): one button that says whether it's on, and flips it. */
   function auraButton(s, url, done) {
+    if (s.used && !s.aura_on) return h("span", { class: "tag", title: "Switched on once already; a long rest brings it back" }, icon("hourglass", "sm"), " Used · back after a long rest");
     return h("button", { type: "button", class: "btn btn-sm aura-btn" + (s.aura_on ? " is-on btn-heal" : ""), "aria-pressed": String(!!s.aura_on),
       title: s.aura_on ? "On for allies in range. Click to switch it off." : "Click to switch it on for allies in range",
       onclick: () => act("POST", url, { index: s.index, on: !s.aura_on }, (d) => {

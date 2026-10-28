@@ -462,6 +462,7 @@
           run: () => api("POST", "/api/rolls", body),
           done: (d) => {
             this.addHistory([d.roll]);
+            if (d.watching) toast("Not your turn: only you" + (d.roll.visibility === "dm" ? " and the DM" : "") + " see this roll.", null, { ms: 3500 });
             if (this.mode !== "normal" && !(ev && (ev.shiftKey || ev.ctrlKey || ev.altKey))) this.setMode("normal");
             const run = this.animate(d.roll);
             if (!opts.wait) { resolve(d.roll); return; }

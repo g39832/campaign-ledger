@@ -79,9 +79,11 @@ def turn_info(conn, cb_id):
     if slowed and speed:
         speed = int(speed * slowed[1] // 5 * 5)  # inside an enemy's Spirit Guardians: half speed
     used = done.get("ft", 0) if mine else 0
-    budget = speed * (2 if done.get("dash") else 1)
+    # "spent": movement locked in when they used an action (moving out, attacking and walking back
+    # isn't free); "budget": what's left to move from where they stand since then
+    budget = max(0, speed * (2 if done.get("dash") else 1) - (done.get("spent", 0) if mine else 0))
     return {"cb_id": row["cb_id"], "name": row["name"], "my_turn": mine, "speed": speed, "used": used, "dash": bool(done.get("dash")),
-            "left": max(0, budget - used) if mine else 0, "budget": budget if mine else 0, "held": held,
+            "left": max(0, budget - used) if mine else 0, "budget": budget if mine else 0, "held": held, "spent": done.get("spent", 0) if mine else 0,
             "slowed": slowed[0] if slowed else None, "from": done.get("from") if mine else None}
 
 
@@ -152,7 +154,8 @@ def _check(conn, md, turn, x0, y0, x1, y1, name):
     cost = step_ft(md, origin[0], origin[1], x1, y1)
     if cost > turn["budget"]:
         who = "you can" if name is None else f"{name} can"
-        raise F.ApiError(f"That's {cost} ft from where {'you' if name is None else 'they'} started this turn, and {who} only go {turn['budget']} ft"
+        since = ("where you" if name is None else "where they") + (" last used an action" if turn["spent"] else " started this turn")
+        raise F.ApiError(f"That's {cost} ft from {since}, and {who} only go {turn['budget']} ft"
                          + ("" if turn["dash"] else " (Dash for more)"), status=403, left=turn["left"])
     row = _row(conn, turn["cb_id"])
     _save(conn, row, dict(_turn(row), ft=cost, **{"from": origin}))
@@ -309,6 +312,13 @@ def spend_action(conn, cb_id):
         return None
     done = _turn(row)
     done["acts"] = done.get("acts", 0) + 1
+    # acting locks in the movement so far: it's spent, and readjusting starts again from here
+    if done.get("ft") or done.get("from"):
+        done["spent"] = done.get("spent", 0) + done.get("ft", 0)
+        done["ft"] = 0
+        m = _live_map(conn, row["eid"])
+        here = _token_of(conn, m["id"], cb_id) if m else None
+        done["from"] = [here["x"], here["y"]] if here else None
     _save(conn, row, done)
     return done["acts"]
 
