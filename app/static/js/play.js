@@ -37,7 +37,10 @@
     onAim: () => { if (using && using.aim) { caughtByAim(); render(); } }, // the cone was turned: who's in it now
     onPlace: (x, y) => { // a clone: the square it appears on
       if (!casting || !casting.spell.summon || casting.busy || casting.result) return;
-      if ((S.mapTokens || []).some((t) => x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size)) { toast("Someone's already standing there — pick an empty square.", "error"); return; }
+      const on = (S.mapTokens || []).find((t) => !["marker", "trap"].includes(t.kind) && !["dead", "defeated"].includes(t.status) && x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size);
+      if (on) { toast(on.display + " is already standing there — pick an empty square.", "error"); return; }
+      const m = S.map;
+      if (m && m.fog_enabled && (m.revealed || "")[y * m.cols + x] !== "1") { toast("You can't see that square — pick one you can see.", "error"); return; }
       casting.at = [x, y]; view.mark = [x, y]; view.draw(); render();
     },
     onPing: async (x, y) => {

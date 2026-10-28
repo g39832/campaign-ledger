@@ -29,7 +29,8 @@
     onPlace: (x, y) => {
       if (pendingSummon) {
         const p = pendingSummon;
-        if ((S.tokens || []).some((t) => x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size)) { toast("Someone's already standing there — pick an empty square.", "error"); return; }
+        const on = (S.tokens || []).find((t) => !["marker", "trap"].includes(t.kind) && !["dead", "defeated"].includes(t.status) && !t.hidden && x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size);
+        if (on) { toast(on.display + " is already standing there — pick an empty square.", "error"); return; }
         pendingSummon = null; summonAt = { map_id: MID, x, y }; castNow(p.c, p.a, []); return;
       }
       if (pendingMonster) { dropMonsters(x, y); return; }

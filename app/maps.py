@@ -54,15 +54,15 @@ def _record_move(ctx, snap, t):
     record(ctx, snap, f"{conn_name} moved")
 
 
-def taken_by(conn, map_id, token_id, size, x, y):
+def taken_by(conn, map_id, token_id, size, x, y, skip_hidden=False):
     """Who already stands on the squares a token would take at (x, y), or None. Markers and
-    traps don't count, nor do the fallen (dead or defeated)."""
+    traps don't count, nor do the fallen (dead or defeated), nor (skip_hidden) tokens the DM hid."""
     for r in conn.execute(
-            "SELECT t.id, t.x, t.y, t.size, t.kind, COALESCE(ch.name, cb.name, t.label, 'someone') AS who, "
+            "SELECT t.id, t.x, t.y, t.size, t.kind, t.hidden, COALESCE(ch.name, cb.name, t.label, 'someone') AS who, "
             "COALESCE(ch.status, cb.status, '') AS status FROM map_tokens t LEFT JOIN combatants cb ON cb.id = t.combatant_id "
             "LEFT JOIN characters ch ON ch.id = COALESCE(t.character_id, cb.character_id) WHERE t.map_id = ? AND t.id != ?",
             (map_id, token_id)):
-        if r["kind"] == "marker" or r["status"] in ("dead", "defeated"):
+        if r["kind"] in ("marker", "trap") or r["status"] in ("dead", "defeated") or (skip_hidden and r["hidden"]):
             continue
         if x < r["x"] + r["size"] - 1e-6 and r["x"] < x + size - 1e-6 and y < r["y"] + r["size"] - 1e-6 and r["y"] < y + size - 1e-6:
             return r["who"]

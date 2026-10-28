@@ -362,9 +362,10 @@ def summon(ctx, caster, sp, at=None):
             raise F.ApiError("That square is off the map")
         if md["terrain"].get(f"{spot[1]},{spot[2]}") in _BLOCK:
             raise F.ApiError("Nobody can stand there — pick an open square")
-        if any(int(round(r["x"])) <= spot[1] < int(round(r["x"])) + (r["size"] or 1) and int(round(r["y"])) <= spot[2] < int(round(r["y"])) + (r["size"] or 1)
-               for r in ctx.conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ?", (spot[0],))):
-            raise F.ApiError("Someone's already standing there — pick an empty square")
+        from .maps import taken_by
+        who = taken_by(ctx.conn, spot[0], -1, 1, spot[1], spot[2], skip_hidden=True)  # the same rule as moving: no stacking
+        if who:
+            raise F.ApiError(f"{who} is already standing there — pick an empty square")
     from .combat import _instance_names, _next_sort, _resort
     from .maps import BLOCKING, _bump, _open_spots, map_dict
     cr = ctx.conn.execute("SELECT * FROM creatures WHERE lower(name) = lower(?) AND (campaign_id IS NULL OR campaign_id = ?) "
