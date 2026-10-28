@@ -41,7 +41,9 @@
       if (on) { toast(on.display + " is already standing there — pick an empty square.", "error"); return; }
       const m = S.map;
       if (m && m.fog_enabled && (m.revealed || "")[y * m.cols + x] !== "1") { toast("You can't see that square — pick one you can see.", "error"); return; }
-      casting.at = [x, y]; view.mark = [x, y]; view.draw(); render();
+      if (casting.busy) return;
+      casting.at = [x, y]; view.mark = [x, y]; view.draw();
+      castNow(); // it appears there straight away (Take it back if that was a misclick)
     },
     onPing: async (x, y) => {
       // one ping every few seconds (the server keeps the same cooldown)
@@ -356,7 +358,13 @@
     casting = { spell: L.spellView(s), index: s.index, chosen, slot: s.level || null, busy: false, result: null, at: null };
     if (s.summon && S.map) { view.tool = "place"; view.mark = null; } // tap the map where it appears
     render();
-    if (s.summon && S.map) $("#hint").textContent = s.name + ": tap the square on the map where " + s.summon + " appears, then Cast.";
+    if (s.summon && S.map) { // bring the map into view: the next tap on it is where the clone appears
+      $("#hint").textContent = s.name + ": tap the square on the map where " + s.summon + " appears.";
+      const st = $("#stage").getBoundingClientRect();
+      if (st.top < 0 || st.bottom > innerHeight) $("#stage").scrollIntoView({ block: "start", behavior: "smooth" });
+      if (window.FX) FX.float($("#stage"), "Tap where " + s.summon + " appears", "ac");
+      return;
+    }
     const box = $("#cast-box");
     if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -392,12 +400,10 @@
       name: p.id === (mine && mine.id) ? p.name + " (you)" : p.name, info: p.current_hp + "/" + p.max_hp + " HP" }));
     const slots = mine && Object.fromEntries(Object.entries(mine.spell_slots || {}).filter(([, v]) => v && v.max > 0));
     return h("div", { id: "cast-box" }, L.castPanel({ spell: k.spell, people, chosen: k.chosen, busy: k.busy, result: k.result,
-      slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false, casterName: mine && mine.name,
+      slots: slots && Object.keys(slots).length ? slots : null, slot: k.slot, allowFree: false, casterName: mine && mine.name, place: !!(k.spell.summon && S.map),
       onToggle: (p) => pick(p.id), onSlot: (n) => { k.slot = n; }, onCast: castNow, onCancel: () => { placeDone(); casting = null; render(); },
       onTakeBack: (r) => takeBack(r.undo) }),
-      k.spell.summon && S.map && !k.result ? h("p", { class: "summon-spot", style: "font-size:.88rem;margin:6px 0 0;font-weight:600" },
-        k.at ? "It appears on the square you marked (tap another to change it)." : "Tap the square on the map where it appears — or Cast to have it appear next to you.")
-        : S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
+      k.spell.summon ? null : S.map && !k.result ? h("p", { class: "faint", style: "font-size:.84rem;margin:6px 0 0" }, "You can also tap their token on the map.") : null);
   }
   window.appBusy = () => !!((using && !using.result) || (casting && !casting.result) || (window.Dice && Dice.isOpen && Dice.rolling && Dice.rolling()));
   function placeDone() { view.mark = null; if (view.tool === "place") view.tool = "select"; view.draw(); }
@@ -502,7 +508,7 @@
       const mine = S.mapTokens.find((t) => t.own), k = acting(), pet = k && S.mapTokens.find((t) => t.combatant_id === k.id);
       if (k && view.tool === "select" && !using) $("#hint").textContent = (pet ? (k.move && k.move.held ? k.name + " can't move. " : pet.movable
         ? "Drag " + k.name + " to move it: " + k.move.left + " of " + k.move.budget + " ft left. " : k.name + " has no movement left. ") : "") + "Double-tap to ping.";
-      else if (casting && !casting.result && casting.spell.summon) $("#hint").textContent = casting.spell.name + ": tap the square on the map where " + casting.spell.summon + " appears, then Cast.";
+      else if (casting && !casting.result && casting.spell.summon) $("#hint").textContent = casting.spell.name + ": tap the square on the map where " + casting.spell.summon + " appears.";
       else if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
       else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";

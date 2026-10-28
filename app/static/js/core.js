@@ -229,7 +229,9 @@
         h("span", { class: "cast-what" }, [spellWhat(s), o.lands].filter(Boolean).join(" · "))),
       s.notes ? h("p", { class: "faint cast-notes" }, s.notes) : null,
       res ? castResult(res, o.onUndo, o.onTakeBack) : null,
-      res || !s.summon ? null : h("p", { class: "cast-ask" }, s.summon + " appears next to " + (o.casterName || "the caster") + " and acts right after them. Press Cast."),
+      res || !s.summon ? null : o.place
+        ? h("p", { class: "cast-ask summon-ask" }, icon("map-pin", "sm"), " Tap the square on the map where " + s.summon + " appears — it appears there straight away. It acts right after " + (o.casterName || "you") + ".")
+        : h("p", { class: "cast-ask" }, s.summon + " appears next to " + (o.casterName || "the caster") + " and acts right after them. Press Cast."),
       res || s.summon ? null : h("p", { class: "cast-ask" }, n ? "Casting on " + n + (max ? " of up to " + max : "") + ". Tap anyone else it reaches, then Cast." : max === 1 ? "Who is it on? Tap them." : "Who does it reach? Tap each one" + (max ? " (up to " + max + ")" : "") + "."),
       res || s.summon ? null : groups.filter(([, list]) => list.length).map(([label, list]) => h("div", { class: "cast-group" },
         groups.filter(([, l]) => l.length).length > 1 ? h("div", { class: "lbl" }, label) : null,
@@ -238,7 +240,8 @@
       res ? null : slotPick,
       h("div", { class: "row", style: "margin-top:10px;gap:8px" },
         res ? null : h("button", { type: "button", class: "btn cast-go " + (helps ? "btn-heal" : "btn-dmg"), disabled: o.busy || (!n && !s.concentration && !s.summon && !s.zone), onclick: o.onCast },
-          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : s.zone ? " Cast around " + (o.casterName || "them") : " Cast" + (n && !s.summon ? " on " + n : "")),
+          icon(KIND_ICON[k] || "zap", "sm"), o.busy ? " Casting…" : s.zone ? " Cast around " + (o.casterName || "them") : s.summon && o.place ? " Or: next to " + (o.casterName || "me")
+            : " Cast" + (n && !s.summon ? " on " + n : "")),
         h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
   }
   const HOW_CLASS = { hit: "hits", crit: "hits", failed: "hits", auto: "hits", miss: "misses", saved: "misses" };
