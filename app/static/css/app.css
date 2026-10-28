@@ -1318,3 +1318,18 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 /* a player's moves under "It's your turn" */
 .your-moves .fight-act { min-height: 48px; }
 .your-moves .fight-act .faint { flex-basis: 100%; margin-left: 0; }
+
+/* who is rolling: a title across the top of the screen while dice roll, then what they rolled */
+.roll-who { position: fixed; top: 10px; left: 50%; z-index: 95; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+  max-width: min(92vw, 560px); padding: 9px 18px; border-radius: 12px; background: rgba(22, 17, 12, .93); color: #f3e6c4;
+  border: 1px solid rgba(232, 196, 120, .55); box-shadow: 0 8px 28px rgba(0, 0, 0, .45); font-size: 1.05rem; line-height: 1.25;
+  opacity: 0; transform: translate(-50%, -14px); transition: opacity .25s ease, transform .25s ease; pointer-events: none; }
+.roll-who.is-on { opacity: 1; transform: translate(-50%, 0); }
+.roll-who b { font-weight: 800; color: #ffe2a1; }
+.roll-who .rw-what { flex-basis: 100%; text-align: center; font-size: .85rem; color: #cdbf9f; }
+.roll-who .rw-total { font-size: 1.35rem; margin-left: 2px; }
+.roll-who.is-rolling .ico { animation: rw-spin 0.9s linear infinite; }
+.roll-who.is-dmg { border-color: rgba(220, 110, 90, .7); }
+.roll-who.is-heal { border-color: rgba(120, 210, 140, .7); }
+@keyframes rw-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .roll-who, .roll-who.is-rolling .ico { transition: none; animation: none; } }

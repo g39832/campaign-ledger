@@ -172,7 +172,7 @@
 
   // ---- the tray: animation + drawing ------------------------------------------
   const FLASH_MS = 2200; // how long the total pulses after the dice land
-  const HOLD_MS = 1600; // a landed roll stays on screen this long before the next one in a row starts
+  const HOLD_MS = 2400; // a landed roll stays on screen this long before the next one in a row starts
   class Tray {
     constructor(canvas) {
       this.canvas = canvas;
@@ -373,7 +373,7 @@
   const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduceMotion && !localStorage.getItem(prefsKey)) prefs.speed = "none";
   const savePrefs = () => { try { localStorage.setItem(prefsKey, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
-  const DURATION = { fast: 1000, normal: 2300, dramatic: 3400, none: 0 }; // slow enough to follow the dice
+  const DURATION = { fast: 1400, normal: 3000, dramatic: 4200, none: 0 }; // slow enough to follow the dice
 
   const role = document.body.dataset.role || "dm";
   const Dice = {
@@ -485,7 +485,7 @@
       if (!this.isOpen() && prefs.speed !== "dramatic" && !this.mapOverlayActive()) this.toggle(true);
       // the first roll at full speed; the rest of the same move (its damage, the saves) a bit quicker
       for (const [i, r] of rolls.entries()) {
-        const later = i > 0 ? { duration: Math.min(DURATION[prefs.speed] || 0, 1300), hold: 900 } : {};
+        const later = i > 0 ? { duration: Math.min(DURATION[prefs.speed] || 0, 2000), hold: 1700 } : {};
         const guard = (DURATION[prefs.speed] || 0) + HOLD_MS + 6000; // never hang a cast on an animation
         await Promise.race([this.animate(r, Object.assign({ quiet: r !== rolls[0] && r.kind !== "attack" }, later)), new Promise((ok) => setTimeout(ok, guard))]);
       }
@@ -509,9 +509,23 @@
       this._queue = run.then(() => (prefs.speed === "none" ? null : new Promise((ok) => setTimeout(ok, hold))), () => null);
       return run;
     },
+    /* The title at the top of the screen: who is rolling (and what), then what they rolled. Shown
+       whether the tray is open or not, so with a lot of rolls in a row everyone can follow whose it is. */
+    caption(roll, rolling) {
+      let el = document.getElementById("roll-who");
+      if (!el) { el = h("div", { id: "roll-who", class: "roll-who", role: "status", "aria-live": "polite" }); document.body.append(el); }
+      const who = roll.subject || roll.roller_name || "Someone", what = roll.label || roll.expression || "";
+      el.className = "roll-who is-on" + (rolling ? " is-rolling" : " is-done") + (roll.kind === "heal" ? " is-heal" : roll.kind === "damage" ? " is-dmg" : "");
+      el.replaceChildren(icon("dice-5", "sm"), h("span", { class: "rw-text" }, h("b", null, who), rolling ? " is rolling" : " rolled ",
+        rolling ? null : h("b", { class: "rw-total" }, String(roll.total))),
+        what ? h("span", { class: "rw-what" }, what) : null);
+      clearTimeout(this._captionOff);
+      if (!rolling) this._captionOff = setTimeout(() => { if (!this.playing) el.classList.remove("is-on"); }, HOLD_MS + 1200);
+    },
     animateNow(roll, opts) {
       opts = opts || {};
       this.current = roll;
+      if (prefs.speed !== "none") this.caption(roll, true);
       this.showResult(roll, true);
       const specs = diceFromRoll(roll);
       const speed = prefs.speed;
@@ -531,6 +545,7 @@
         this.playing = false;
         $("#dice-skip").disabled = true;
         this.showResult(roll, false);
+        if (prefs.speed !== "none") this.caption(roll, false);
         const nat = roll.result && roll.result.natural;
         if (window.FX && !opts.quiet && (nat === 20 || nat === 1)) {
           const who = roll.subject ? roll.subject + " · " : "";
@@ -624,7 +639,7 @@
           // someone else's roll: the newest one plays (no backlog of everything they rolled), and
           // its pop-up comes once it has landed
           const newest = others.sort((a, b) => b.id - a.id)[0];
-          const say = () => toast(`${newest.roller_name} rolled ${newest.label || newest.expression}: ${newest.total}`, null, { ms: 3500 });
+          const say = () => toast(`${newest.subject || newest.roller_name} rolled ${newest.label || newest.expression}: ${newest.total}`, null, { ms: 3500 });
           if ((this.isOpen() || this.mapOverlayActive()) && !this.playing) this.animate(newest).then(say);
           else { if (!this.isOpen()) this.badge(others.length); say(); }
         }
