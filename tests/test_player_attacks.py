@@ -115,3 +115,16 @@ def test_nobody_hits_themselves(api, battlemap):
     # healing yourself is fine
     api.post(f"/api/combatants/{by['Aria']['id']}/hp", {"op": "damage", "amount": 3})
     api.post(f"/api/encounters/{eid}/cast", {"caster_id": by["Aria"]["id"], "spell": 1, "targets": [by["Aria"]["id"]]})
+
+
+def test_an_area_attack_says_where_it_landed(api, battlemap):
+    """The DM's map sends where an aimed area sat, so everyone's map can shake the ground there
+    (Earth Shatter: the earthquake fills its whole radius)."""
+    eid, by = setup(api, battlemap)
+    api.post(f"/api/maps/{battlemap['mid']}/fx", {"by": by["Bandit 1"]["id"], "name": "Earth Shatter", "area": {"kind": "circle", "size": 40, "at": [4.5, 3]},
+                                                  "targets": [{"id": by["Aria"]["id"], "how": "hit"}]})
+    fx = [p["fx"] for p in api.get(f"/api/maps/{battlemap['mid']}")["pings"] if p.get("fx")][-1]
+    assert fx["area"] == {"kind": "circle", "squares": 8.0, "at": [4.5, 3.0]}
+    api.post(f"/api/maps/{battlemap['mid']}/fx", {"by": by["Bandit 1"]["id"], "name": "Quake", "area": {"kind": "circle", "size": 20, "at": "here"},
+                                                  "targets": [{"id": by["Aria"]["id"], "how": "hit"}]})
+    assert "at" not in [p["fx"] for p in api.get(f"/api/maps/{battlemap['mid']}")["pings"] if p.get("fx")][-1]["area"]

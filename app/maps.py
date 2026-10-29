@@ -372,7 +372,8 @@ def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type=
             continue
         add_fx(m["id"], {"name": str(name or "")[:60], "kind": kind or "damage", "type": str(damage_type or "")[:20],
                          "from": [round(a["x"] + a["size"] / 2, 2), round(a["y"] + a["size"] / 2, 2)] if a else None,
-                         "to": to, "how": hows, "area": {"kind": area["kind"], "squares": round(area["size"] / 5, 1)} if area else None})
+                         "to": to, "how": hows, "area": {"kind": area["kind"], "squares": round(area["size"] / 5, 1)}
+                         | ({"at": area["at"]} if area.get("at") else {}) if area else None})
 
 
 @bp.post("/maps/<int:map_id>/fx")
@@ -388,8 +389,17 @@ def api_fx(map_id):
     area = data.get("area") if isinstance(data.get("area"), dict) and data["area"].get("kind") in ("cone", "line", "circle", "square") else None
     attack_fx(conn, m["encounter_id"], int(data["by"]) if str(data.get("by", "")).isdigit() else None, hits,
               data.get("name"), data.get("kind") or "damage", data.get("damage_type") or "",
-              {"kind": area["kind"], "size": max(5, min(200, int(area.get("size") or 15)))} if area else None)
+              {"kind": area["kind"], "size": max(5, min(200, int(area.get("size") or 15))), "at": _area_at(area)} if area else None)
     return jsonify({"pings": recent_pings(map_id)})
+
+
+def _area_at(area):
+    """Where an aimed area sat on the map ([x, y] in squares), or None."""
+    at = area.get("at")
+    try:
+        return [round(float(at[0]), 2), round(float(at[1]), 2)] if isinstance(at, list) and len(at) == 2 else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _ping_xy(data, m):

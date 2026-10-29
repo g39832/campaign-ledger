@@ -526,6 +526,7 @@
     const ground = a.cast && a.cast.spell.terrain;
     if (!targets.length && !ground) { toast("Nobody's in it yet. Drag on the map to aim it.", "error"); return; }
     if (a.cast) { castNow(c, a, targets.map((x) => x.id)); return; }
+    const at = view.aim ? [view.aim.shape.x, view.aim.shape.y] : null; // where the area was (an earthquake shakes from there)
     view.aim = null; aim = null; setTool("select"); renderSelected();
     useMove(c, a);
     // one attack roll for the whole area, checked against each one's AC; one damage roll
@@ -551,7 +552,7 @@
         lines.push((crit ? "CRIT on " : a.heal ? "healed " : "hit ") + target.name + " for " + n + how);
       } else lines.push((a.effect ? (a.effect.condition || a.effect.name) + " on " : "hit ") + target.name + how);
     }
-    if (hits.length) showFx(c, a, hits);
+    if (hits.length) showFx(c, a, hits, at);
     say(c.id, a.name + ": " + (lines.join("; ") || "no one") + ".", lines.some((l) => !l.startsWith("missed")) ? "hit" : "miss");
   }
 
@@ -565,8 +566,8 @@
     return (Math.ceil(Math.max(gx, gy) - 1e-6) + 1) * per;
   }
   // everyone watching sees the attack: a slash, a bite, a fire bolt... (how: hit, crit, miss, saved)
-  function showFx(c, a, hits) {
-    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", area: a.aimArea || null, targets: hits.map(([id, how]) => ({ id, how })) })
+  function showFx(c, a, hits, at) {
+    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", area: a.aimArea ? Object.assign({}, a.aimArea, at ? { at } : {}) : null, targets: hits.map(([id, how]) => ({ id, how })) })
       .then((d) => view.setPings(d.pings)).catch(() => { /* the animation is a nicety */ });
   }
   function useMove(c, a) {

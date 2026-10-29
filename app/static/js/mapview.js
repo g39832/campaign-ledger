@@ -166,6 +166,14 @@
       const COLORS = { fire: "#ff7a2f", ice: "#8fdcff", lightning: "#fff27a", radiant: "#ffe9a3", poison: "#8fe36b", arcane: "#c08bff",
         arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a" };
       const color = COLORS[style] || "#ffffff", hows = fx.how || [];
+      // Earth Shatter: an earth move with a radius shakes the map and splits the ground across all of it
+      const quakeAt = fx.area && fx.area.kind === "circle" && (style === "earth" || /quake|tremor|seismic|fissure/i.test(fx.name || ""))
+        ? fx.area.at || fx.from || (fx.to && fx.to[0]) : null;
+      if (quakeAt) {
+        const r = Math.max(1, (fx.area.squares || 3) * 5 / ((this.map && this.map.scale_value) || 5));
+        this.addFx({ type: "quake", x: quakeAt[0], y: quakeAt[1], r, cracks: MapView.cracks(r), ms: 2600, start });
+        if (window.FX) FX.sound("quake");
+      }
       const sweep = style === "slash" && fx.area && fx.area.kind === "cone" && fx.from && fx.to && fx.to.length;
       if (sweep) { // Wide Slash: one wide slash the full length of the cone, pointed at the ones it reaches
         const cx = fx.to.reduce((s, p) => s + p[0], 0) / fx.to.length, cy = fx.to.reduce((s, p) => s + p[1], 0) / fx.to.length;
@@ -180,6 +188,85 @@
         if (word && to) this.addFx({ type: "word", x: to[0], y: to[1], text: word, color: how === "crit" ? "#ffd36b" : "#d8d2c4", ms: 1500, start: start + 500 + i * 120 });
         if (i === 0 && window.FX) FX.sound(fx.kind === "heal" || fx.kind === "buff" ? "heal" : how === "crit" ? "crit" : missed ? "fumble" : "hit");
       });
+    }
+    /* Jagged cracks from the middle out to the edge of a radius r (in squares), with side branches.
+       Each is a list of points; made once per quake so every frame draws the same cracks. */
+    static cracks(r) {
+      const out = [], n = Math.max(7, Math.min(16, Math.round(r * 1.2)));
+      const walk = (x, y, ang, len, depth) => {
+        const pts = [[x, y]], steps = Math.max(3, Math.round(len * 2));
+        for (let i = 1; i <= steps; i++) {
+          ang += (Math.random() - 0.5) * 0.7;
+          x += Math.cos(ang) * len / steps; y += Math.sin(ang) * len / steps;
+          if (Math.hypot(x, y) > r) break;
+          pts.push([x, y]);
+          if (depth < 2 && Math.random() < 0.18) walk(x, y, ang + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5), len * (0.3 + Math.random() * 0.25), depth + 1);
+        }
+        out.push({ pts, w: depth ? 0.05 : 0.11, at: Math.hypot(pts[0][0], pts[0][1]) / r });
+      };
+      for (let i = 0; i < n; i++) walk(0, 0, (i + Math.random() * 0.6) / n * Math.PI * 2, r * (0.75 + Math.random() * 0.25), 0);
+      for (let i = 0; i < n * 2; i++) { // loose rocks thrown up
+        const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+        out.push({ rock: [Math.cos(a) * d, Math.sin(a) * d], size: 0.08 + Math.random() * 0.14, at: d / r });
+      }
+      return out;
+    }
+    quakeShake() {
+      const now = performance.now();
+      let amp = 0;
+      for (const f of this.fx) if (f.type === "quake") {
+        const k = (now - f.start) / f.ms;
+        if (k >= 0 && k < 0.75) amp = Math.max(amp, (1 - k / 0.75) * Math.min(1, k * 8));
+      }
+      if (!amp) return [0, 0];
+      const s = (this.view.s || 1) * (this.map ? this.map.cell_px : 50) * 0.16 * amp;
+      return [Math.sin(now / 23) * s + (Math.random() - 0.5) * s * 0.6, Math.cos(now / 31) * s * 0.7 + (Math.random() - 0.5) * s * 0.5];
+    }
+    /** The ground splitting: dust rolling out to the edge, cracks tearing outward, rocks jumping. */
+    drawQuakes(cp, ox, oy) {
+      const ctx = this.ctx, now = performance.now();
+      for (const f of this.fx) {
+        if (f.type !== "quake") continue;
+        const k = (now - f.start) / f.ms;
+        if (k < 0 || k > 1) continue;
+        const X = ox + f.x * cp, Y = oy + f.y * cp, R = f.r * cp, fade = k < 0.7 ? 1 : (1 - k) / 0.3;
+        ctx.save();
+        // the area darkens like churned earth
+        const g = ctx.createRadialGradient(X, Y, 0, X, Y, R);
+        g.addColorStop(0, `rgba(70,45,22,${0.38 * fade})`); g.addColorStop(0.85, `rgba(90,60,30,${0.22 * fade})`); g.addColorStop(1, "rgba(90,60,30,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(X, Y, R, 0, Math.PI * 2); ctx.fill();
+        // shockwave rings of dust rolling out to the edge
+        for (let i = 0; i < 2; i++) {
+          const q = Math.min(1, Math.max(0, (k - i * 0.15) / 0.55));
+          if (q <= 0 || q >= 1) continue;
+          ctx.strokeStyle = `rgba(185,150,105,${(1 - q) * 0.85})`; ctx.lineWidth = cp * (0.5 - q * 0.3);
+          ctx.beginPath(); ctx.arc(X, Y, R * q, 0, Math.PI * 2); ctx.stroke();
+        }
+        const grow = Math.min(1, k / 0.45); // cracks tear out from the middle
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        for (const c of f.cracks) {
+          if (c.rock) {
+            const q = (k - c.at * 0.45) / 0.35;
+            if (q <= 0 || q >= 1) continue;
+            const hop = Math.sin(q * Math.PI) * cp * 0.5;
+            ctx.globalAlpha = fade; ctx.fillStyle = "#6b4a2b"; ctx.strokeStyle = "rgba(20,12,6,.8)"; ctx.lineWidth = cp * 0.02;
+            const s = c.size * cp, rx = X + c.rock[0] * cp, ry = Y + c.rock[1] * cp - hop;
+            ctx.beginPath(); ctx.moveTo(rx - s, ry); ctx.lineTo(rx - s * 0.3, ry - s * 0.9); ctx.lineTo(rx + s, ry - s * 0.4); ctx.lineTo(rx + s * 0.6, ry + s * 0.7); ctx.closePath(); ctx.fill(); ctx.stroke();
+            continue;
+          }
+          const show = (grow - c.at) / Math.max(0.05, 1 - c.at);
+          if (show <= 0) continue;
+          const upto = Math.max(1, Math.ceil(c.pts.length * Math.min(1, show)));
+          ctx.globalAlpha = fade;
+          for (const [w, col] of [[c.w * 2.2, "rgba(30,18,8,.55)"], [c.w, "#140b05"], [c.w * 0.35, "rgba(255,140,60,.55)"]]) {
+            ctx.strokeStyle = col; ctx.lineWidth = cp * w;
+            ctx.beginPath(); ctx.moveTo(X + c.pts[0][0] * cp, Y + c.pts[0][1] * cp);
+            for (let i = 1; i < upto; i++) ctx.lineTo(X + c.pts[i][0] * cp, Y + c.pts[i][1] * cp);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
     }
     addFx(f) {
       f.start = f.start || performance.now() + (f.delay || 0);
@@ -320,7 +407,9 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, this.w, this.h);
       if (!m) return;
-      const { s, tx, ty } = this.view, cp = m.cell_px, ox = m.offset_x, oy = m.offset_y;
+      const { s } = this.view, cp = m.cell_px, ox = m.offset_x, oy = m.offset_y;
+      let { tx, ty } = this.view;
+      const [jx, jy] = this.quakeShake(); tx += jx; ty += jy;
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty);
       const gw = m.cols * cp, gh = m.rows * cp;
       if (this.bg) ctx.drawImage(this.bg, 0, 0);
@@ -349,6 +438,7 @@
         ctx.restore();
       }
       this.drawZones(cp, ox, oy);
+      this.drawQuakes(cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawReach(this.drag.token, cp, ox, oy);
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawStepLabel(this.drag.token, cp, ox, oy);
