@@ -935,6 +935,31 @@
     watchForUpdates();
   });
 
+  /* The boss bar: across the top of the page while a boss is in the fight. items: [{id, name,
+     frac (0-1), text (what's written on it: HP for the DM, nothing for players), phase, portrait}].
+     Phase 2 gets a banner the first time each screen sees it. */
+  function bossBar(items) {
+    let bar = document.getElementById("boss-bar");
+    if (!items || !items.length) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = h("div", { id: "boss-bar", class: "boss-bar", role: "status", "aria-label": "Boss" });
+      const main = document.querySelector("main") || document.body;
+      main.prepend(bar);
+    }
+    bar.replaceChildren(...items.map((b) => h("div", { class: "boss-row" + (b.phase === 2 ? " is-phase2" : "") + (b.frac <= 0 ? " is-down" : "") },
+      b.portrait ? h("img", { class: "boss-pic", src: "/api/uploads/" + b.portrait, alt: "" }) : h("span", { class: "boss-crown" }, icon("crown", "sm")),
+      h("div", { class: "boss-main" },
+        h("div", { class: "boss-name" }, h("b", null, b.name), b.phase === 2 ? h("span", { class: "tag is-bad" }, "Phase 2") : null, b.text ? h("span", { class: "boss-num" }, b.text) : null),
+        h("div", { class: "boss-track" }, h("div", { class: "boss-fill", style: "width:" + Math.max(0, Math.min(100, Math.round((b.frac || 0) * 100))) + "%" }))))));
+    items.forEach((b) => {
+      if (b.phase !== 2) return;
+      const key = "boss-phase2-" + b.id;
+      let seen = false;
+      try { seen = sessionStorage.getItem(key) === "1"; sessionStorage.setItem(key, "1"); } catch (e) { /* ignore */ }
+      if (!seen && window.FX) { FX.banner("Phase 2!", b.name + " grows stronger", "crit"); FX.sound && FX.sound("crit"); }
+    });
+  }
+
   /* Instant updates: one connection per page (server-sent events). on(fn) runs fn the moment
      anything changes anywhere; recent() says whether the connection is up, so the pages' regular
      checks can slow down to a fallback (they keep going in case it drops). */
@@ -985,5 +1010,5 @@
     setInterval(check, 8000);
   }
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

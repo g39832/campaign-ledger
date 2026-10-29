@@ -2,7 +2,7 @@
 
 Paste everything below into a new coding session (Claude Code or similar) opened in
 `~/Desktop/Dnd Tracker`. It explains the project and exactly how to build each feature.
-Features already done are marked **DONE**; continue with the first one that isn't.
+Features already done are marked **DONE**; continue with the first one that isn't. (As of 2026-10-29 all of them are done; use this file as a map of the project for future work.)
 
 ---
 
@@ -141,7 +141,7 @@ still shows the dead link as "on".
   for creature pictures.
 - Include handouts in backups (`app/backup.py`: export rows and files).
 
-### 6. Boss extras
+### 6. Boss extras — **DONE** (`combat.boss_info`, `/api/combatants/<id>/legendary`, `use_legendary_resistance`, `L.bossBar`)
 For creatures with `boss = 1` (already on the creatures table and copied into combatants'
 `statblock`):
 - **Boss health bar:** in a fight with a boss, a wide bar across the top of everyone's screen

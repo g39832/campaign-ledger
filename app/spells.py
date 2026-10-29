@@ -640,6 +640,12 @@ def cast(ctx, caster_id, data, viewer=None):
             res.update(how="crit" if crit else "hit" if landed else "miss", roll=r["total"], vs=t["ac"])
         elif lands == "save":
             made, total, how = roll_save(roller, t, sp["hit"], nums["dc"], sp["name"])
+            if not made:  # a boss can turn a failed save into a success
+                from .combat import use_legendary_resistance
+                lr = use_legendary_resistance(ctx, t)
+                if lr is not None:
+                    made = True
+                    how += f" — Legendary Resistance: it succeeds instead ({lr} left)"
             res.update(how="saved" if made else "failed", roll=total, vs=nums["dc"])
             if made:
                 landed, half = False, sp["kind"] == "damage" and sp["save_half"]
@@ -801,7 +807,7 @@ def _undo_store():
 def snapshot(ctx):
     """Everything a cast can change in this fight, to put back."""
     conn, eid = ctx.conn, ctx.enc["id"]
-    cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id "
+    cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id, boss_state "
                                          "FROM combatants WHERE encounter_id = ?", (eid,))]
     chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots "
                                            "FROM characters WHERE id IN (SELECT character_id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))]
@@ -890,6 +896,8 @@ def restore(ctx, snap):
     for c in snap["cbs"]:
         conn.execute("UPDATE combatants SET current_hp = ?, max_hp = ?, temp_hp = ?, status = ?, conditions = ?, moved = ?, sort_order = ? WHERE id = ?",
                      (c["current_hp"], c["max_hp"], c["temp_hp"], c["status"], c["conditions"], c["moved"], c["sort_order"], c["id"]))
+        if "boss_state" in c:
+            conn.execute("UPDATE combatants SET boss_state = ? WHERE id = ?", (c["boss_state"], c["id"]))
     for ch in snap["chars"]:
         conn.execute("UPDATE characters SET current_hp = ?, max_hp = ?, temp_hp = ?, status = ?, conditions = ?, death_successes = ?, "
                      "death_failures = ?, spell_slots = ?, updated_at = ? WHERE id = ?",

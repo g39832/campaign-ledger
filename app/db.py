@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 MIGRATIONS = {
     1: """
@@ -380,6 +380,13 @@ MIGRATIONS = {
         updated_at TEXT NOT NULL
     );
     CREATE INDEX handouts_campaign ON handouts(campaign_id);
+    """,
+    13: """
+    ALTER TABLE creatures ADD COLUMN legendary TEXT NOT NULL DEFAULT '';
+    ALTER TABLE creatures ADD COLUMN legendary_per_round INTEGER NOT NULL DEFAULT 3;
+    ALTER TABLE creatures ADD COLUMN phase2 TEXT NOT NULL DEFAULT '';
+    ALTER TABLE creatures ADD COLUMN legendary_resistance INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE combatants ADD COLUMN boss_state TEXT NOT NULL DEFAULT '{}';
     """,
 }
 

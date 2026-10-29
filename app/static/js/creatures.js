@@ -44,7 +44,7 @@
     if (!c) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No creature selected"), "Pick one from the list or create a new stat block.")); return; }
     const model = {};
     ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "spells", "traits", "resistances", "immunities",
-      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss"].forEach((k) => { model[k] = c[k]; });
+      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss", "legendary", "legendary_per_round", "phase2", "legendary_resistance"].forEach((k) => { model[k] = c[k]; });
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
     } });
@@ -105,7 +105,7 @@
       h("label", { class: "check sb-boss" }, h("input", { type: "checkbox", checked: !!model.boss, onchange: (e) => {
         b.set("boss", e.target.checked, true); c.boss = e.target.checked;
         const i = list.findIndex((x) => x.id === c.id); if (i >= 0) list[i] = Object.assign({}, list[i], { boss: e.target.checked });
-        renderList(); } }), icon("crown", "sm"), " Boss", h("span", { class: "faint", style: "font-size:.85rem" }, " — listed in the Bosses section")),
+        renderList(); renderEditor(list.find((x) => x.id === c.id) || c); } }), icon("crown", "sm"), " Boss", h("span", { class: "faint", style: "font-size:.85rem" }, " — listed in the Bosses section")),
       h("hr"),
       h("div", { class: "sb-props" },
         prop("Hit points", "max_hp", { type: "number", min: 1 }),
@@ -125,6 +125,15 @@
           L.attackRows({ text: model.attacks || "", kind: "attacks", onChange: (t) => b.set("attacks", t) })),
         h("div", { class: "full field" }, h("span", null, "Spells"),
           L.attackRows({ text: model.spells || "", kind: "spells", onChange: (t) => b.set("spells", t) })),
+        model.boss ? h("div", { class: "full boss-extras" },
+          h("h4", { class: "lbl" }, icon("crown", "sm"), " Boss extras"),
+          h("div", { class: "field" }, h("span", null, "Legendary actions (used at the end of other creatures' turns)"),
+            L.attackRows({ text: model.legendary || "", kind: "attacks", onChange: (t) => b.set("legendary", t) })),
+          h("div", { class: "row", style: "gap:14px;flex-wrap:wrap" },
+            prop("Legendary actions per round", "legendary_per_round", { type: "number", min: 0, max: 10 }),
+            prop("Legendary resistance (per fight)", "legendary_resistance", { type: "number", min: 0, max: 10 })),
+          h("div", { class: "field" }, h("span", null, "Phase 2 attacks (from half HP)"),
+            L.attackRows({ text: model.phase2 || "", kind: "attacks", onChange: (t) => b.set("phase2", t) }))) : null,
         h("div", { class: "full" }, prop("DM notes", "notes", { rows: 3 })))),
       toEncounter,
       h("div", { class: "row", style: "margin-top:12px;justify-content:flex-end" }, del));

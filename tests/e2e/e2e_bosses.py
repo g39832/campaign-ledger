@@ -52,7 +52,7 @@ with sync_playwright() as p:
         pg.locator("#boss-only").uncheck(); pg.wait_for_timeout(300)
         check(len(pg.locator("#list li button").all()) == len(lib), "everything's listed again")
         # the editor still works (the attacks form) and it still goes into fights
-        check(pg.locator("#editor .mrows").count() == 2, "the stat block's attacks form is still there")
+        check(pg.locator("#editor .mrows").count() == 4, "the stat block has its attacks and spells forms, plus the boss extras (legendary, phase 2)")
         # untick both
         for n in ("Mimic Boss", "Dreadnought"):
             btn(n).first.click(); pg.wait_for_timeout(400); pg.locator("#editor .sb-boss input").uncheck(); pg.wait_for_timeout(2000)

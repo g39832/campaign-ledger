@@ -624,6 +624,8 @@
     }
     if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
     newHandouts();
+    L.bossBar(e ? e.order.filter((o) => o.boss && !["dead", "defeated", "fled"].includes(o.status))
+      .map((o) => ({ id: o.id, name: o.name, frac: (o.quarters || 0) / 4, text: "", phase: o.phase, portrait: o.portrait })) : []);
     $("#party").replaceChildren(handoutsPanel() || "", h("h3", { class: "rule-head" }, "Party"),
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),

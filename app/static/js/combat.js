@@ -44,6 +44,8 @@
     if (selected && !byId(selected)) selected = null;
     if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
     renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
+    L.bossBar(S.encounter.status === "active" ? S.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
+      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: c.hp + " / " + c.max_hp + " HP", phase: c.boss.phase, portrait: c.portrait })) : []);
     if (before !== state) { celebrate(before, state); L.offerParry(state, before && before.combatants, (cid) => L.parry(cid, (d) => { if (d && d.encounter) apply(d); })); }
     if (keep) {
       const el = document.querySelector('[data-keep="' + keep.key + '"]');
@@ -422,7 +424,7 @@
       dmg: a.has_dmg ? (e, crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }, e) : null, dmgLabel: a.heal ? "Heal" : "Dmg" }));
 
     // spells are listed under Spells (L.monsterSpells); this is the Attacks box
-    return attackLines(c.statblock.attacks).map((a) => ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: !!a.hit,
+    return attackLines(c.statblock.attacks + (c.boss && c.boss.phase === 2 ? "\n" + c.boss.phase2 : "")).map((a) => ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: !!a.hit,
       hit: !a.check && !a.heal && (a.dmg || !a.condition) && (a.hit || rule) ? (e) => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }, e) : null,
       hitLabel: "Hit " + (a.hit || "+0"),
       dmg: a.dmg ? (e, crit) => roll({ expression: a.dmg, label: a.name + (a.heal ? " healing" : " damage"), kind: a.heal ? "heal" : "damage", subject: c.name, crit }, e) : null,
@@ -552,6 +554,13 @@
       h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, seg),
       h("div", { class: "target-chips" }, chips),
       atkRows, spellRows, verdict,
+      c.boss && c.boss.legendary && c.boss.legendary.trim() ? h("div", { class: "legendary-box" },
+        h("div", null, icon("crown", "sm"), h("b", null, " Legendary actions: " + c.boss.left + " of " + c.boss.per_round + " left"),
+          h("span", { class: "faint" }, " · " + L.attackLines(c.boss.legendary).map((x) => x.name + (x.dmg ? " " + x.dmg : "")).join(", "))),
+        h("button", { type: "button", class: "btn btn-sm", disabled: isTurnNow || !c.boss.left || S.encounter.status !== "active",
+          title: isTurnNow ? "Not on its own turn" : "Use one now (at the end of another creature's turn), then roll it above",
+          onclick: () => run("POST", "/api/combatants/" + c.id + "/legendary", {}) }, "Use one")) : null,
+      c.boss && c.boss.lr ? h("div", { class: "faint", style: "font-size:.88rem" }, "Legendary Resistance: " + c.boss.lr_left + " of " + c.boss.lr + " left (failed saves turn into successes).") : null,
       h("div", { class: "hp-ctl", style: "margin-top:10px" }, amt,
         h("button", { type: "button", class: "btn " + (healing ? "btn-heal" : "btn-dmg"), disabled: !set.size, onclick: () => deal(false) },
           icon(healing ? "heart" : "swords", "sm"), label),

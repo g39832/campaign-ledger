@@ -1402,3 +1402,21 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .handout-text { white-space: pre-wrap; line-height: 1.5; font-size: 1.02rem; }
 .handout-list { margin-bottom: 14px; }
 .handout-list .linkish { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 6px 0; font: inherit; display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+
+/* the boss bar across the top of the page; the boss extras on the stat block and in a fight */
+.boss-bar { position: sticky; top: 0; z-index: 40; display: grid; gap: 6px; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(60, 10, 10, .92), rgba(28, 12, 12, .92)); border: 1px solid rgba(220, 90, 70, .55); box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+.boss-row { display: flex; align-items: center; gap: 10px; }
+.boss-pic { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255, 210, 140, .6); }
+.boss-crown { color: #ffd36b; display: inline-grid; place-items: center; width: 34px; }
+.boss-main { flex: 1; display: grid; gap: 4px; min-width: 0; }
+.boss-name { display: flex; align-items: center; gap: 8px; color: #ffe2c2; flex-wrap: wrap; }
+.boss-num { margin-left: auto; font-variant-numeric: tabular-nums; color: #f3c9a8; font-size: .9rem; }
+.boss-track { height: 12px; border-radius: 6px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.boss-fill { height: 100%; background: linear-gradient(90deg, #b0281c, #e2553c); transition: width .5s ease; }
+.boss-row.is-phase2 .boss-fill { background: linear-gradient(90deg, #6d1fb0, #d24bd8); }
+.boss-row.is-down { opacity: .55; }
+.legendary-acts { border-top: 1px dashed rgba(232, 196, 120, .45); padding-top: 6px; }
+.fight-act.is-legendary .ico { color: #ffd36b; }
+.legendary-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1px dashed rgba(232, 196, 120, .5); border-radius: var(--radius); padding: 6px 10px; margin-top: 8px; }
+.boss-extras { display: grid; gap: 8px; border: 1px solid rgba(232, 196, 120, .45); border-radius: var(--radius); padding: 10px; }

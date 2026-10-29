@@ -82,7 +82,8 @@ def _combatant_rows(conn, enc_id):
                   ch.death_successes AS ch_ds, ch.death_failures AS ch_df, ch.portrait AS ch_portrait,
                   ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
                   ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof,
-                  cr.portrait AS cr_portrait
+                  cr.portrait AS cr_portrait, cr.boss AS cr_boss, cr.legendary AS cr_legendary, cr.legendary_per_round AS cr_lpr,
+                  cr.phase2 AS cr_phase2, cr.legendary_resistance AS cr_lr
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
@@ -116,12 +117,56 @@ def _combatant_dict(r):
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
                  status=r["status"], conditions=json.loads(r["conditions"]), death_successes=0,
                  death_failures=0, portrait=r["cr_portrait"], subtitle=d["statblock"].get("creature_type", ""), exhaustion=0)
+    d["boss"] = None if linked else boss_info(d, r)
     # "ac" is what attacks are checked against: the saved AC plus temporary effects.
     # Editing AC changes "ac_base", the saved value.
     d["ac_base"] = d["ac"]
     d["ac_bonus"] = ac_bonus(d["conditions"])
     d["ac"] = (d["ac"] or 0) + d["ac_bonus"]
     return d
+
+
+def boss_info(d, r):
+    """A boss's extras in the fight, or None: its legendary actions (left this round), phase 2
+    attacks (on from half HP) and legendary resistance (left this fight). The fight's own copy of
+    the stat block wins; anything it doesn't have comes from the library creature."""
+    sb = d["statblock"]
+    keys = r.keys()
+
+    def pick(k, col, dflt):
+        if sb.get(k) not in (None, ""):
+            return sb[k]
+        return r[col] if col in keys and r[col] not in (None, "") else dflt
+    if not (sb.get("boss") or ("cr_boss" in keys and r["cr_boss"])):
+        return None
+    try:
+        moved = json.loads(r["moved"] or "{}") if r["moved"] else {}
+    except ValueError:
+        moved = {}
+    state = json.loads(r["boss_state"] or "{}") if "boss_state" in keys and r["boss_state"] else {}
+    per = int(pick("legendary_per_round", "cr_lpr", 3) or 0)
+    lr = int(pick("legendary_resistance", "cr_lr", 0) or 0)
+    phase2 = str(pick("phase2", "cr_phase2", "") or "")
+    hp, mx = d["hp"] or 0, d["max_hp"] or 0
+    return {"legendary": str(pick("legendary", "cr_legendary", "") or ""), "per_round": per,
+            "left": max(0, per - int(moved.get("legendary") or 0)), "phase2": phase2,
+            "phase": 2 if phase2.strip() and mx and 0 < hp * 2 <= mx else 1, "lr": lr, "lr_left": max(0, lr - int(state.get("lr_used") or 0))}
+
+
+def use_legendary_resistance(ctx, t):
+    """A boss failed a save: it uses legendary resistance if it has any left (and it's on).
+    Returns how many are left after, or None when it couldn't."""
+    b = t.get("boss")
+    if not b or b["lr_left"] <= 0:
+        return None
+    row = ctx.conn.execute("SELECT boss_state FROM combatants WHERE id = ?", (t["id"],)).fetchone()
+    state = json.loads(row["boss_state"] or "{}")
+    state["lr_used"] = int(state.get("lr_used") or 0) + 1
+    ctx.conn.execute("UPDATE combatants SET boss_state = ? WHERE id = ?", (json.dumps(state), t["id"]))
+    left = b["lr_left"] - 1
+    b["lr_left"] = left
+    ctx.log("condition", f"{t['name']} uses Legendary Resistance and succeeds instead ({left} left)")
+    return left
 
 
 def _encounter_row(conn, enc_id):
@@ -1194,6 +1239,36 @@ def apply_hp(ctx, cid, data, by=None):
         from .spells import concentration_check
         concentration_check(ctx, ctx.combatant(cid), int(data.get("amount") or 0))
     return v
+
+
+@bp.post("/combatants/<int:cid>/legendary")
+def api_legendary(cid):
+    """The boss uses one of its legendary actions (at the end of another creature's turn). The
+    count comes back at the start of its own turn."""
+    eid = _enc_of_combatant(cid)
+    data = _body()
+
+    def fn(ctx):
+        c = ctx.combatant(cid)
+        b = c.get("boss")
+        if not b or not b["legendary"].strip():
+            raise F.ApiError(f"{c['name']} has no legendary actions")
+        if ctx.enc["status"] != "active":
+            raise F.ApiError("Start the fight first")
+        if ctx.enc["current_id"] == cid:
+            raise F.ApiError("Legendary actions are for the end of other creatures' turns, not its own")
+        if b["left"] <= 0:
+            raise F.ApiError(f"{c['name']} has used all {b['per_round']} legendary actions — they come back at the start of its turn")
+        row = ctx.conn.execute("SELECT moved FROM combatants WHERE id = ?", (cid,)).fetchone()
+        try:
+            moved = json.loads(row["moved"] or "{}") if row["moved"] else {}
+        except ValueError:
+            moved = {}
+        moved["legendary"] = int(moved.get("legendary") or 0) + 1
+        ctx.conn.execute("UPDATE combatants SET moved = ? WHERE id = ?", (json.dumps(moved), cid))
+        what = str(data.get("name") or "").strip()[:60]
+        ctx.log("action", f"{c['name']} uses a legendary action{(': ' + what) if what else ''} ({b['left'] - 1} left this round)")
+    return mutate(eid, fn, data.get("op_id"))
 
 
 @bp.post("/combatants/<int:cid>/hp")

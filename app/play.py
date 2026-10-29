@@ -264,8 +264,8 @@ def _player_encounter(conn, campaign_id, live_map):
     rows = conn.execute(
         """SELECT c.id, c.kind, c.hidden, c.character_id, COALESCE(ch.name, c.name) AS name,
                   COALESCE(ch.current_hp, c.current_hp) AS hp, COALESCE(ch.max_hp, c.max_hp) AS max_hp,
-                  COALESCE(ch.status, c.status) AS status, c.init_roll
-           FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id
+                  COALESCE(ch.status, c.status) AS status, c.init_roll, c.statblock, cr.boss AS cr_boss, cr.phase2 AS cr_phase2, cr.portrait AS cr_portrait
+           FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""", (enc["id"],)).fetchall()
     order, current_name = [], None
     for r in rows:
@@ -278,6 +278,14 @@ def _player_encounter(conn, campaign_id, live_map):
             item.update(hp=r["hp"], max_hp=r["max_hp"])
         elif r["max_hp"]:
             item["health"] = "down" if r["hp"] <= 0 else ("bloodied" if r["hp"] * 2 <= r["max_hp"] else "")
+            try:
+                sb = json.loads(r["statblock"] or "{}")
+            except ValueError:
+                sb = {}
+            if sb.get("boss") or r["cr_boss"]:  # the boss bar: in quarters, never the HP itself
+                p2 = str(sb.get("phase2") or r["cr_phase2"] or "").strip()
+                item.update(boss=True, quarters=0 if r["hp"] <= 0 else max(1, math.ceil(r["hp"] * 4 / r["max_hp"])),
+                            phase=2 if p2 and 0 < r["hp"] * 2 <= r["max_hp"] else 1, portrait=r["cr_portrait"])
         if item["is_current"]:
             current_name = r["name"]
         order.append(item)

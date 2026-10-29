@@ -308,6 +308,12 @@ CREATURE = {
     "languages": Text(1000),
     "notes": Text(),
     "boss": Bool(),  # shown in the library's Bosses section
+    # boss extras: legendary actions (lines like attacks) and how many a round, phase 2 attacks
+    # (from half HP), legendary resistance (failed saves it can turn into successes, per fight)
+    "legendary": Text(),
+    "legendary_per_round": Int(0, 10),
+    "phase2": Text(),
+    "legendary_resistance": Int(0, 10),
 }
 
 ENCOUNTER = {

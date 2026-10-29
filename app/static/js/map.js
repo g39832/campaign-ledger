@@ -85,6 +85,7 @@
     renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings();
     if (state.pings) view.setPings(state.pings);
     view.setZones(state.zones);
+    ensureEnc(); if (!S.map.encounter_id) L.bossBar([]);
   }
 
   // ---- top bar -------------------------------------------------------------------
@@ -353,7 +354,7 @@
     const want = S.encounter ? S.encounter.rev : null;
     if (encLoading || !EID() || (enc && enc.encounter.id === EID() && enc.encounter.rev === want)) return;
     encLoading = true;
-    api("GET", "/api/encounters/" + EID()).then((d) => { enc = d; }).catch(() => { enc = null; })
+    api("GET", "/api/encounters/" + EID()).then((d) => { enc = d; dmBossBar(); }).catch(() => { enc = null; })
       .finally(() => { encLoading = false; renderSelected(); });
   }
   // wait: each roll lands before the next starts, so the d20 is seen before the damage
@@ -363,6 +364,12 @@
   /* Everything this combatant can do, as buttons.
      single: one target, rolled when it's tapped. many: tap each one it reaches.
      toHit: rolled against each target's AC first. dmg / roll: the damage (or healing). effect: a condition it puts on. */
+  // the boss bar for the DM: real HP
+  function dmBossBar() {
+    const live = enc && enc.encounter && enc.encounter.status === "active";
+    L.bossBar(live ? enc.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
+      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: c.hp + " / " + c.max_hp + " HP", phase: c.boss.phase, portrait: c.portrait })) : []);
+  }
   function actionsFor(c) {
     const out = [], rule = toHitRule();
     if (c.linked) {
@@ -391,6 +398,8 @@
     } else {
       const sb = c.statblock || {};
       L.attackLines(sb.attacks).forEach((a) => out.push(monsterAction(c, a, false, rule)));
+      if (c.boss && c.boss.phase === 2) L.attackLines(c.boss.phase2).forEach((a) => { // from half HP
+        const x = monsterAction(c, a, false, rule); x.info = "Phase 2 · " + (x.info || ""); out.push(x); });
       L.monsterSpells(sb.spells).forEach((s) => out.push(spellAction(c, s, null)));
     }
     return out;
@@ -757,6 +766,16 @@
       (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")
         + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left" : "") + (x.dmg_mult > 1 ? " · damage ×" + x.dmg_mult : "")))) : null,
       castBox, aiming, res,
+      a || !(c.boss && c.boss.legendary && c.boss.legendary.trim()) ? null : h("div", { class: "fight-acts legendary-acts" },
+        h("div", { class: "lbl" }, "Legendary actions — " + c.boss.left + " of " + c.boss.per_round + " left" + (isTurn ? " (not on its own turn)" : " · at the end of another's turn")),
+        L.attackLines(c.boss.legendary).map((x0) => {
+          const x = monsterAction(c, x0, false, toHitRule());
+          return h("button", { type: "button", class: "fight-act is-legendary", disabled: isTurn || !c.boss.left || enc.encounter.status !== "active",
+            onclick: () => act("POST", "/api/combatants/" + c.id + "/legendary", { name: x.name }, (d) => { enc = d; renderSelected(); arm(c, x); },
+              { onError: (e) => toast(e.message, "error") }) },
+            icon("crown", "sm"), h("b", null, x.name), h("span", { class: "faint" }, x.info || ""));
+        })),
+      c.boss && c.boss.lr ? h("div", { class: "fight-note" }, icon("shield", "sm"), " Legendary Resistance: " + c.boss.lr_left + " of " + c.boss.lr + " left — a failed save turns into a success.") : null,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
         h("div", { class: "lbl" }, "Attacks & spells — click one, then tap who"),
         acts.map((x) => {
