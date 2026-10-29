@@ -48,6 +48,7 @@
         <button type="button" class="btn btn-sm btn-quiet" id="off-code">Turn off joining</button>
       </div>
       <p class="faint" style="font-size:.9rem">They go to <b>/join</b> on the address above, type this code and their name, and pick their character. A new code stops new people joining with the old one; players already in stay in.</p>
+      <div id="qr-box" class="qr-box" hidden></div>
     </section>
 
     <section class="section">
@@ -77,6 +78,44 @@
 <script type="application/json" id="boot-chars">{{ characters | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script>
+/* A QR code for joining: the online link when it's up and working, otherwise this computer's
+   Wi-Fi link, with the join code filled in. Players point their phone's camera at it. */
+(() => {
+  const { h, icon, $, api } = L;
+  let shown = "";
+  async function draw() {
+    const box = $("#qr-box");
+    if (!box) return;
+    let info, online = null;
+    try { info = await api("GET", "/api/campaigns/{{ campaign.id }}/players"); } catch (e) { return; }
+    try { online = await api("GET", "/api/online"); } catch (e) { /* offline is fine */ }
+    if (!info.join_code) { box.hidden = true; shown = ""; return; }
+    const lan = info.addresses && info.addresses[0] ? "http://" + info.addresses[0].ip + ":" + info.port : null;
+    const base = online && online.running && online.url && !online.broken ? online.url : lan;
+    if (!base) { box.hidden = true; return; }
+    const url = base + "/join?code=" + encodeURIComponent(info.join_code);
+    if (url === shown) return;
+    shown = url;
+    const src = (scale) => "/api/join-qr?scale=" + scale + "&url=" + encodeURIComponent(url);
+    const where = base === lan ? "same Wi-Fi as this computer" : "online — works from anywhere";
+    const big = () => {
+      const ov = h("div", { class: "qr-big", role: "dialog", "aria-label": "Join QR code", onclick: () => ov.remove() },
+        h("div", { class: "qr-big-card" }, h("img", { src: src(14), alt: "QR code to join the game" }),
+          h("div", { class: "qr-big-code" }, "Code: " + info.join_code), h("div", { class: "faint" }, url), h("div", { class: "faint" }, "Tap anywhere to close")));
+      document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { ov.remove(); document.removeEventListener("keydown", esc); } });
+      document.body.append(ov);
+    };
+    box.hidden = false;
+    box.replaceChildren(h("img", { src: src(6), alt: "QR code to join the game", class: "qr-img" }),
+      h("div", { class: "qr-side" }, h("b", null, "Scan to join"), h("span", { class: "faint" }, "Players point their phone's camera here (" + where + "). The join code is filled in for them."),
+        h("button", { type: "button", class: "btn btn-sm", id: "qr-big", onclick: big }, icon("search", "sm"), " Show it big")));
+  }
+  draw();
+  setInterval(() => { if (!document.hidden) draw(); }, 15000);
+  document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#new-code, #off-code, #go-online, #new-link")) setTimeout(draw, 1500); });
+})();
+</script>
 <script>
 (function () {
   const { h, icon, $, api, toast } = L;

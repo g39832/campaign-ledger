@@ -4,3 +4,8 @@ __pycache__/
 .pytest_cache/
 data/
 .vscode/
+
+# browser tests: screenshots, scratch data and their own venv
+tests/e2e/shots/
+tests/e2e/.tmp/
+tests/e2e/.venv/

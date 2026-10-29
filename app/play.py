@@ -1031,6 +1031,20 @@ def api_players(cid):
                     "port": request.host.rsplit(":", 1)[-1] if ":" in request.host else "80"})
 
 
+@bp.get("/api/join-qr")
+def api_join_qr():
+    """The QR code (PNG) for a join link, for the Players page: players point their camera at it."""
+    from flask import Response
+    from .qr import png
+    _dm_required()
+    url = str(request.args.get("url") or "")
+    if not url.startswith(("http://", "https://")) or len(url) > 200:
+        raise F.ApiError("That isn't a join link")
+    resp = Response(png(url, scale=int(request.args.get("scale") or 8) if str(request.args.get("scale") or "8").isdigit() else 8), mimetype="image/png")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @bp.post("/api/campaigns/<int:cid>/join-code")
 def api_join_code(cid):
     _dm_required()

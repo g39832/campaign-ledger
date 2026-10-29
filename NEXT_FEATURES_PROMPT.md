@@ -77,7 +77,7 @@ still shows the dead link as "on".
 - Tests: monkeypatch the metrics reader. In `tests/conftest.py` there's an autouse fixture
   that sets `online.METRICS_PORTS = range(0)` so tests never touch a real tunnel. Keep it.
 
-### 3. Save the browser tests in the project
+### 3. Save the browser tests in the project — **DONE** (`tests/e2e`, `run.py`, README)
 - Move the Playwright scripts into `tests/e2e/` (players, moves, clones, dice colors, monster
   rows, bosses, monster icons, rollwho, reach, zone, turns, etc.). Make paths relative: no
   hard-coded scratch folders.
@@ -96,7 +96,7 @@ still shows the dead link as "on".
 - pytest must not collect `tests/e2e`. Add `collect_ignore = ["e2e"]` in `tests/conftest.py`
   or name the files without the `test_` prefix.
 
-### 4. QR code for joining
+### 4. QR code for joining — **DONE** (`app/qr.py`, `GET /api/join-qr`, Players page)
 - On the Players page, show a QR code for the join link:
   - the online link if it's running and healthy,
   - else the LAN link (`http://<current LAN IP>:5050/join`).
