@@ -30,7 +30,7 @@ def for_character(conn, campaign_id, char_id, limit=30):
     for r in conn.execute("SELECT * FROM handouts WHERE campaign_id = ? ORDER BY id DESC", (campaign_id,)):
         h = handout_dict(r)
         if h["to"] is None or (char_id and char_id in h["to"]):
-            h.pop("to")
+            h["just_you"] = h.pop("to") is not None  # sent to them alone (or a few), not to everyone
             out.append(h)
             if len(out) >= limit:
                 break
@@ -39,6 +39,17 @@ def for_character(conn, campaign_id, char_id, limit=30):
 
 def player_may_see_image(conn, campaign_id, char_id, name):
     return any(h["image"] == name for h in for_character(conn, campaign_id, char_id, limit=1000))
+
+
+@bp.get("/characters/<int:char_id>/handouts")
+def api_for_character(char_id):
+    """What this character has received (for everyone, or to them): the Handouts section of the sheet."""
+    _dm()
+    conn = get_db()
+    ch = conn.execute("SELECT campaign_id FROM characters WHERE id = ?", (char_id,)).fetchone()
+    if ch is None:
+        raise F.NotFound("Character not found")
+    return jsonify({"handouts": for_character(conn, ch["campaign_id"], char_id, limit=200)})
 
 
 @bp.get("/campaigns/<int:cid>/handouts")

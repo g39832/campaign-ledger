@@ -543,6 +543,7 @@
           c.temp_hp ? h("span", { class: "temp", style: "color:var(--temp);font-weight:700" }, "+" + c.temp_hp + " temp") : null,
           h("span", { class: "grow" }), h("span", { title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : null }, h("b", null, c.ac), " AC", c.ac_bonus ? h("small", { class: "ac-bonus" }, " " + signed(c.ac_bonus)) : null)),
         c.conditions.length ? h("div", { class: "c-conds", style: "margin-bottom:8px" }, c.conditions.map((x) => h("span", { class: "tag" }, x))) : null,
+        handoutsPanel(),
         c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
           h("span", { class: "grow" }, h("b", null, "You were hit for " + c.parry.pending.amount + "!"), " " + c.parry.name + ": roll off against the DM. Win and you take " + Math.floor(c.parry.pending.amount / 2) + " instead."),
           h("button", { type: "button", class: "btn btn-primary", onclick: () => me("parry", {}).then((r) => {
@@ -626,7 +627,7 @@
     newHandouts();
     L.bossBar(e ? e.order.filter((o) => o.boss && !["dead", "defeated", "fled"].includes(o.status))
       .map((o) => ({ id: o.id, name: o.name, frac: (o.quarters || 0) / 4, text: "", phase: o.phase, portrait: o.portrait })) : []);
-    $("#party").replaceChildren(handoutsPanel() || "", h("h3", { class: "rule-head" }, "Party"),
+    $("#party").replaceChildren(c ? "" : handoutsPanel() || "", h("h3", { class: "rule-head" }, "Party"),
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),
         p.conditions.length || p.status !== "ok" ? h("div", { class: "faint", style: "font-size:.85rem" }, [p.status !== "ok" ? p.status : "", ...p.conditions].filter(Boolean).join(", ")) : null))));

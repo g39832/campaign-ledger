@@ -171,6 +171,11 @@
         </div>
       </section>
       <section class="section">
+        <h3 class="rule-head" data-fold="handouts">Handouts <span class="count fold-hint" id="handouts-hint"></span></h3>
+        <div data-fold-body="handouts"><div id="sheet-handouts" class="sheet-handouts"><p class="faint" style="margin:0">Loading…</p></div>
+          <p class="faint" style="margin:8px 0 0;font-size:.85rem">Send one from the <a href="/table#handouts-section">Players page</a> (4 · Handouts).</p></div>
+      </section>
+      <section class="section">
         <h3 class="rule-head" data-fold="dice">Dice colors <span class="count fold-hint" id="dice-hint"></span></h3>
         <div data-fold-body="dice"><p class="faint" style="margin:0 0 8px;font-size:.88rem">Everyone sees this character's rolls in these dice.</p><div id="dice-colors"></div></div>
       </section>
@@ -209,4 +214,4 @@
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=123"></script>{% endblock %}
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=124"></script>{% endblock %}

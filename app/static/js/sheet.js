@@ -70,6 +70,34 @@
     b.bind(el, f, { int: isInt, nullable: NULLABLE.has(f), onInput: derive });
   });
 
+  // ---- handouts this character has received (sent to everyone, or to them) ------------------
+  function openHandout(x) {
+    const close = () => ov.remove();
+    const ov = h("div", { class: "handout-pop", role: "dialog", "aria-modal": "true", "aria-label": x.title || "Handout", onclick: (e) => { if (e.target === ov) close(); } },
+      h("div", { class: "handout-card" },
+        h("div", { class: "handout-head" }, icon("scroll-text", "sm"), h("b", null, x.title || "Handout")),
+        x.image ? h("img", { src: "/api/uploads/" + x.image, alt: x.title || "Handout picture" }) : null,
+        x.body ? h("div", { class: "handout-text" }, x.body) : null,
+        h("button", { type: "button", class: "btn btn-primary", onclick: close }, "Close")));
+    document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
+    document.body.append(ov);
+  }
+  async function renderHandouts() {
+    const box = $("#sheet-handouts");
+    if (!box) return;
+    let d;
+    try { d = await api("GET", "/api/characters/" + char.id + "/handouts"); } catch (e) { return; }
+    const list = d.handouts || [];
+    const hint = $("#handouts-hint"); if (hint) hint.textContent = list.length ? String(list.length) : "";
+    box.replaceChildren(...(list.length ? list.map((x) => h("button", { type: "button", class: "sheet-handout", onclick: () => openHandout(x) },
+      x.image ? h("img", { src: "/api/uploads/" + x.image, alt: "" }) : h("span", { class: "handout-ico" }, icon("scroll-text")),
+      h("span", { class: "sh-text" }, h("b", null, x.title || "Handout"),
+        h("span", { class: "faint" }, (x.just_you ? "Sent to " + (model.name || "them") : "Sent to everyone") + " · " + L.fmtTime(x.created_at))))) :
+      [h("p", { class: "faint", style: "margin:0" }, "No handouts yet.")]));
+  }
+  renderHandouts();
+  if (L.live) L.live.on(renderHandouts);
+
   // ---- dice colors ------------------------------------------------------------------
   function renderDice() {
     const box = $("#dice-colors");

@@ -65,3 +65,14 @@ def test_backups_keep_handouts(api, joined):
     assert [h["title"] for h in hs] == ["Map scrap"]
     copied_aria = next(ch for ch in api.get(f"/api/campaigns/{newc['id']}/characters")["characters"] if ch["name"] == "Aria")
     assert hs[0]["to"] == [copied_aria["id"]]
+
+
+def test_the_sheet_lists_a_characters_handouts(api, joined):
+    cid, a, b = joined["camp"]["id"], joined["a"], joined["b"]
+    send(api, cid, title="To all", body="Hello everyone")
+    send(api, cid, title="Just Aria", body="Psst", to=str(a["id"]))
+    ha = api.get(f"/api/characters/{a['id']}/handouts")["handouts"]
+    hb = api.get(f"/api/characters/{b['id']}/handouts")["handouts"]
+    assert [(x["title"], x["just_you"]) for x in ha] == [("Just Aria", True), ("To all", False)]
+    assert [x["title"] for x in hb] == ["To all"]
+    assert joined["pa"].c.get(f"/api/characters/{a['id']}/handouts").status_code == 403   # the DM's sheet only

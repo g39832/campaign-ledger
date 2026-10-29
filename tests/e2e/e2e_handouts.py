@@ -82,6 +82,24 @@ with sync_playwright() as p:
     # it doesn't pop up again after a reload (it's been seen)
     lux.reload(); lux.wait_for_timeout(3000)
     check(lux.locator(".handout-pop").count() == 0, "after a reload it doesn't pop up again")
+    check(moni.locator("#me .handout-list li").count() == 2 and lux.locator("#me .handout-list li").count() == 1, "on the phones the list is in the character box")
+    # the character sheets
+    sh = b.new_page(viewport={"width": 1300, "height": 950}); sh.on("pageerror", lambda e: problems.append(f"sheet JS error: {e}"))
+    sh.goto(DM_URL + f"/characters/{chars['Moni Easter']['id']}"); sh.wait_for_timeout(1500)
+    if sh.locator("[data-fold-body=handouts]").first.is_hidden():
+        sh.locator("[data-fold=handouts]").click(); sh.wait_for_timeout(300)
+    items = sh.locator("#sheet-handouts .sheet-handout")
+    check(items.count() == 2 and "Sent to Moni Easter" in items.first.inner_text() and "Sent to everyone" in items.nth(1).inner_text(),
+          f"Moni's sheet lists both her handouts ({[x.replace(chr(10), ' ') for x in items.all_inner_texts()]})")
+    items.nth(1).click(); sh.wait_for_timeout(400)
+    check("Come alone." in sh.locator(".handout-card").inner_text() and sh.locator(".handout-card img").count() == 1, "clicking one on the sheet opens it big")
+    sh.locator("#sheet-handouts").scroll_into_view_if_needed(); sh.screenshot(path=SHOTS_DIR + rf"\handout_sheet_{engine.NAME}.png")
+    sh.locator(".handout-card").get_by_role("button", name="Close").click()
+    sh.goto(DM_URL + f"/characters/{chars['Lux Fedelis']['id']}"); sh.wait_for_timeout(1500)
+    if sh.locator("[data-fold-body=handouts]").first.is_hidden():
+        sh.locator("[data-fold=handouts]").click(); sh.wait_for_timeout(300)
+    check(sh.locator("#sheet-handouts .sheet-handout").count() == 1, "Lux's sheet lists only the one for everyone")
+    sh.close()
     # the DM's list, delete
     sent = dm.locator("#handout-sent li.handout-item")
     check(sent.count() == 2 and "To Moni Easter" in sent.first.inner_text(), "the DM sees what was sent and to whom")
