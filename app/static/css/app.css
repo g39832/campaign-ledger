@@ -1088,8 +1088,8 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 .play-tabs { display: none; }
 
 .map-size-btn { display: none; }
-.roll-fold { margin-top: 12px; }
-.roll-fold > summary { cursor: pointer; padding: 8px 0; border-top: 1px solid var(--line); list-style-position: inside; }
+.roll-fold, .dice-fold { margin-top: 12px; }
+.roll-fold > summary, .dice-fold > summary { cursor: pointer; padding: 8px 0; border-top: 1px solid var(--line); list-style-position: inside; }
 
 @media (max-width: 1100px) {
   .map-layout, .play-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1346,3 +1346,19 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .dc-color { display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; cursor: pointer; }
 .dc-color input[type=color] { width: 40px; height: 32px; padding: 0; border: 1px solid var(--line-strong); border-radius: 6px; background: none; cursor: pointer; }
 .dc-preview { width: 84px; height: 64px; border-radius: 6px; background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--felt, #2f4a35) 85%, #fff 15%), var(--felt, #2f4a35) 70%); }
+
+/* a monster's attacks and spells as cards, like a hero's attack rows */
+.mrows { display: grid; gap: 8px; }
+.mrow { border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); padding: 8px 10px; display: grid; gap: 6px; background: color-mix(in srgb, var(--bg-deep, transparent) 40%, transparent); }
+.mrow.is-note { border-style: dashed; }
+.mr-head { display: flex; align-items: center; gap: 8px; }
+.mr-name { flex: 1; font-weight: 700; min-width: 0; }
+.mr-grid { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; }
+.mr-f { margin: 0; min-width: 0; }
+.mr-f > span { font-size: .78rem; }
+.mr-f select { width: auto; max-width: 100%; }
+.mrow .mr-short { width: 76px; }
+.mrow .mr-tiny { width: 54px; }
+.mr-area { display: inline-flex; align-items: center; gap: 5px; }
+.mr-fight { font-size: .8rem; overflow-wrap: anywhere; }
+.mr-warn { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--warn, #e0a94a); font-size: .9rem; }

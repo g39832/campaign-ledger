@@ -39,7 +39,7 @@
 <script type="application/json" id="boot">{{ creatures | tojson }}</script>
 <script type="application/json" id="boot-encounters">{{ encounters | tojson }}</script>
 {% endblock %}
-{% block scripts %}
+{% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/creatures.js') }}?v=116"></script>
+<script src="{{ url_for('static', filename='js/creatures.js') }}?v=117"></script>
 {% endblock %}

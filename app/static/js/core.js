@@ -244,6 +244,123 @@
             : " Cast" + (n && !s.summon ? " on " + n : "")),
         h("button", { type: "button", class: "btn btn-sm" + (res ? " btn-primary" : ""), onclick: o.onCancel }, res ? "Done" : "Cancel")));
   }
+  /* A monster's attacks or spells as a form, like a hero's attack rows: one card per move (name, to hit,
+     damage, what it does, area, reach, cooldown). It writes the same lines the fight reads ("Claw: +4 to
+     hit, 1d6+2 slashing"), so nothing else changes; a card nobody touched keeps its line exactly as it was.
+     o: {text, kind: "attacks" | "spells", onChange(text)} */
+  const DMG_TYPES = ["", "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+  const SHAPES = [["cone", "cone"], ["line", "line"], ["square", "cube"], ["circle", "radius"]];
+  function rowFromLine(line, kind) {
+    const p = parseAttack(line);
+    if (!p || p.note) return { raw: line, note: true, text: line };
+    const type = DMG_TYPES.find((t) => t && new RegExp("\\b" + t + "\\b", "i").test(line)) || "";
+    const ar = parseArea(line), dc = /\bDC\s*(\d+)/i.exec(line);
+    return { raw: line, name: p.name, hit: p.hit || "", dice: p.dmg || p.check || "", type,
+      does: p.check ? "check" : p.heal ? "heal" : p.condition && !p.dmg ? "condition" : "damage",
+      condition: p.condition || "", rounds: p.rounds || "", beat: p.beat != null ? p.beat : p.check && p.dc != null ? p.dc : "",
+      dc: dc && !p.check ? Number(dc[1]) : "", area: ar ? ar.size : "", shape: ar ? ar.kind : "cone", range: ar ? ar.range || "" : "",
+      reach: kind === "attacks" && !ar && lineReach(line, p) != null ? lineReach(line, p) : "", ranged: kind === "attacks" && !ar && !p.heal && !p.check && lineReach(line, p) == null,
+      cooldown: p.cooldown || "" };
+  }
+  function lineFromRow(r, kind) {
+    if (r.note) return String(r.text || "").trim();
+    const name = String(r.name || "").replace(/[.:\n]/g, " ").trim() || (kind === "spells" ? "Spell" : "Attack");
+    const parts = [];
+    const dice = String(r.dice || "").replace(/\s+/g, "");
+    const hit = String(r.hit || "").trim();
+    if (r.does === "check") {
+      parts.push((dice || "1d20") + (r.beat !== "" && r.beat != null ? " must beat " + r.beat : ""));
+    } else if (r.does === "heal") {
+      parts.push("heal " + (dice || "1d4"));
+    } else {
+      if (hit) parts.push((/^[+-]/.test(hit) ? hit : "+" + hit) + " to hit");
+      if (r.dc !== "" && r.dc != null) parts.push("DC " + r.dc);
+      if (dice && r.does !== "condition") parts.push(dice + (r.type ? " " + r.type : "") + " damage"); // "damage": a lone 1d20 isn't a check
+      if (r.condition) parts.push(r.condition + (r.rounds ? " " + r.rounds + " rounds" : ""));
+    }
+    if (r.area) parts.push(r.area + " ft " + (SHAPES.find(([k]) => k === r.shape) || SHAPES[0])[1] + (r.range ? ", range " + r.range : ""));
+    if (r.cooldown) parts.push(r.cooldown + " turn cooldown");
+    let line = name + ": " + parts.join(", ");
+    if (kind === "attacks" && !r.area && r.does !== "heal" && r.does !== "check") { // say the reach whenever the line wouldn't read that way by itself (a "Javelin" sounds ranged)
+      const want = r.ranged ? null : r.reach === "" || r.reach == null ? 5 : Number(r.reach);
+      const p = parseAttack(line), got = p && !p.note ? lineReach(line, p) : want;
+      if (got !== want) line += want == null ? ", ranged" : ", reach " + want + " ft";
+    }
+    return line;
+  }
+  function attackRows(o) {
+    const kind = o.kind === "spells" ? "spells" : "attacks";
+    const rows = String(o.text || "").split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => rowFromLine(l, kind));
+    const out = () => rows.map((r) => (r.raw != null && !r.dirty ? r.raw : lineFromRow(r, kind))).filter(Boolean).join("\n");
+    let asText = false;
+    const wrap = h("div", { class: "mrows" });
+    const changed = () => { o.onChange(out()); };
+    const fight = (r) => { // what the fight will show for this card
+      const line = r.raw != null && !r.dirty ? r.raw : lineFromRow(r, kind);
+      const p = parseAttack(line);
+      if (!p || p.note) return "a note (not a button in the fight)";
+      if (kind === "spells" && bookSpell(line)) { const b = bookSpell(line); return "the rulebook's " + b.name + (p.dmg && p.dmg !== b.dice ? " with " + p.dmg : "") + (spellWhat(b) ? " · " + spellWhat(b) : ""); }
+      return [p.check ? "rolls " + p.check + (p.beat != null ? ", must beat " + p.beat : p.dc != null ? ", DC " + p.dc : "") : "",
+        p.heal ? "heals " + p.dmg : "", !p.check && !p.heal && p.hit ? p.hit + " to hit" : !p.check && !p.heal && (p.dmg || p.condition) ? "d20 to hit" : "",
+        !p.check && !p.heal && p.dmg ? p.dmg + " damage" : "", p.condition ? p.condition + (p.rounds ? " for " + p.rounds + " rounds" : "") : "",
+        p.aimArea ? p.aimArea.size + " ft " + p.aimArea.kind + " (aimed on the map)" : "", kind === "attacks" && !p.aimArea && !p.heal && !p.check ? (lineReach(line, p) ? "reaches " + lineReach(line, p) + " ft" : "any distance") : "",
+        p.cooldown ? p.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · ");
+    };
+    function card(r, i) {
+      const set = (k, v) => { r[k] = v; r.dirty = true; changed(); prev.textContent = "In a fight: " + fight(r); };
+      const inp = (k, attrs) => h("input", Object.assign({ value: r[k] ?? "", oninput: (e) => set(k, e.target.value) }, attrs));
+      const sel = (k, opts, attrs) => h("select", Object.assign({ onchange: (e) => { set(k, e.target.value); draw(); } }, attrs),
+        opts.map(([v, label]) => h("option", { value: v, selected: String(r[k] ?? "") === String(v) }, label)));
+      const fld = (label, el, cls) => h("label", { class: "field mr-f" + (cls ? " " + cls : "") }, h("span", null, label), el);
+      const prev = h("div", { class: "mr-fight faint" }, "In a fight: " + fight(r));
+      const del = h("button", { type: "button", class: "icon-btn", "aria-label": "Remove " + (r.name || "this"), title: "Remove",
+        onclick: () => { rows.splice(i, 1); changed(); draw(); } }, icon("trash-2", "sm"));
+      if (r.note) return h("div", { class: "mrow is-note" }, h("div", { class: "mr-head" }, h("span", { class: "tag" }, "Note"), del),
+        h("textarea", { rows: 2, class: "prose", "aria-label": "Note", oninput: (e) => { r.text = e.target.value; r.dirty = true; changed(); } }, r.text || ""), prev);
+      const does = r.does || "damage";
+      return h("div", { class: "mrow" },
+        h("div", { class: "mr-head" }, inp("name", { class: "mr-name", placeholder: kind === "spells" ? "Spell name (Fireball, Web…)" : "Attack name (Claw, Bite…)", "aria-label": "Name", maxlength: 40 }), del),
+        h("div", { class: "mr-grid" },
+          fld("What it does", sel("does", [["damage", "Damage"], ["condition", "Puts on a condition"], ["heal", "Heals"], ["check", "Roll to beat a number"]], { "aria-label": "What it does" })),
+          does === "damage" || does === "condition" ? fld("To hit", inp("hit", { placeholder: "+4", "aria-label": "To hit", inputmode: "numeric", class: "mr-short" })) : null,
+          does === "check" ? fld("Must beat", inp("beat", { placeholder: "5", "aria-label": "Must beat", inputmode: "numeric", class: "mr-short" })) : null,
+          does !== "condition" ? fld(does === "heal" ? "Heals" : does === "check" ? "Roll" : "Damage dice", inp("dice", { placeholder: does === "check" ? "1d20" : "1d6+2", "aria-label": "Dice", class: "mr-short" })) : null,
+          does === "damage" ? fld("Damage type", sel("type", DMG_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]), { "aria-label": "Damage type" })) : null,
+          does === "damage" || does === "condition" ? fld("Condition on a hit", sel("condition", [["", "—"]].concat(CONDITION_WORDS.map((c) => [c, c])), { "aria-label": "Condition" })) : null,
+          (does === "damage" || does === "condition") && r.condition ? fld("For rounds", inp("rounds", { placeholder: "1", "aria-label": "Rounds", inputmode: "numeric", class: "mr-short" })) : null,
+          kind === "spells" && (does === "damage" || does === "condition") ? fld("Save DC", inp("dc", { placeholder: "13", "aria-label": "Save DC", inputmode: "numeric", class: "mr-short" })) : null,
+          does !== "check" ? fld("Area", h("span", { class: "mr-area" }, inp("area", { placeholder: "—", "aria-label": "Area size in feet", inputmode: "numeric", class: "mr-tiny" }), h("span", { class: "faint" }, "ft"),
+            sel("shape", SHAPES.map(([k, w]) => [k, w]), { "aria-label": "Area shape" }))) : null,
+          does !== "check" && r.area ? fld("Range", inp("range", { placeholder: "0", "aria-label": "Area range in feet", inputmode: "numeric", class: "mr-short" })) : null,
+          kind === "attacks" && does !== "heal" && does !== "check" && !r.area ? fld("Reach", h("span", { class: "mr-area" },
+            inp("reach", { placeholder: "5", "aria-label": "Reach in feet", inputmode: "numeric", class: "mr-tiny", disabled: !!r.ranged }), h("span", { class: "faint" }, "ft"),
+            h("label", { class: "check", style: "font-size:.85rem" }, h("input", { type: "checkbox", checked: !!r.ranged, onchange: (e) => { set("ranged", e.target.checked); draw(); } }), "Ranged"))) : null,
+          fld("Cooldown", h("span", { class: "mr-area" }, inp("cooldown", { placeholder: "0", "aria-label": "Cooldown in turns", inputmode: "numeric", class: "mr-tiny" }), h("span", { class: "faint" }, "turns")))),
+        prev);
+    }
+    function draw() {
+      if (asText) {
+        const ta = h("textarea", { rows: 5, class: "prose", "aria-label": kind === "spells" ? "Spells as text" : "Attacks as text",
+          oninput: (e) => { o.onChange(e.target.value); } }, out());
+        wrap.replaceChildren(ta, h("small", { class: "faint" }, kind === "spells" ? SPELL_HELP : ATTACK_HELP),
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => {
+            rows.splice(0, rows.length, ...ta.value.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => rowFromLine(l, kind))); asText = false; draw(); } }, icon("list-ordered", "sm"), " Back to the form"));
+        return;
+      }
+      const none = !rows.some((r) => !r.note);
+      wrap.replaceChildren(
+        none && kind === "attacks" ? h("p", { class: "mr-warn" }, icon("circle-alert", "sm"), " No attacks yet — it can't hit anyone in a fight. ",
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "Strike", hit: "+2", dice: "1d6", type: "bludgeoning", does: "damage", dirty: true }); changed(); draw(); } }, "Add a basic attack")) : null,
+        ...rows.map(card),
+        h("div", { class: "row", style: "gap:8px;flex-wrap:wrap" },
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "", hit: kind === "attacks" ? "+3" : "", dice: "1d6", does: "damage", dirty: true }); changed(); draw();
+            const n = wrap.querySelectorAll(".mr-name"); if (n.length) n[n.length - 1].focus(); } }, icon("plus", "sm"), kind === "spells" ? " Add a spell" : " Add an attack"),
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => { rows.push({ note: true, text: "", dirty: true }); draw(); } }, icon("pencil", "sm"), " Add a note"),
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", style: "margin-left:auto", onclick: () => { asText = true; draw(); } }, "Edit as text")));
+    }
+    draw();
+    return wrap;
+  }
   /* Dice colors: ready-made sets, or any die and number color. o: {style: {body, ink} | null, onChange(style | null)}. */
   const DICE_SETS = [["Classic", null], ["Blood red", "#8e1b1b", "#fbe9d0"], ["Royal purple", "#4b2a6b", "#f2e6ff"], ["Forest", "#2f5d34", "#f1ecd8"],
     ["Ocean", "#1f4e79", "#e8f4ff"], ["Gold & black", "#1b1712", "#e6c45a"], ["Bone", "#e8dcc2", "#2b2118"], ["Ice", "#bfe3f2", "#12324a"], ["Ember", "#c2571a", "#1d0f05"]];
@@ -348,7 +465,8 @@
     const hitM = line.match(/([+-]\s*\d+)\s*to hit/i) || line.match(/(?:^|\s)([+-]\d+)(?=\s+\d*d\d)/i);
     const diceM = line.match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)/i);
     const cond = CONDITION_WORDS.find((w) => new RegExp("\\b" + w + "\\b", "i").test(line));
-    const roundsM = line.match(/(\d+)\s*(?:rounds?|rds?)\b/i);
+    const cdPhrase = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i;
+    const roundsM = line.replace(cdPhrase, "").match(/(\d+)\s*(?:rounds?|rds?)\b/i); // "Poisoned 2 rounds, 3 turn cooldown": both count
     if (!diceM && !hitM && !cond) return /[a-z]/i.test(line) ? { note: line } : null;
     let name = (line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1] || line.split(/\s+[-–—:]\s*|\s*:\s*|\s*\d*d\d|\s*[+-]\s*\d/i)[0];
     name = name.replace(/\d*d\d+(?:\s*[+-]\s*\d+)?/gi, "").replace(/\bDC\s*\d+/gi, "").replace(/\d+\s*(?:rounds?|rds?)\b/gi, "");
@@ -367,7 +485,7 @@
     // breath weapons and other areas reach several creatures
     const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
     const cd = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i.exec(line);
-    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM && !cd ? Number(roundsM[1]) : null, area, aimArea: parseArea(line),
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line),
       cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0 };
   }
   /* "15 ft cone", "20-foot radius", "10 ft cone, range 20" -> { kind, size, range } to aim on the map.
@@ -428,6 +546,8 @@
       oninput: (e) => drafts.set(dk(f), e.target.value) }, drafts.has(dk(f)) ? drafts.get(dk(f)) : sb[f] || "");
     const atk = box("attacks", "Attacks", "Bite 1d6\nClaw +4 to hit 1d6+2");
     const spl = box("spells", "Spells", "Fire bolt +5 2d10\nWeb: Restrained 10 rounds");
+    atk.hidden = true; spl.hidden = true; // the form below writes into these
+    const form = (f, ta) => attackRows({ text: ta.value, kind: f, onChange: (t) => { ta.value = t; drafts.set(dk(f), t); } });
     const base = sb.base_name || c.name;
     const all = h("input", { type: "checkbox", checked: true });
     const save = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("check", "sm"), " Save attacks & spells");
@@ -436,8 +556,8 @@
       { onError: (e) => toast(e.message, "error") }));
     return h("details", { class: "mon-edit", "data-key": "mon-edit-" + c.id, open: !(sb.attacks || sb.spells) || drafts.has(dk("attacks")) || drafts.has(dk("spells")) ? true : null },
       h("summary", { class: "lbl" }, (sb.attacks || sb.spells) ? "Change attacks & spells" : "Write attacks & spells"),
-      h("label", { class: "field" }, h("span", null, "Attacks"), atk, h("small", { class: "faint" }, ATTACK_HELP)),
-      h("label", { class: "field" }, h("span", null, "Spells"), spl, h("small", { class: "faint" }, SPELL_HELP)),
+      h("div", { class: "field" }, h("span", null, "Attacks"), atk, form("attacks", atk)),
+      h("div", { class: "field" }, h("span", null, "Spells"), spl, form("spells", spl)),
       h("label", { class: "check" }, all, "Every " + base + " in this fight" + (c.creature_id ? ", and in the creature library" : "")),
       save);
   }
@@ -843,5 +963,5 @@
     setInterval(check, 8000);
   }
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

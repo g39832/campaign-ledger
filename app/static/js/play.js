@@ -607,20 +607,20 @@
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
             : s.kind === "debuff" && !c.my_turn ? h("span", { class: "tag", title: "On your turn" }, L.spellWhat(s) || "debuff") : null))] : null,
-        h("details", { class: "roll-fold dice-fold", open: diceOpen, ontoggle: (e) => { diceOpen = e.target.open; } },
+        h("details", { class: "roll-fold", open: rollsOpen, ontoggle: (e) => { rollsOpen = e.target.open; } },
+          h("summary", { class: "lbl" }, "Saving throws & skills"),
+          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
+          h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
+          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),
+          h("div", { class: "roll-grid" }, SKILLS.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "skill", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.skills[k])))))),
+        h("details", { class: "dice-fold", open: diceOpen, ontoggle: (e) => { diceOpen = e.target.open; } },
           h("summary", { class: "lbl" }, "My dice colors"),
           h("p", { class: "faint", style: "margin:6px 0 8px;font-size:.88rem" }, "Everyone sees your rolls in these dice."),
           L.diceColors({ style: c.dice_style, onChange: async (style) => {
             try { await api("POST", "/api/play/me/dice", Object.assign({ op_id: L.uid() }, style || {})); toast("Dice colors saved.", "ok"); }
             catch (e) { toast(e.message, "error"); }
             load(true);
-          } })),
-        h("details", { class: "roll-fold", open: rollsOpen, ontoggle: (e) => { rollsOpen = e.target.open; } },
-          h("summary", { class: "lbl" }, "Saving throws & skills"),
-          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
-          h("div", { class: "roll-grid" }, ABIL.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "save", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.saves[k]))))),
-          h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Skills"),
-          h("div", { class: "roll-grid" }, SKILLS.map(([k, label]) => h("button", { type: "button", onclick: (ev) => roll({ type: "skill", key: k }, ev) }, h("span", null, label), h("b", null, signed(d.skills[k])))))));
+          } })));
     }
     if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
     $("#party").replaceChildren(h("h3", { class: "rule-head" }, "Party"),
