@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 MIGRATIONS = {
     1: """
@@ -387,6 +387,11 @@ MIGRATIONS = {
     ALTER TABLE creatures ADD COLUMN phase2 TEXT NOT NULL DEFAULT '';
     ALTER TABLE creatures ADD COLUMN legendary_resistance INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE combatants ADD COLUMN boss_state TEXT NOT NULL DEFAULT '{}';
+    """,
+    # v14: phase 2 is a tick box; bosses that already had phase 2 attacks keep it on.
+    14: """
+    ALTER TABLE creatures ADD COLUMN has_phase2 INTEGER NOT NULL DEFAULT 0;
+    UPDATE creatures SET has_phase2 = 1 WHERE trim(phase2) != '';
     """,
 }
 

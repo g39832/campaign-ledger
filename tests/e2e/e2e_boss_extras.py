@@ -41,13 +41,16 @@ with sync_playwright() as p:
     card.locator(".mr-name").fill("Tail swipe"); card.get_by_label("To hit").fill("+7"); card.get_by_label("Dice").fill("1d8+3"); pg.wait_for_timeout(300)
     ex.get_by_label("Legendary actions per round").fill("2")
     ex.get_by_label("Legendary resistance (per fight)").fill("1")
+    check(ex.locator(".mrows").count() == 1, "no phase 2 attacks until 'Has a phase 2' is ticked")
+    ex.get_by_label("Has a phase 2").check(); pg.wait_for_timeout(1500)
+    ex = pg.locator("#editor .boss-extras")
     p2 = ex.locator(".mrows").nth(1)
     p2.get_by_role("button", name="Add an attack").click(); pg.wait_for_timeout(200)
     c2 = p2.locator(".mrow").last
     c2.locator(".mr-name").fill("Ash breath"); c2.get_by_label("Dice").fill("6d6"); pg.wait_for_timeout(2500)
     saved = next(c for c in call("GET", "/api/creatures")["creatures"] if c["id"] == cr["id"])
     check(saved["boss"] and saved["legendary"].startswith("Tail swipe:") and saved["legendary_per_round"] == 2 and saved["legendary_resistance"] == 1
-          and saved["phase2"].startswith("Ash breath:"), f"the boss extras save ({saved['legendary']!r}, {saved['phase2']!r})")
+          and saved["has_phase2"] and saved["phase2"].startswith("Ash breath:"), f"the boss extras save ({saved['legendary']!r}, {saved['phase2']!r})")
     pg.locator("#editor").screenshot(path=SHOTS_DIR + rf"\boss_extras_editor_{engine.NAME}.png")
     # the fight
     eid = call("POST", "/api/campaigns/1/encounters", {"name": "Ash Wyrm lair"})["encounter"]["id"]

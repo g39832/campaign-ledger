@@ -318,8 +318,16 @@
       if (r.note) return h("div", { class: "mrow is-note" }, h("div", { class: "mr-head" }, h("span", { class: "tag" }, "Note"), del),
         h("textarea", { rows: 2, class: "prose", "aria-label": "Note", oninput: (e) => { r.text = e.target.value; r.dirty = true; changed(); } }, r.text || ""), prev);
       const does = r.does || "damage";
+      // folded: one line with its name and what it does in a fight; the arrow or the line opens it
+      const fold = h("button", { type: "button", class: "icon-btn sm mr-fold", "aria-expanded": String(!!r.open),
+        "aria-label": (r.open ? "Fold up " : "Open ") + (r.name || "this"), title: r.open ? "Fold it up" : "Open it to edit",
+        onclick: () => { r.open = !r.open; draw(); } }, icon(r.open ? "chevron-down" : "chevron-right", "sm"));
+      if (!r.open) return h("div", { class: "mrow is-folded" },
+        h("div", { class: "mr-head" }, fold,
+          h("button", { type: "button", class: "fold-text", title: "Open it to edit", onclick: () => { r.open = true; draw(); } },
+            h("b", null, (r.name || "").trim() || "Unnamed"), h("span", { class: "faint" }, fight(r))), del));
       return h("div", { class: "mrow" },
-        h("div", { class: "mr-head" }, inp("name", { class: "mr-name", placeholder: kind === "spells" ? "Spell name (Fireball, Web…)" : "Attack name (Claw, Bite…)", "aria-label": "Name", maxlength: 40 }), del),
+        h("div", { class: "mr-head" }, fold, inp("name", { class: "mr-name", placeholder: kind === "spells" ? "Spell name (Fireball, Web…)" : "Attack name (Claw, Bite…)", "aria-label": "Name", maxlength: 40 }), del),
         h("div", { class: "mr-grid" },
           fld("What it does", sel("does", [["damage", "Damage"], ["condition", "Puts on a condition"], ["heal", "Heals"], ["check", "Roll to beat a number"]], { "aria-label": "What it does" })),
           does === "damage" || does === "condition" ? fld("To hit", inp("hit", { placeholder: "+4", "aria-label": "To hit", inputmode: "numeric", class: "mr-short" })) : null,
@@ -347,16 +355,18 @@
             rows.splice(0, rows.length, ...ta.value.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => rowFromLine(l, kind))); asText = false; draw(); } }, icon("list-ordered", "sm"), " Back to the form"));
         return;
       }
-      const none = !rows.some((r) => !r.note);
+      const none = !rows.some((r) => !r.note), cards = rows.filter((r) => !r.note), anyOpen = cards.some((r) => r.open);
       wrap.replaceChildren(
         none && kind === "attacks" ? h("p", { class: "mr-warn" }, icon("circle-alert", "sm"), " No attacks yet — it can't hit anyone in a fight. ",
-          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "Strike", hit: "+2", dice: "1d6", type: "bludgeoning", does: "damage", dirty: true }); changed(); draw(); } }, "Add a basic attack")) : null,
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "Strike", hit: "+2", dice: "1d6", type: "bludgeoning", does: "damage", dirty: true, open: true }); changed(); draw(); } }, "Add a basic attack")) : null,
         ...rows.map(card),
         h("div", { class: "row", style: "gap:8px;flex-wrap:wrap" },
-          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "", hit: kind === "attacks" ? "+3" : "", dice: "1d6", does: "damage", dirty: true }); changed(); draw();
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => { rows.push({ name: "", hit: kind === "attacks" ? "+3" : "", dice: "1d6", does: "damage", dirty: true, open: true }); changed(); draw();
             const n = wrap.querySelectorAll(".mr-name"); if (n.length) n[n.length - 1].focus(); } }, icon("plus", "sm"), kind === "spells" ? " Add a spell" : " Add an attack"),
           h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => { rows.push({ note: true, text: "", dirty: true }); draw(); } }, icon("pencil", "sm"), " Add a note"),
-          h("button", { type: "button", class: "btn btn-sm btn-quiet", style: "margin-left:auto", onclick: () => { asText = true; draw(); } }, "Edit as text")));
+          cards.length > 1 ? h("button", { type: "button", class: "btn btn-sm btn-quiet", style: "margin-left:auto",
+            onclick: () => { cards.forEach((r) => { r.open = !anyOpen; }); draw(); } }, icon(anyOpen ? "chevron-right" : "chevron-down", "sm"), anyOpen ? " Fold all" : " Open all") : null,
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", style: cards.length > 1 ? null : "margin-left:auto", onclick: () => { asText = true; draw(); } }, "Edit as text")));
     }
     draw();
     return wrap;

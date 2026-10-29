@@ -7,7 +7,7 @@ from tests.test_spells import Loaded
 
 DRAGON = {"name": "Young dragon", "max_hp": 100, "ac": 17, "boss": True, "attacks": "Bite: +8 to hit, 2d10+4 piercing damage",
           "legendary": "Tail: +8 to hit, 1d8+4 bludgeoning damage\nWing beat: +8 to hit, 1d6 damage", "legendary_per_round": 2,
-          "phase2": "Fire breath: 8d6 fire damage, 30 ft cone", "legendary_resistance": 2}
+          "has_phase2": True, "phase2": "Fire breath: 8d6 fire damage, 30 ft cone", "legendary_resistance": 2}
 
 
 def fight(api, bm):
@@ -54,6 +54,23 @@ def test_phase_two_from_half_hp(api, battlemap):
     assert dragon(api, eid)["boss"]["phase"] == 2
 
 
+def test_no_phase_two_unless_ticked(api, battlemap):
+    """Phase 2 is a tick box: with it off the boss stays in phase 1 at half HP, attacks or not."""
+    cr = api.post("/api/creatures", dict(DRAGON, has_phase2=False, campaign_id=battlemap["camp"]["id"]), 201)["creature"]
+    assert cr["has_phase2"] is False
+    eid = battlemap["eid"]
+    api.post(f"/api/encounters/{eid}/combatants", {"creature_id": cr["id"], "count": 1})
+    api.post(f"/api/encounters/{eid}/start")
+    d = dragon(api, eid)
+    api.post(f"/api/combatants/{d['id']}/hp", {"op": "damage", "amount": 60})
+    assert dragon(api, eid)["boss"]["phase"] == 1
+    on = api.post("/api/creatures", dict(DRAGON, phase2="", campaign_id=battlemap["camp"]["id"]), 201)["creature"]  # ticked, no extra attacks
+    api.post(f"/api/encounters/{eid}/combatants", {"creature_id": on["id"], "count": 1})
+    d2 = [c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"].startswith("Young dragon")][-1]
+    api.post(f"/api/combatants/{d2['id']}/hp", {"op": "damage", "amount": 50})
+    assert next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["id"] == d2["id"])["boss"]["phase"] == 2
+
+
 def test_legendary_resistance_and_take_it_back(api, battlemap, monkeypatch):
     loaded = Loaded()
     monkeypatch.setattr(dice, "_rng", loaded)
@@ -89,3 +106,22 @@ def test_players_see_the_bar_in_quarters(api, battlemap):
     # a plain enemy isn't a boss
     b1 = next(x for x in battlemap["pa"].get("/api/play/state")["encounter"]["order"] if x["name"] == "Bandit 1")
     assert not b1.get("boss")
+
+
+def test_migration_keeps_phase_two_on_for_bosses_that_had_its_attacks(data_dir):
+    """v14 adds the tick box: a boss saved with phase 2 attacks comes back with it ticked."""
+    import os, sqlite3
+    from app import create_app, db as appdb
+    from tests.conftest import Api
+    api = Api(create_app({"DATA_DIR": data_dir}).test_client())
+    a = api.post("/api/creatures", dict(DRAGON), 201)["creature"]
+    b = api.post("/api/creatures", dict(DRAGON, phase2="", has_phase2=False, name="Ogre"), 201)["creature"]
+    path = os.path.join(data_dir, "dnd_tracker.sqlite3")
+    conn = sqlite3.connect(path)
+    conn.execute("ALTER TABLE creatures DROP COLUMN has_phase2")
+    conn.execute("PRAGMA user_version = 13")
+    conn.commit(); conn.close()
+    api = Api(create_app({"DATA_DIR": data_dir}).test_client())
+    assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == appdb.SCHEMA_VERSION
+    got = {x["id"]: x for x in api.get("/api/creatures")["creatures"]}
+    assert got[a["id"]]["has_phase2"] is True and got[b["id"]]["has_phase2"] is False

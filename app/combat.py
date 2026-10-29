@@ -83,7 +83,7 @@ def _combatant_rows(conn, enc_id):
                   ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
                   ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof,
                   cr.portrait AS cr_portrait, cr.boss AS cr_boss, cr.legendary AS cr_legendary, cr.legendary_per_round AS cr_lpr,
-                  cr.phase2 AS cr_phase2, cr.legendary_resistance AS cr_lr
+                  cr.phase2 AS cr_phase2, cr.has_phase2 AS cr_has_phase2, cr.legendary_resistance AS cr_lr
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
@@ -128,7 +128,7 @@ def _combatant_dict(r):
 
 def boss_info(d, r):
     """A boss's extras in the fight, or None: its legendary actions (left this round), phase 2
-    attacks (on from half HP) and legendary resistance (left this fight). The fight's own copy of
+    (if it has one, on from half HP) and legendary resistance (left this fight). The fight's own copy of
     the stat block wins; anything it doesn't have comes from the library creature."""
     sb = d["statblock"]
     keys = r.keys()
@@ -147,10 +147,11 @@ def boss_info(d, r):
     per = int(pick("legendary_per_round", "cr_lpr", 3) or 0)
     lr = int(pick("legendary_resistance", "cr_lr", 0) or 0)
     phase2 = str(pick("phase2", "cr_phase2", "") or "")
+    has_phase2 = bool(pick("has_phase2", "cr_has_phase2", False))
     hp, mx = d["hp"] or 0, d["max_hp"] or 0
     return {"legendary": str(pick("legendary", "cr_legendary", "") or ""), "per_round": per,
-            "left": max(0, per - int(moved.get("legendary") or 0)), "phase2": phase2,
-            "phase": 2 if phase2.strip() and mx and 0 < hp * 2 <= mx else 1, "lr": lr, "lr_left": max(0, lr - int(state.get("lr_used") or 0))}
+            "left": max(0, per - int(moved.get("legendary") or 0)), "phase2": phase2, "has_phase2": has_phase2,
+            "phase": 2 if has_phase2 and mx and 0 < hp * 2 <= mx else 1, "lr": lr, "lr_left": max(0, lr - int(state.get("lr_used") or 0))}
 
 
 def use_legendary_resistance(ctx, t):

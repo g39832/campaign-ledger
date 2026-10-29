@@ -95,7 +95,15 @@ with sync_playwright() as p:
     # an untouched monster from the book keeps its exact text
     mage = next(c for c in lib if c["name"] == "Mage")
     pg.locator("#list li button").filter(has=pg.locator(".t", has_text=re.compile(r"^Mage$"))).first.click(); pg.wait_for_timeout(800)
-    pg.locator("#editor .mr-name").first.click(); pg.wait_for_timeout(2000)
+    mc = pg.locator("#editor .mrows").first.locator(".mrow").first
+    check("is-folded" in (mc.get_attribute("class") or ""), "a monster's saved attacks start folded up, one line each")
+    mc.locator(".fold-text").click(); pg.wait_for_timeout(300)
+    check(mc.locator(".mr-name").count() == 1, "clicking the line opens it to edit")
+    pg.locator("#editor .mr-name").first.click(); pg.wait_for_timeout(300)
+    pg.locator("#editor .mrows").first.get_by_role("button", name="Fold all").click(); pg.wait_for_timeout(300)
+    check(pg.locator("#editor .mrows").first.locator(".mrow:not(.is-folded):not(.is-note)").count() == 0, "Fold all folds them back up")
+    pg.locator("#editor .mrows").first.get_by_role("button", name="Open all").click(); pg.wait_for_timeout(2000)
+    check(pg.locator("#editor .mrows").first.locator(".mrow.is-folded").count() == 0, "Open all opens every one")
     check(next(c for c in call("GET", "/api/creatures")["creatures"] if c["id"] == mage["id"])["attacks"] == mage["attacks"], "looking at a monster changes nothing (its lines stay word for word)")
 
     # 3. in a fight: the bat's new Bite is a button; change it with the form on the map

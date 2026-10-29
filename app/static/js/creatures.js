@@ -44,7 +44,7 @@
     if (!c) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No creature selected"), "Pick one from the list or create a new stat block.")); return; }
     const model = {};
     ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "spells", "traits", "resistances", "immunities",
-      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss", "legendary", "legendary_per_round", "phase2", "legendary_resistance"].forEach((k) => { model[k] = c[k]; });
+      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss", "legendary", "legendary_per_round", "has_phase2", "phase2", "legendary_resistance"].forEach((k) => { model[k] = c[k]; });
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
     } });
@@ -132,8 +132,13 @@
           h("div", { class: "row", style: "gap:14px;flex-wrap:wrap" },
             prop("Legendary actions per round", "legendary_per_round", { type: "number", min: 0, max: 10 }),
             prop("Legendary resistance (per fight)", "legendary_resistance", { type: "number", min: 0, max: 10 })),
-          h("div", { class: "field" }, h("span", null, "Phase 2 attacks (from half HP)"),
-            L.attackRows({ text: model.phase2 || "", kind: "attacks", onChange: (t) => b.set("phase2", t) }))) : null,
+          h("label", { class: "check" }, h("input", { type: "checkbox", checked: !!model.has_phase2, onchange: (e) => {
+            b.set("has_phase2", e.target.checked, true); c.has_phase2 = e.target.checked;
+            const i = list.findIndex((x) => x.id === c.id); if (i >= 0) list[i] = Object.assign({}, list[i], { has_phase2: e.target.checked });
+            renderEditor(list.find((x) => x.id === c.id) || c); } }), " Has a phase 2",
+            h("span", { class: "faint", style: "font-size:.85rem" }, " — at half HP it turns to phase 2")),
+          model.has_phase2 ? h("div", { class: "field" }, h("span", null, "Phase 2 attacks (from half HP)"),
+            L.attackRows({ text: model.phase2 || "", kind: "attacks", onChange: (t) => b.set("phase2", t) })) : null) : null,
         h("div", { class: "full" }, prop("DM notes", "notes", { rows: 3 })))),
       toEncounter,
       h("div", { class: "row", style: "margin-top:12px;justify-content:flex-end" }, del));

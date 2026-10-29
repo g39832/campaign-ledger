@@ -1351,6 +1351,9 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .mrows { display: grid; gap: 8px; }
 .mrow { border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); padding: 8px 10px; display: grid; gap: 6px; background: color-mix(in srgb, var(--bg-deep, transparent) 40%, transparent); }
 .mrow.is-note { border-style: dashed; }
+.mrow.is-folded { padding-top: 5px; padding-bottom: 5px; }
+.mrow.is-folded .fold-text { flex: 1; }
+.mr-fold { flex: 0 0 auto; }
 .mr-head { display: flex; align-items: center; gap: 8px; }
 .mr-name { flex: 1; font-weight: 700; min-width: 0; }
 .mr-grid { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; }

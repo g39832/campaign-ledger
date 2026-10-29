@@ -62,6 +62,7 @@ def test_migration_to_v6_adds_monster_spells(data_dir):
     conn.execute("ALTER TABLE creatures DROP COLUMN boss")
     conn.execute("ALTER TABLE creatures DROP COLUMN portrait")
     conn.execute("DROP TABLE handouts")
+    conn.execute("ALTER TABLE creatures DROP COLUMN has_phase2")
     for col in ("legendary", "legendary_per_round", "phase2", "legendary_resistance"):
         conn.execute(f"ALTER TABLE creatures DROP COLUMN {col}")
     conn.execute("ALTER TABLE combatants DROP COLUMN boss_state")
