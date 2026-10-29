@@ -81,8 +81,9 @@ def _combatant_rows(conn, enc_id):
                   ch.ac AS ch_ac, ch.status AS ch_status, ch.conditions AS ch_conditions,
                   ch.death_successes AS ch_ds, ch.death_failures AS ch_df, ch.portrait AS ch_portrait,
                   ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
-                  ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof
-           FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id
+                  ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof,
+                  cr.portrait AS cr_portrait
+           FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
     ).fetchall()
@@ -114,7 +115,7 @@ def _combatant_dict(r):
     else:
         d.update(name=r["name"], hp=r["current_hp"], max_hp=r["max_hp"], temp_hp=r["temp_hp"], ac=r["ac"],
                  status=r["status"], conditions=json.loads(r["conditions"]), death_successes=0,
-                 death_failures=0, portrait=None, subtitle=d["statblock"].get("creature_type", ""), exhaustion=0)
+                 death_failures=0, portrait=r["cr_portrait"], subtitle=d["statblock"].get("creature_type", ""), exhaustion=0)
     # "ac" is what attacks are checked against: the saved AC plus temporary effects.
     # Editing AC changes "ac_base", the saved value.
     d["ac_base"] = d["ac"]

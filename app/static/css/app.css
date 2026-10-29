@@ -1369,3 +1369,10 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .j-list li button.is-boss .t { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
 .sb-boss { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 0; }
 .boss-only { display: inline-flex; align-items: center; gap: 6px; }
+
+/* a creature's picture: on the stat block and in the library list */
+.sb-pic-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.sb-pic { width: 72px; height: 72px; border-radius: 50%; font-size: 1.4rem; }
+.sb-pic-side { display: grid; gap: 4px; justify-items: start; }
+.j-list li button.has-pic { grid-template-columns: 38px 1fr; column-gap: 10px; }
+.j-list li button.has-pic .lib-pic { grid-row: span 2; width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line-strong); align-self: center; }

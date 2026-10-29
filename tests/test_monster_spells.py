@@ -60,6 +60,7 @@ def test_migration_to_v6_adds_monster_spells(data_dir):
     conn.execute("ALTER TABLE characters DROP COLUMN skill_set")
     conn.execute("ALTER TABLE characters DROP COLUMN dice_style")
     conn.execute("ALTER TABLE creatures DROP COLUMN boss")
+    conn.execute("ALTER TABLE creatures DROP COLUMN portrait")
     conn.execute("PRAGMA user_version = 5")
     conn.commit(); conn.close()
     api = Api(create_app({"DATA_DIR": data_dir}).test_client())

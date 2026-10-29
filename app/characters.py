@@ -138,7 +138,8 @@ def uploads(name):
         # Players may load portraits from their own campaign, nothing else
         # (raw map images could reveal areas still under fog of war).
         ok = get_db().execute("SELECT 1 FROM characters WHERE campaign_id = ? AND portrait = ?",
-                              (ident["campaign_id"], name)).fetchone()
+                              (ident["campaign_id"], name)).fetchone() or get_db().execute(
+            "SELECT 1 FROM creatures WHERE portrait = ? AND (campaign_id IS NULL OR campaign_id = ?)", (name, ident["campaign_id"])).fetchone()
         if not ok:
             raise F.NotFound("Not found")
     return send_from_directory(current_app.config["UPLOAD_DIR"], name, max_age=86400)

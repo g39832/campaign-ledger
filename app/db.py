@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 MIGRATIONS = {
     1: """
@@ -363,6 +363,9 @@ MIGRATIONS = {
     """,
     10: """
     ALTER TABLE creatures ADD COLUMN boss INTEGER NOT NULL DEFAULT 0;
+    """,
+    11: """
+    ALTER TABLE creatures ADD COLUMN portrait TEXT;
     """,
 }
 

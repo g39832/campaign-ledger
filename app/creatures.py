@@ -13,7 +13,8 @@ bp = Blueprint("creatures", __name__, url_prefix="/api")
 
 
 def creature_dict(row):
-    return F.decode_row(row, F.CREATURE) | {"campaign_id": row["campaign_id"], "id": row["id"]}
+    return F.decode_row(row, F.CREATURE) | {"campaign_id": row["campaign_id"], "id": row["id"],
+                                            "portrait": row["portrait"] if "portrait" in row.keys() else None}
 
 
 def list_creatures(campaign_id=None, q=""):
@@ -57,6 +58,48 @@ def api_patch(cr_id):
         F.cas_patch(conn, "creatures", F.CREATURE, cr_id, changes)
     row = get_db().execute("SELECT * FROM creatures WHERE id = ?", (cr_id,)).fetchone()
     return jsonify({"creature": creature_dict(row)})
+
+
+@bp.post("/creatures/<int:cr_id>/portrait")
+def api_portrait(cr_id):
+    """A picture for the creature (its icon): shown in the library, in fights and on its map tokens,
+    including enemies of its kind already in a fight."""
+    import os
+    import uuid
+    from flask import current_app
+    from .characters import PORTRAIT_TYPES
+    if get_db().execute("SELECT 1 FROM creatures WHERE id = ?", (cr_id,)).fetchone() is None:
+        raise F.NotFound("Creature not found")
+    f = request.files.get("file")
+    if f is None or not f.filename:
+        raise F.ApiError("Choose an image file")
+    ext = PORTRAIT_TYPES.get(f.mimetype)
+    if ext is None:
+        raise F.ApiError("Pictures must be PNG, JPEG, WebP or GIF")
+    name = f"{uuid.uuid4().hex}{ext}"
+    f.save(os.path.join(current_app.config["UPLOAD_DIR"], name))
+    with tx() as conn:
+        conn.execute("UPDATE creatures SET portrait = ?, updated_at = ? WHERE id = ?", (name, now_iso(), cr_id))
+        _touch_fights(conn, cr_id)
+    # old files are kept: backups taken earlier may still use them
+    return jsonify({"creature": creature_dict(get_db().execute("SELECT * FROM creatures WHERE id = ?", (cr_id,)).fetchone())})
+
+
+@bp.delete("/creatures/<int:cr_id>/portrait")
+def api_portrait_clear(cr_id):
+    with tx() as conn:
+        conn.execute("UPDATE creatures SET portrait = NULL, updated_at = ? WHERE id = ?", (now_iso(), cr_id))
+        _touch_fights(conn, cr_id)
+    row = get_db().execute("SELECT * FROM creatures WHERE id = ?", (cr_id,)).fetchone()
+    if row is None:
+        raise F.NotFound("Creature not found")
+    return jsonify({"creature": creature_dict(row)})
+
+
+def _touch_fights(conn, cr_id):
+    """Fights and maps with this creature's enemies redraw with the new picture."""
+    conn.execute("UPDATE encounters SET rev = rev + 1 WHERE status != 'ended' AND id IN (SELECT encounter_id FROM combatants WHERE creature_id = ?)", (cr_id,))
+    conn.execute("UPDATE maps SET rev = rev + 1 WHERE id IN (SELECT t.map_id FROM map_tokens t JOIN combatants cb ON cb.id = t.combatant_id WHERE cb.creature_id = ?)", (cr_id,))
 
 
 @bp.delete("/creatures/<int:cr_id>")

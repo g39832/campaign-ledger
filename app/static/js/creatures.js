@@ -12,7 +12,8 @@
     const q = $("#q").value.trim().toLowerCase(), bossOnly = $("#boss-only").checked;
     const shown = list.filter((c) => (!q || c.name.toLowerCase().includes(q) || (c.creature_type || "").toLowerCase().includes(q)) && (!bossOnly || c.boss))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const item = (c) => h("li", null, h("button", { type: "button", class: (c.id === current ? "is-on" : "") + (c.boss ? " is-boss" : ""), onclick: () => open(c.id) },
+    const item = (c) => h("li", null, h("button", { type: "button", class: (c.id === current ? "is-on" : "") + (c.boss ? " is-boss" : "") + (c.portrait ? " has-pic" : ""), onclick: () => open(c.id) },
+      c.portrait ? h("img", { class: "lib-pic", src: "/api/uploads/" + c.portrait, alt: "" }) : null,
       h("span", { class: "t" }, c.boss ? icon("crown", "sm") : null, c.name),
       h("span", { class: "m" }, [c.creature_type, c.cr ? "CR " + c.cr : "", c.max_hp + " HP", "AC " + c.ac].filter(Boolean).join(" · "))));
     // the bosses get their own section at the top
@@ -80,7 +81,25 @@
       h("span", { class: "lbl" }, "Use in a fight"), encSel, count, addBtn,
       encs.length ? null : h("a", { href: "/combat#new", style: "font-size:.9rem" }, "Create an encounter"));
     armed(del, () => act("DELETE", "/api/creatures/" + c.id, {}, () => { list = list.filter((x) => x.id !== c.id); open(list[0] ? list[0].id : null); }), "Delete? Existing enemies stay as they are");
+    // the creature's picture (its icon): in the library, in fights and on its map tokens
+    const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", class: "sr-only", "aria-label": "Choose a picture" });
+    const pic = h("label", { class: "portrait sb-pic", title: c.portrait ? "Change picture" : "Add a picture" },
+      c.portrait ? h("img", { src: "/api/uploads/" + c.portrait, alt: "Picture of " + c.name }) : h("span", null, icon("image")),
+      h("span", { class: "portrait-edit" }, c.portrait ? "Change" : "Add picture"), file);
+    const setPic = (rec) => { const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = Object.assign({}, list[i], { portrait: rec.portrait }); c.portrait = rec.portrait; renderList(); renderEditor(list[i] || c); };
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      const fd = new FormData(); fd.append("file", f);
+      try { const d = await api("POST", "/api/creatures/" + c.id + "/portrait", fd); setPic(d.creature); toast("Picture saved — it shows on its map tokens too.", "ok"); }
+      catch (e) { toast(e.message, "error"); }
+    });
+    const unpic = c.portrait ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: async () => {
+      try { const d = await api("DELETE", "/api/creatures/" + c.id + "/portrait"); setPic(d.creature); } catch (e) { toast(e.message, "error"); }
+    } }, icon("x", "sm"), " Remove picture") : null;
     box.replaceChildren(h("div", { class: "sb-edit" },
+      h("div", { class: "sb-pic-row" }, pic, h("div", { class: "sb-pic-side" },
+        h("span", { class: "faint", style: "font-size:.85rem" }, "Picture: shows in fights and on its map tokens."), unpic)),
       inp("name", { class: "input sb-name", "aria-label": "Name", maxlength: 200, wrap: true }),
       inp("creature_type", { class: "input sb-type", placeholder: "Medium humanoid (goblinoid), neutral evil", "aria-label": "Type" }),
       h("label", { class: "check sb-boss" }, h("input", { type: "checkbox", checked: !!model.boss, onchange: (e) => {

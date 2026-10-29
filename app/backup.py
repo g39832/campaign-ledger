@@ -66,6 +66,7 @@ def build_export(campaign_ids=None):
         portraits.update(ch["portrait"] for ch in c["characters"] if ch["portrait"])
         c["morality_events"] = _rows(conn, "SELECT * FROM morality_events WHERE campaign_id = ? ORDER BY id", (cid,))
         c["creatures"] = _rows(conn, "SELECT * FROM creatures WHERE campaign_id = ? ORDER BY id", (cid,))
+        portraits.update(cr["portrait"] for cr in c["creatures"] if cr.get("portrait"))
         encounters = _rows(conn, "SELECT * FROM encounters WHERE campaign_id = ? ORDER BY id", (cid,))
         for e in encounters:
             e["combatants"] = _rows(conn, "SELECT * FROM combatants WHERE encounter_id = ? ORDER BY id", (e["id"],))
@@ -84,9 +85,11 @@ def build_export(campaign_ids=None):
         c["maps"] = maps_
         c["rolls"] = _rows(conn, "SELECT * FROM rolls WHERE campaign_id = ? ORDER BY id", (cid,))
         out.append(c)
+    library = _rows(conn, "SELECT * FROM creatures WHERE campaign_id IS NULL ORDER BY id")
+    portraits.update(cr["portrait"] for cr in library if cr.get("portrait"))
     data = {
         "campaigns": out,
-        "library": _rows(conn, "SELECT * FROM creatures WHERE campaign_id IS NULL ORDER BY id"),
+        "library": library,
         "files": _portrait_files(portraits),
     }
     return {

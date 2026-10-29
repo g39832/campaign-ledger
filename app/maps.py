@@ -136,9 +136,11 @@ def tokens_for(conn, map_id, encounter_current=None):
         """SELECT t.*, ch.name AS ch_name, ch.current_hp AS ch_hp, ch.max_hp AS ch_max, ch.status AS ch_status,
                   ch.portrait AS ch_portrait, ch.kind AS ch_kind, ch.conditions AS ch_conditions,
                   cb.name AS cb_name, cb.current_hp AS cb_hp, cb.max_hp AS cb_max, cb.status AS cb_status,
-                  cb.character_id AS cb_char, cb.hidden AS cb_hidden, cb.conditions AS cb_conditions, cb.encounter_id AS cb_enc
+                  cb.character_id AS cb_char, cb.hidden AS cb_hidden, cb.conditions AS cb_conditions, cb.encounter_id AS cb_enc,
+                  cr.portrait AS cr_portrait
            FROM map_tokens t
            LEFT JOIN combatants cb ON cb.id = t.combatant_id
+           LEFT JOIN creatures cr ON cr.id = cb.creature_id
            LEFT JOIN characters ch ON ch.id = COALESCE(t.character_id, cb.character_id)
            WHERE t.map_id = ? ORDER BY t.id""", (map_id,)).fetchall()
     out = []
@@ -149,7 +151,7 @@ def tokens_for(conn, map_id, encounter_current=None):
             t.update(name=r["ch_name"], hp=r["ch_hp"], max_hp=r["ch_max"], status=r["ch_status"],
                      portrait=r["ch_portrait"], conditions=[c["name"] for c in json.loads(r["ch_conditions"] or "[]")])
         elif r["cb_name"] is not None:
-            t.update(name=r["cb_name"], hp=r["cb_hp"], max_hp=r["cb_max"], status=r["cb_status"], portrait=None,
+            t.update(name=r["cb_name"], hp=r["cb_hp"], max_hp=r["cb_max"], status=r["cb_status"], portrait=r["cr_portrait"],
                      conditions=[c["name"] for c in json.loads(r["cb_conditions"] or "[]")])
         else:
             t.update(name=t["label"], hp=None, max_hp=None, status=None, portrait=None, conditions=[])

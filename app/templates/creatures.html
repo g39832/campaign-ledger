@@ -42,5 +42,5 @@
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/creatures.js') }}?v=118"></script>
+<script src="{{ url_for('static', filename='js/creatures.js') }}?v=119"></script>
 {% endblock %}
