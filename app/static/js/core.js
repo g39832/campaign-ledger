@@ -946,7 +946,7 @@
   });
 
   /* The boss bar: across the top of the page while a boss is in the fight. items: [{id, name,
-     frac (0-1), text (what's written on it: HP for the DM, nothing for players), phase, portrait}].
+     frac (0-1), text (written on it; empty, so nobody sees its HP), phase, portrait}].
      Phase 2 gets a banner the first time each screen sees it. */
   function bossBar(items) {
     let bar = document.getElementById("boss-bar");

@@ -125,3 +125,27 @@ def test_migration_keeps_phase_two_on_for_bosses_that_had_its_attacks(data_dir):
     assert sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0] == appdb.SCHEMA_VERSION
     got = {x["id"]: x for x in api.get("/api/creatures")["creatures"]}
     assert got[a["id"]]["has_phase2"] is True and got[b["id"]]["has_phase2"] is False
+
+
+def by_id(api, eid, name):
+    return next(c for c in api.get(f"/api/encounters/{eid}")["combatants"] if c["name"] == name)["creature_id"]
+
+
+def test_a_boss_is_in_a_fight_only_once(api, battlemap):
+    """Adding a boss that's already in the fight is refused (from the Combat page or the map);
+    asking for several adds just one. Ordinary monsters still come in as many as you like."""
+    eid, by = fight(api, battlemap)
+    cr = {"id": by_id(api, eid, "Young dragon")}
+    err = api.post(f"/api/encounters/{eid}/combatants", {"creature_id": cr["id"], "count": 1}, 400)
+    assert "already in this fight" in err["error"]
+    err = api.post(f"/api/maps/{battlemap['mid']}/monsters", {"creature_id": cr["id"], "x": 1, "y": 1}, 400)
+    assert "already in this fight" in err["error"]
+    names = [c["name"] for c in api.get(f"/api/encounters/{eid}")["combatants"]]
+    assert names.count("Young dragon") == 1 and not any(n.startswith("Young dragon ") for n in names)
+    other = api.post(f"/api/campaigns/{battlemap['camp']['id']}/encounters", {"name": "Second"}, 201)["encounter"]["id"]
+    api.post(f"/api/encounters/{other}/combatants", {"creature_id": cr["id"], "count": 3})
+    assert [c["name"] for c in api.get(f"/api/encounters/{other}")["combatants"]].count("Young dragon") == 1
+    ogre = api.post("/api/creatures", {"name": "Ogre", "max_hp": 30, "ac": 11}, 201)["creature"]
+    api.post(f"/api/encounters/{other}/combatants", {"creature_id": ogre["id"], "count": 2})
+    api.post(f"/api/encounters/{other}/combatants", {"creature_id": ogre["id"], "count": 1})
+    assert sum(c["name"].startswith("Ogre") for c in api.get(f"/api/encounters/{other}")["combatants"]) == 3

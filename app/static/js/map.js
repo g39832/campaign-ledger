@@ -368,7 +368,7 @@
   function dmBossBar() {
     const live = enc && enc.encounter && enc.encounter.status === "active";
     L.bossBar(live ? enc.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
-      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: c.hp + " / " + c.max_hp + " HP", phase: c.boss.phase, portrait: c.portrait })) : []);
+      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: "", phase: c.boss.phase, portrait: c.portrait })) : []);
   }
   function actionsFor(c) {
     const out = [], rule = toHitRule();

@@ -749,3 +749,18 @@ def test_open_pages_can_tell_when_the_server_was_updated(app, api, joined):
     b = api.get("/api/join/build")["build"]
     assert b and joined["pa"].get("/api/join/build")["build"] == b
     assert app.test_client().get("/api/join/build").status_code == 200   # the join page too
+
+
+def test_linking_a_fight_puts_everyone_in_it_on_the_map(api, joined):
+    """A map made on its own, then linked to a fight in its settings: every hero and monster in
+    that fight gets a token right away (no Add encounter click needed)."""
+    camp = joined["camp"]
+    eid = api.encounter(camp["id"], "Ambush")["encounter"]["id"]
+    api.post(f"/api/encounters/{eid}/combatants", {"characters": [joined["a"]["id"]], "quick": {"name": "Wolf", "max_hp": 11, "count": 2}})
+    m = api.post(f"/api/campaigns/{camp['id']}/maps", {"name": "Woods", "cols": 12, "rows": 8}, 201)["map"]
+    assert api.get(f"/api/maps/{m['id']}")["tokens"] == []
+    st = api.patch(f"/api/maps/{m['id']}", {"changes": {"encounter_id": {"from": None, "to": eid}}})
+    assert sorted(t["display"] for t in st["tokens"]) == ["Aria", "Wolf 1", "Wolf 2"]
+    api.patch(f"/api/maps/{m['id']}", {"changes": {"encounter_id": {"from": eid, "to": None}}})
+    st = api.patch(f"/api/maps/{m['id']}", {"changes": {"encounter_id": {"from": None, "to": eid}}})
+    assert len(st["tokens"]) == 3  # linking again doesn't double them up

@@ -45,7 +45,7 @@
     if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
     renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
     L.bossBar(S.encounter.status === "active" ? S.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
-      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: c.hp + " / " + c.max_hp + " HP", phase: c.boss.phase, portrait: c.portrait })) : []);
+      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: "", phase: c.boss.phase, portrait: c.portrait })) : []);
     if (before !== state) { celebrate(before, state); L.offerParry(state, before && before.combatants, (cid) => L.parry(cid, (d) => { if (d && d.encounter) apply(d); })); }
     if (keep) {
       const el = document.querySelector('[data-keep="' + keep.key + '"]');

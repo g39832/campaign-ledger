@@ -545,6 +545,8 @@ def api_patch(map_id):
         row, updates = F.cas_patch(conn, "maps", F.MAP, map_id, changes)
         if "encounter_id" in updates:
             link_party(conn, map_id)
+            if row["encounter_id"]:  # linking a fight puts everyone in it on the map
+                place_encounter_tokens(conn, map_id)
         if "cols" in updates or "rows" in updates:
             bits = resize_bitmap(before["revealed"], before["cols"], before["rows"], row["cols"], row["rows"])
             conn.execute("UPDATE maps SET revealed = ? WHERE id = ?", (bits, map_id))
@@ -889,7 +891,7 @@ def api_add_monsters(map_id):
     """Add enemies from the creature library or the Monster Book to the map's
     encounter (making one if the map has none) and put their tokens around the
     square that was clicked."""
-    from .combat import Ctx, _insert_enemy, _instance_names, _resort
+    from .combat import Ctx, _insert_enemy, _instance_names, _resort, one_boss
     from .monster_book import BY_NAME
     data = request.get_json(silent=True) or {}
     try:
@@ -929,6 +931,7 @@ def api_add_monsters(map_id):
         before = {c["id"] for c in ctx.combatants()}
         statblock = {k: block.get(k) for k in F.CREATURE if k != "name"}
         statblock["base_name"] = base
+        count = one_boss(ctx, block, base, count, creature_id)
         names = _instance_names(ctx, base, count)
         hidden = bool(data.get("hidden"))
         for n in names:

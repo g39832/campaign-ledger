@@ -64,7 +64,7 @@ with sync_playwright() as p:
     pg.evaluate(f"localStorage.setItem('combat-sel-{eid}', '{by['Ash Wyrm']['id']}')")
     pg.goto(DM_URL + f"/map/{mid}"); pg.wait_for_timeout(2500)
     bar = pg.locator("#boss-bar")
-    check(bar.count() == 1 and "Ash Wyrm" in bar.inner_text() and "80 / 80 HP" in bar.inner_text(), f"the DM's map has the boss bar with its HP ({bar.inner_text() if bar.count() else ''!r})")
+    check(bar.count() == 1 and "Ash Wyrm" in bar.inner_text() and "HP" not in bar.inner_text(), f"the DM's map has the boss bar, without its HP ({bar.inner_text() if bar.count() else ''!r})")
     leg = pg.locator(".legendary-acts")
     check(leg.count() == 1 and "2 of 2 left" in leg.inner_text(), "the boss's panel offers its legendary actions (2 of 2)")
     leg.locator(".fight-act", has_text="Tail swipe").click(); pg.wait_for_timeout(1500)

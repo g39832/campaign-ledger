@@ -669,6 +669,15 @@ def _next_sort(ctx):
     return row[0]
 
 
+def one_boss(ctx, block, base, count, creature_id):
+    """A boss is in a fight only once: adding it again is refused, and asking for several adds one."""
+    if not block.get("boss"):
+        return count
+    if any(c["creature_id"] == creature_id and not c["linked"] for c in ctx.combatants()):
+        raise F.ApiError(f"{base} is already in this fight — a boss can only be in it once")
+    return 1
+
+
 def _instance_names(ctx, base, count):
     existing = [c for c in ctx.combatants() if c["statblock"].get("base_name") == base and not c["linked"]]
     nums = []
@@ -723,6 +732,7 @@ def api_add(eid):
             block = F.decode_row(cr, F.CREATURE)
             statblock = {k: block[k] for k in F.CREATURE if k not in ("name",)}
             statblock["base_name"] = cr["name"]
+            count = one_boss(ctx, block, cr["name"], count, cr["id"])
             for name in _instance_names(ctx, cr["name"], count):
                 _insert_enemy(ctx, name, statblock, cr["max_hp"], cr["ac"], cr["initiative_mod"], cr["id"])
                 added.append(name)
