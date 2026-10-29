@@ -38,7 +38,7 @@ JSON_COLUMNS = {
     "rolls": ["result"],
 }
 CHILD_KEYS = ("characters", "morality_events", "creatures", "encounters", "journal", "combatants", "hp_changes",
-              "log", "links", "maps", "tokens", "rolls")
+              "log", "links", "maps", "tokens", "rolls", "handouts")
 
 
 def _rows(conn, sql, params=()):
@@ -84,6 +84,8 @@ def build_export(campaign_ids=None):
                 portraits.add(m["image"])
         c["maps"] = maps_
         c["rolls"] = _rows(conn, "SELECT * FROM rolls WHERE campaign_id = ? ORDER BY id", (cid,))
+        c["handouts"] = _rows(conn, "SELECT * FROM handouts WHERE campaign_id = ? ORDER BY id", (cid,))
+        portraits.update(hd["image"] for hd in c["handouts"] if hd.get("image"))
         out.append(c)
     library = _rows(conn, "SELECT * FROM creatures WHERE campaign_id IS NULL ORDER BY id")
     portraits.update(cr["portrait"] for cr in library if cr.get("portrait"))
@@ -233,6 +235,7 @@ def validate_backup(payload):
         for m in c.get("maps", []) or []:
             _check_rows(conn, "map_tokens", m.get("tokens", []), errors, where, required_fk=("map_id",))
         _check_rows(conn, "rolls", c.get("rolls", []), errors, where)
+        _check_rows(conn, "handouts", c.get("handouts", []), errors, where)
         for e in c.get("encounters", []) or []:
             _check_rows(conn, "combatants", e.get("combatants", []), errors, where)
             _check_rows(conn, "hp_changes", e.get("hp_changes", []), errors, where, required_fk=("encounter_id",))
@@ -320,6 +323,7 @@ def _insert_row(conn, table, row, overrides, fresh_uid=False):
 
 def delete_campaign_data(conn, cid):
     conn.execute("DELETE FROM rolls WHERE campaign_id = ?", (cid,))
+    conn.execute("DELETE FROM handouts WHERE campaign_id = ?", (cid,))
     conn.execute("DELETE FROM players WHERE campaign_id = ?", (cid,))
     conn.execute("DELETE FROM maps WHERE campaign_id = ?", (cid,))  # cascades tokens
     conn.execute("DELETE FROM journal_links WHERE entry_id IN (SELECT id FROM journal_entries WHERE campaign_id = ?)", (cid,))
@@ -392,6 +396,9 @@ def import_campaign(conn, c, mode, lib_map):
                                        "character_id": char_map.get(r.get("character_id")),
                                        "combatant_id": comb_map.get(r.get("combatant_id")),
                                        "encounter_id": enc_map.get(r.get("encounter_id"))}, fresh)
+    for hd in c.get("handouts", []):  # who it was for: the same characters, renumbered
+        to = json.loads(hd["to_characters"]) if hd.get("to_characters") else None
+        _insert_row(conn, "handouts", hd, {"campaign_id": cid, "to_characters": json.dumps([char_map[x] for x in to if x in char_map]) if to is not None else None}, fresh)
     targets = {"character": char_map, "encounter": enc_map, "morality": ev_map}
     for j in c.get("journal", []):
         jid = _insert_row(conn, "journal_entries", j, {"campaign_id": cid}, fresh)

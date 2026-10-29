@@ -48,7 +48,9 @@ def main():
     print()
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    serve(app, host=host, port=args.port, threads=8, ident="CampaignLedger")
+    # each open page keeps one connection for instant updates (app/events.py), so there are
+    # plenty of threads: a full table of players and the DM's tabs, with room to spare
+    serve(app, host=host, port=args.port, threads=48, ident="CampaignLedger")
 
 
 if __name__ == "__main__":

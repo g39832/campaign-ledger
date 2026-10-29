@@ -935,6 +935,28 @@
     watchForUpdates();
   });
 
+  /* Instant updates: one connection per page (server-sent events). on(fn) runs fn the moment
+     anything changes anywhere; recent() says whether the connection is up, so the pages' regular
+     checks can slow down to a fallback (they keep going in case it drops). */
+  const live = { es: null, up: false, fns: [], t: null };
+  function liveStart() {
+    if (live.es || !window.EventSource) return;
+    try { live.es = new EventSource("/api/play/events"); } catch (e) { return; }
+    live.es.onopen = () => { live.up = true; };
+    live.es.onerror = () => { live.up = false; }; // the browser reconnects by itself
+    live.es.addEventListener("change", () => {
+      live.up = true;
+      clearTimeout(live.t);
+      live.t = setTimeout(() => live.fns.forEach((fn) => { try { fn(); } catch (e) { /* one page part failing mustn't stop the rest */ } }), 40);
+    });
+  }
+  const Live = {
+    on(fn) { live.fns.push(fn); liveStart(); },
+    get connected() { return live.up; },
+    // a regular check can skip itself while the connection is up, but still runs every `every` ms
+    due(state, every) { const now = Date.now(); if (live.up && now - (state.last || 0) < (every || 10000)) return false; state.last = now; return true; },
+  };
+
   /* After an update (the server restarted), every open page reloads itself onto the new version:
      players don't have to refresh. It waits while someone is typing, something is still saving,
      or the page says it's busy (aiming a spell, rolling). */
@@ -963,5 +985,5 @@
     setInterval(check, 8000);
   }
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

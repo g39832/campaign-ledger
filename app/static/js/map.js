@@ -825,7 +825,9 @@
       if (fresh.length && window.FX) FX.sound("ping");
     } catch (e) { /* offline */ }
   }
-  setInterval(refresh, 1500);
+  const polled = {};
+  setInterval(() => { if (L.live.due(polled)) refresh(); }, 1500); // a fallback check (instant updates do the rest)
+  L.live.on(() => refresh());
 
   // Dice can tumble across the map (an overlay canvas that never touches map data).
   if (window.Dice) { Dice.overlayHost = $("#stage"); $(".dd-overmap").hidden = false; }

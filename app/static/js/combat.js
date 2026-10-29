@@ -742,7 +742,9 @@
       apply(d);
     } catch (e) { /* offline: the indicator shows it when a save fails */ }
   }
-  setInterval(refresh, 3000);
+  const polled = {};
+  setInterval(() => { if (L.live.due(polled)) refresh(); }, 3000); // a fallback check (instant updates do the rest)
+  L.live.on(() => refresh());
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 
   apply(S);

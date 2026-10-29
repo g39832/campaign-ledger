@@ -740,13 +740,16 @@
   });
 
   // ---- keep in sync with combat and other tabs -----------------------------------------
-  setInterval(async () => {
+  const polled = {};
+  const sync = async () => {
     if (document.hidden) return;
     try {
       const d = await api("GET", "/api/characters/" + char.id);
       b.refresh(d.character);
     } catch (e) { /* offline; the save indicator already reports it */ }
-  }, 4000);
+  };
+  setInterval(() => { if (L.live.due(polled)) sync(); }, 4000); // a fallback check (instant updates do the rest)
+  L.live.on(sync);
 
   renderNested(); renderProfs(); renderPips(); renderConds(); renderSlots(); renderRest(); derive();
   $("[data-f='hit_dice']").addEventListener("input", renderRest);

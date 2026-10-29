@@ -141,6 +141,9 @@ def uploads(name):
                               (ident["campaign_id"], name)).fetchone() or get_db().execute(
             "SELECT 1 FROM creatures WHERE portrait = ? AND (campaign_id IS NULL OR campaign_id = ?)", (name, ident["campaign_id"])).fetchone()
         if not ok:
+            from .handouts import player_may_see_image
+            ok = player_may_see_image(get_db(), ident["campaign_id"], ident["character_id"], name)
+        if not ok:
             raise F.NotFound("Not found")
     return send_from_directory(current_app.config["UPLOAD_DIR"], name, max_age=86400)
 

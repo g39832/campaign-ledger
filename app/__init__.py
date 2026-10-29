@@ -41,9 +41,9 @@ def create_app(config=None):
     app.teardown_appcontext(db.close_db)
 
     from . import (auth, backup, campaigns, characters, combat, creatures, encounter_presets, journal, maps, morality,
-                   online, pages, play, rest, rolls, spells, aura)
+                   online, pages, play, rest, rolls, spells, aura, handouts)
     for module in (auth, campaigns, characters, morality, combat, encounter_presets, creatures, journal, backup, rolls,
-                   maps, play, rest, spells, aura, online, pages):
+                   maps, play, rest, spells, aura, handouts, online, pages):
         app.register_blueprint(module.bp)
     # Every request passes the DM/player permission check first.
     app.before_request(auth.guard)
@@ -71,6 +71,10 @@ def create_app(config=None):
     def _no_cache_api(resp):
         if request.path.startswith("/api/"):
             resp.headers["Cache-Control"] = "no-store"
+            # anything changed: every open page hears about it at once (app/events.py)
+            if request.method in ("POST", "PATCH", "PUT", "DELETE") and resp.status_code < 400:
+                from . import events
+                events.publish()
         return resp
 
     return app

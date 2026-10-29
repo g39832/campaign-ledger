@@ -623,12 +623,42 @@
           } })));
     }
     if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
-    $("#party").replaceChildren(h("h3", { class: "rule-head" }, "Party"),
+    newHandouts();
+    $("#party").replaceChildren(handoutsPanel() || "", h("h3", { class: "rule-head" }, "Party"),
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),
         p.conditions.length || p.status !== "ok" ? h("div", { class: "faint", style: "font-size:.85rem" }, [p.status !== "ok" ? p.status : "", ...p.conditions].filter(Boolean).join(", ")) : null))));
   }
 
+  /* Handouts: a new one pops up as a big card (once per device); they all stay in the Handouts list. */
+  const seenKey = "handouts-seen";
+  const seen = new Set((() => { try { return JSON.parse(localStorage.getItem(seenKey) || "[]"); } catch (e) { return []; } })());
+  let handoutOpen = null;
+  function showHandout(x) {
+    if (handoutOpen) handoutOpen.remove();
+    seen.add(x.uid); try { localStorage.setItem(seenKey, JSON.stringify([...seen].slice(-200))); } catch (e) { /* ignore */ }
+    const close = () => { ov.remove(); handoutOpen = null; setTimeout(newHandouts, 300); };
+    const ov = h("div", { class: "handout-pop", role: "dialog", "aria-modal": "true", "aria-label": x.title || "Handout", onclick: (e) => { if (e.target === ov) close(); } },
+      h("div", { class: "handout-card" },
+        h("div", { class: "handout-head" }, icon("scroll-text", "sm"), h("b", null, x.title || "A handout from the DM")),
+        x.image ? h("img", { src: "/api/uploads/" + x.image, alt: x.title || "Handout picture" }) : null,
+        x.body ? h("div", { class: "handout-text" }, x.body) : null,
+        h("button", { type: "button", class: "btn btn-primary", onclick: close }, "Close")));
+    document.body.append(ov);
+    handoutOpen = ov;
+    if (window.FX) FX.sound("ac");
+  }
+  function handoutsPanel() {
+    const list = S.handouts || [];
+    if (!list.length) return null;
+    return h("div", { class: "handout-list" }, h("h3", { class: "rule-head" }, "Handouts"),
+      h("ul", { class: "stack-list" }, list.map((x) => h("li", null, h("button", { type: "button", class: "linkish", onclick: () => showHandout(x) },
+        x.image ? icon("image", "sm") : icon("scroll-text", "sm"), " " + (x.title || "Handout"))))));
+  }
+  function newHandouts() {
+    const fresh = (S.handouts || []).filter((x) => !seen.has(x.uid));
+    if (fresh.length && !handoutOpen) showHandout(fresh[fresh.length - 1]); // the oldest unseen first; the rest after it's closed
+  }
   async function load(force) {
     if (!force && (document.hidden || view.drag)) return;
     try {
@@ -683,5 +713,7 @@
     await api("POST", "/api/play/leave"); location.href = "/join";
   });
   load(true);
-  setInterval(load, 1500);
+  const polled = {};
+  setInterval(() => { if (L.live.due(polled)) load(); }, 1500); // a fallback check (instant updates do the rest)
+  L.live.on(() => load());
 })();

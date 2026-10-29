@@ -388,7 +388,9 @@
       this.drama = new Tray($("#dice-drama-canvas"));
       this.bindControls();
       this.loadHistory();
-      setInterval(() => this.poll(), 3000);
+      const polled = {};
+      setInterval(() => { if (L.live.due(polled)) this.poll(); }, 3000); // a fallback check (instant updates do the rest)
+      L.live.on(() => this.poll());
       document.addEventListener("keydown", (e) => {
         const t = e.target;
         if (e.ctrlKey || e.metaKey || e.altKey || (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName))) return;

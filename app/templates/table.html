@@ -59,6 +59,22 @@
       </div>
       <p class="faint" style="font-size:.9rem">Players see one map at a time: the one picked here (or with "Show to players" on a map).</p>
     </section>
+
+    <section class="section" id="handouts-section">
+      <h2 class="rule-head">4 · Handouts</h2>
+      <p class="faint" style="font-size:.9rem">Send a picture or a note (a letter, a map scrap, a monster reveal). It pops up on their screens straight away and stays in their Handouts list.</p>
+      <form id="handout-form" class="handout-form" autocomplete="off">
+        <label class="field"><span>Title</span><input type="text" name="title" maxlength="200" placeholder="A letter sealed with black wax"></label>
+        <label class="field"><span>Text</span><textarea name="body" rows="3" class="prose" placeholder="What it says…"></textarea></label>
+        <label class="field"><span>Picture (optional)</span><input type="file" name="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+        <fieldset class="handout-to"><legend class="lbl">Who gets it</legend>
+          <label class="check"><input type="checkbox" name="everyone" checked> Everyone</label>
+          {% for c in characters %}<label class="check handout-char"><input type="checkbox" name="to" value="{{ c.id }}" disabled> {{ c.name }}</label>{% endfor %}
+        </fieldset>
+        <button type="submit" class="btn btn-primary">{{ icon("scroll-text", "sm") }} Send handout</button>
+      </form>
+      <ul class="stack-list handout-sent" id="handout-sent"></ul>
+    </section>
   </div>
 
   <div>
@@ -78,6 +94,48 @@
 <script type="application/json" id="boot-chars">{{ characters | tojson }}</script>
 {% endblock %}
 {% block scripts %}
+<script>
+/* Handouts: send a picture or note to everyone or to chosen characters; the list of what's been sent. */
+(() => {
+  const { h, icon, $, api, toast, armed } = L;
+  const CID = {{ campaign.id }};
+  const form = $("#handout-form");
+  if (!form) return;
+  const everyone = form.querySelector("[name=everyone]");
+  const sync = () => form.querySelectorAll("[name=to]").forEach((b) => { b.disabled = everyone.checked; if (everyone.checked) b.checked = false; });
+  everyone.addEventListener("change", sync); sync();
+  const names = Object.fromEntries([...form.querySelectorAll("[name=to]")].map((b) => [Number(b.value), b.parentElement.textContent.trim()]));
+  async function list() {
+    let d;
+    try { d = await api("GET", "/api/campaigns/" + CID + "/handouts"); } catch (e) { return; }
+    $("#handout-sent").replaceChildren(...(d.handouts.length ? d.handouts.map((x) => {
+      const del = h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger" }, icon("trash-2", "sm"), " Delete");
+      armed(del, async () => { await api("DELETE", "/api/handouts/" + x.id); list(); }, "Delete? It disappears from their screens");
+      return h("li", { class: "handout-item" },
+        x.image ? h("img", { src: "/api/uploads/" + x.image, alt: "" }) : h("span", { class: "handout-ico" }, icon("scroll-text")),
+        h("div", { class: "grow" }, h("b", null, x.title || "(no title)"), h("div", { class: "faint", style: "font-size:.85rem" },
+          (x.to ? "To " + x.to.map((i) => names[i] || "?").join(", ") : "To everyone") + " · " + L.fmtTime(x.created_at)),
+          x.body ? h("div", { class: "faint handout-body-short" }, x.body.length > 120 ? x.body.slice(0, 120) + "…" : x.body) : null), del);
+    }) : [h("li", { class: "faint" }, "Nothing sent yet.")]));
+  }
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append("title", form.title.value.trim()); fd.append("body", form.body.value.trim());
+    if (!everyone.checked) {
+      const to = [...form.querySelectorAll("[name=to]:checked")].map((b) => b.value);
+      if (!to.length) { toast("Tick who gets it (or Everyone).", "error"); return; }
+      fd.append("to", to.join(","));
+    }
+    if (form.file.files[0]) fd.append("file", form.file.files[0]);
+    const btn = form.querySelector("[type=submit]"); btn.disabled = true;
+    try { await api("POST", "/api/campaigns/" + CID + "/handouts", fd); toast("Handout sent.", "ok"); form.reset(); everyone.checked = true; sync(); list(); }
+    catch (err) { toast(err.message, "error"); }
+    btn.disabled = false;
+  });
+  list();
+})();
+</script>
 <script>
 /* A QR code for joining: the online link when it's up and working, otherwise this computer's
    Wi-Fi link, with the join code filled in. Players point their phone's camera at it. */

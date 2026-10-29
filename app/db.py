@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 MIGRATIONS = {
     1: """
@@ -366,6 +366,20 @@ MIGRATIONS = {
     """,
     11: """
     ALTER TABLE creatures ADD COLUMN portrait TEXT;
+    """,
+    12: """
+    CREATE TABLE handouts (
+        id INTEGER PRIMARY KEY,
+        uid TEXT NOT NULL UNIQUE,
+        campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        image TEXT,
+        to_characters TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX handouts_campaign ON handouts(campaign_id);
     """,
 }
 

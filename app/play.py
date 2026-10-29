@@ -73,6 +73,18 @@ def join_page():
     return render_template("join.html", ident=ident, prefill=request.args.get("code", ""))
 
 
+@bp.get("/api/play/events")
+def api_events():
+    """Instant updates for this page: "something changed" the moment it does (see app/events.py).
+    Players and the DM both use it; nothing but a counter is sent."""
+    from flask import Response
+    from . import events
+    resp = Response(events.stream(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
+
+
 @bp.get("/api/join/build")
 def api_build():
     """Which start of the server this is. Open pages check it now and then and reload
@@ -272,6 +284,11 @@ def _player_encounter(conn, campaign_id, live_map):
     return {"id": enc["id"], "name": enc["name"], "round": enc["round"], "current": current_name, "order": order}
 
 
+def _handouts_for(conn, campaign_id, char_id):
+    from .handouts import for_character
+    return for_character(conn, campaign_id, char_id)
+
+
 @bp.get("/api/play/state")
 def api_state():
     ident = _player_required()
@@ -288,6 +305,7 @@ def api_state():
         "campaign": camp["name"],
         "character": _own_character(conn, ident["character_id"]),
         "party": party,
+        "handouts": _handouts_for(conn, camp["id"], ident["character_id"]),
         "encounter": _player_encounter(conn, camp["id"], live),
         "map": player_view(conn, live["id"], ident) if live else None,
     })

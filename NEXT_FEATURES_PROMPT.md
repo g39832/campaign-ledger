@@ -108,7 +108,7 @@ still shows the dead link as "on".
 - Include the join code in the URL (`/join?code=XXXXXX`) and make `/join` prefill the code
   from the query string.
 
-### 5. Instant updates (instead of polling every 1.5 s)
+### 5. Instant updates (instead of polling every 1.5 s) — **DONE** (`app/events.py`, `/api/play/events`, `L.live`)
 - Add a server-sent events endpoint `GET /api/events?campaign=<id>` (also allowed for players:
   add it to `PLAYER_PREFIXES` as `/api/play/events`, or put it under `/api/play/`). It streams
   `event: change\ndata: {"kind": "map"|"encounter"|"rolls"|"party", "id": ...}`.
@@ -128,7 +128,7 @@ still shows the dead link as "on".
     connected, so nothing breaks if SSE fails behind the Cloudflare tunnel.
 - Test: two browsers. A move on one shows on the other in under 500 ms.
 
-### 7. Player handouts
+### 7. Player handouts — **DONE** (`app/handouts.py`, Players page section 4, pop-up on /play)
 - **The DM pushes a handout:** an uploaded picture and/or a text note, with a title, to
   everyone or to chosen players.
 - **New table** (a migration): `handouts(id, uid, campaign_id, title, body, image, to_players
