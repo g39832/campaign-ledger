@@ -95,6 +95,14 @@
         h("div", { class: "share-url" }, h("code", null, s.install_hint), h("button", { type: "button", class: "btn btn-sm", onclick: () => copy(s.install_hint) }, icon("copy", "sm"), " Copy")),
         h("p", { class: "faint" }, "Then close and reopen the app, and come back here."),
         h("button", { type: "button", class: "btn btn-sm", onclick: () => load() }, icon("refresh-cw", "sm"), " Check again"));
+    } else if (s.running && s.url && s.broken) {
+      // the link died (Cloudflare dropped it): say so, and one click makes a new one
+      body.push(h("p", { class: "warn-box" }, icon("circle-alert", "sm"), " ", s.error),
+        h("p", { class: "faint" }, "Old link: " + s.url + "/join"),
+        h("button", { type: "button", class: "btn btn-primary", id: "new-link", onclick: async (e) => {
+          e.currentTarget.disabled = true; e.currentTarget.textContent = "Getting a new link…";
+          try { render(await api("POST", "/api/online/start")); toast("New link ready — send it to everyone.", "ok"); } catch (err) { toast(err.message, "error"); load(); }
+        } }, icon("refresh-cw", "sm"), " Get a new link"));
     } else if (s.running && s.url) {
       const join = s.url + "/join";
       body.push(h("p", null, h("span", { class: "live-dot" }), " ", h("b", null, "You're online."), " Send your friends this link and the join code:"),
@@ -117,6 +125,7 @@
     $("#online-body").replaceChildren(...body);
   }
   load();
+  setInterval(() => { if (!document.hidden && !document.getElementById("go-online")) load(); }, 20000); // a dead link shows up here on its own
 })();
 </script>
 <script>

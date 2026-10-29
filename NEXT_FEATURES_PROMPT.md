@@ -58,7 +58,7 @@ join from phones, tablets and laptops. Public repo: github.com/g39832/campaign-l
 
 ## Features to build (in this order)
 
-### 1. The online link: notice when it dies, one click for a new one
+### 1. The online link: notice when it dies, one click for a new one — **DONE** (`online.py is_broken/probe`, Players page banner)
 **Problem:** Cloudflare quick tunnels sometimes drop and never come back. cloudflared keeps
 logging `"Register tunnel error from server side"`, the hostname stops resolving, and the app
 still shows the dead link as "on".

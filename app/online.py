@@ -95,7 +95,52 @@ def status():
         if found:
             with _lock:
                 _state["url"] = out["url"] = found[0]
+    if out["running"] and out["url"] and is_broken(out["url"]):
+        out.update(broken=True, error="The online link stopped working — Cloudflare dropped it. Get a new link and send it to everyone again.")
     return out
+
+
+# ---- is the link still working? ----------------------------------------------------------
+# A quick tunnel can drop and never come back (cloudflared keeps logging "Register tunnel error"
+# while the address stops existing). Every minute or so the app opens its own link from the
+# outside, in the background; two failures in a row and the link counts as broken.
+CHECK_EVERY = 45
+_health = {"url": None, "fails": 0, "checked": 0.0, "busy": False}
+
+
+def probe(url):
+    """True when the link reaches this app."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/join/build", timeout=12) as r:
+            return r.status == 200 and b"build" in r.read(200)
+    except Exception:
+        return False
+
+
+def _check(url):
+    ok = probe(url)
+    with _lock:
+        if _health["url"] == url:
+            _health["fails"] = 0 if ok else _health["fails"] + 1
+            _health["checked"] = time.time()
+        _health["busy"] = False
+
+
+def is_broken(url):
+    """Whether this link has failed its last two checks (starting a check in the background
+    when one is due; the answer never waits for it)."""
+    with _lock:
+        if _health["url"] != url:
+            _health.update(url=url, fails=0, checked=time.time(), busy=False)  # a new link: give it a minute first
+        wait = CHECK_EVERY if not _health["fails"] else min(CHECK_EVERY, 15)  # one failure: check again soon
+        due = time.time() - _health["checked"] >= wait and not _health["busy"]
+        if due:
+            _health["busy"] = True
+        broken = _health["fails"] >= 2
+    if due:
+        threading.Thread(target=_check, args=(url,), daemon=True).start()
+    return broken
 
 
 def stop():
@@ -144,7 +189,13 @@ def api_start():
     exe = find_cloudflared()
     if not exe:
         raise F.ApiError("cloudflared isn't installed yet. Open PowerShell and run: " + INSTALL_HINT + " — then try again.")
-    if not _running() and left_running():  # still up from before a restart: same link
+    cur = status()
+    if cur.get("broken"):  # the old link is dead: stop it, then make a new one below
+        stop()
+        stop_left_running()
+        with _lock:
+            _health.update(url=None, fails=0)
+    elif not _running() and left_running():  # still up from before a restart: same link
         return jsonify(status() | {"already": True})
     with _lock:
         if _running() or _state.get("starting"):
