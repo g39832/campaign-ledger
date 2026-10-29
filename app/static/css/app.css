@@ -1362,3 +1362,10 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .mr-area { display: inline-flex; align-items: center; gap: 5px; }
 .mr-fight { font-size: .8rem; overflow-wrap: anywhere; }
 .mr-warn { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--warn, #e0a94a); font-size: .9rem; }
+
+/* the creature library's Bosses section */
+.j-list .lib-head { display: flex; align-items: center; gap: 6px; padding: 8px 14px 6px; font: 600 .78rem var(--caps, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--muted, inherit); border-bottom: 1px solid var(--line); }
+.j-list .lib-head .count { margin-left: auto; }
+.j-list li button.is-boss .t { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+.sb-boss { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 0; }
+.boss-only { display: inline-flex; align-items: center; gap: 6px; }

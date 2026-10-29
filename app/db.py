@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 MIGRATIONS = {
     1: """
@@ -360,6 +360,9 @@ MIGRATIONS = {
     """,
     9: """
     ALTER TABLE characters ADD COLUMN dice_style TEXT NOT NULL DEFAULT '{}';
+    """,
+    10: """
+    ALTER TABLE creatures ADD COLUMN boss INTEGER NOT NULL DEFAULT 0;
     """,
 }
 

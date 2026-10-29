@@ -9,15 +9,23 @@
   const NAMES = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
 
   function renderList() {
-    const q = $("#q").value.trim().toLowerCase();
-    const shown = list.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.creature_type || "").toLowerCase().includes(q))
+    const q = $("#q").value.trim().toLowerCase(), bossOnly = $("#boss-only").checked;
+    const shown = list.filter((c) => (!q || c.name.toLowerCase().includes(q) || (c.creature_type || "").toLowerCase().includes(q)) && (!bossOnly || c.boss))
       .sort((a, b) => a.name.localeCompare(b.name));
-    $("#list").replaceChildren(...(shown.length ? shown.map((c) => h("li", null, h("button", { type: "button", class: c.id === current ? "is-on" : "", onclick: () => open(c.id) },
-      h("span", { class: "t" }, c.name),
-      h("span", { class: "m" }, [c.creature_type, c.cr ? "CR " + c.cr : "", c.max_hp + " HP", "AC " + c.ac].filter(Boolean).join(" · "))))) :
-      [h("li", { class: "faint", style: "padding:14px" }, list.length ? "No match." : "No creatures yet. Create one, or tick “save to library” when quick-adding an enemy in combat.")]));
+    const item = (c) => h("li", null, h("button", { type: "button", class: (c.id === current ? "is-on" : "") + (c.boss ? " is-boss" : ""), onclick: () => open(c.id) },
+      h("span", { class: "t" }, c.boss ? icon("crown", "sm") : null, c.name),
+      h("span", { class: "m" }, [c.creature_type, c.cr ? "CR " + c.cr : "", c.max_hp + " HP", "AC " + c.ac].filter(Boolean).join(" · "))));
+    // the bosses get their own section at the top
+    const bosses = shown.filter((c) => c.boss), rest = shown.filter((c) => !c.boss);
+    const head = (ic, text, n) => h("li", { class: "lib-head" }, icon(ic, "sm"), " " + text, h("span", { class: "count" }, String(n)));
+    $("#list").replaceChildren(...(shown.length ? [
+      ...(bosses.length ? [head("crown", "Bosses", bosses.length), ...bosses.map(item)] : []),
+      ...(bosses.length && rest.length ? [head("paw-print", "Creatures", rest.length)] : []),
+      ...rest.map(item)] :
+      [h("li", { class: "faint", style: "padding:14px" }, bossOnly && list.length ? "No bosses yet. Open a creature and tick “Boss”." : list.length ? "No match." : "No creatures yet. Create one, or tick “save to library” when quick-adding an enemy in combat.")]));
   }
   $("#q").addEventListener("input", renderList);
+  $("#boss-only").addEventListener("change", renderList);
   $("#new").addEventListener("click", () => act("POST", "/api/creatures", { name: "New creature", max_hp: 10, ac: 12 }, (d) => {
     list.push(d.creature); open(d.creature.id);
     const n = $("#editor .sb-name"); if (n) { n.focus(); n.select(); }
@@ -35,7 +43,7 @@
     if (!c) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No creature selected"), "Pick one from the list or create a new stat block.")); return; }
     const model = {};
     ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "spells", "traits", "resistances", "immunities",
-      "vulnerabilities", "condition_immunities", "senses", "languages", "notes"].forEach((k) => { model[k] = c[k]; });
+      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss"].forEach((k) => { model[k] = c[k]; });
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
     } });
@@ -75,6 +83,10 @@
     box.replaceChildren(h("div", { class: "sb-edit" },
       inp("name", { class: "input sb-name", "aria-label": "Name", maxlength: 200, wrap: true }),
       inp("creature_type", { class: "input sb-type", placeholder: "Medium humanoid (goblinoid), neutral evil", "aria-label": "Type" }),
+      h("label", { class: "check sb-boss" }, h("input", { type: "checkbox", checked: !!model.boss, onchange: (e) => {
+        b.set("boss", e.target.checked, true); c.boss = e.target.checked;
+        const i = list.findIndex((x) => x.id === c.id); if (i >= 0) list[i] = Object.assign({}, list[i], { boss: e.target.checked });
+        renderList(); } }), icon("crown", "sm"), " Boss", h("span", { class: "faint", style: "font-size:.85rem" }, " — listed in the Bosses section")),
       h("hr"),
       h("div", { class: "sb-props" },
         prop("Hit points", "max_hp", { type: "number", min: 1 }),

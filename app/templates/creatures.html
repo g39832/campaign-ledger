@@ -31,7 +31,8 @@
 </section>
 <div class="bestiary">
   <div>
-    <input type="search" id="q" placeholder="Search by name or type" aria-label="Search creatures" style="margin-bottom:8px">
+    <input type="search" id="q" placeholder="Search by name or type" aria-label="Search creatures" style="margin-bottom:6px">
+    <label class="check boss-only" style="margin:0 0 8px;font-size:.9rem"><input type="checkbox" id="boss-only"> {{ icon("crown", "sm") }} Bosses only</label>
     <ul class="j-list" id="list"></ul>
   </div>
   <div id="editor"></div>
@@ -41,5 +42,5 @@
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/creatures.js') }}?v=117"></script>
+<script src="{{ url_for('static', filename='js/creatures.js') }}?v=118"></script>
 {% endblock %}

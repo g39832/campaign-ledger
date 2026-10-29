@@ -307,6 +307,7 @@ CREATURE = {
     "senses": Text(1000),
     "languages": Text(1000),
     "notes": Text(),
+    "boss": Bool(),  # shown in the library's Bosses section
 }
 
 ENCOUNTER = {
