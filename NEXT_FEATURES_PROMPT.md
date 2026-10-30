@@ -2,7 +2,8 @@
 
 Paste everything below into a new coding session (Claude Code or similar) opened in
 `~/Desktop/Dnd Tracker`. It explains the project and exactly how to build each feature.
-Features already done are marked **DONE**; continue with the first one that isn't. (As of 2026-10-29 all of them are done; use this file as a map of the project for future work.)
+Features already done are marked **DONE**; continue with the first one that isn't. (Round 1, features 1–7,
+is all done. As of 2026-10-30 the next work is **Round 2** at the bottom: boss features first, then the app.)
 
 ---
 
@@ -43,7 +44,7 @@ join from phones, tablets and laptops. Public repo: github.com/g39832/campaign-l
   is on. Yamato's clones are run by his player. Monsters' attacks are text lines
   ("Claw: +4 to hit, 1d6+2 slashing damage") read by `L.parseAttack` / `L.attackLines`.
 - **Testing:**
-  - Code tests: `.venv\Scripts\python -m pytest -q` (about 370 tests, 2 minutes).
+  - Code tests: `.venv\Scripts\python -m pytest -q` (about 400 tests, 2 minutes).
   - Browser tests: Playwright, in `tests/e2e` (see feature 3). They run against a *copy* of the
     real data on port 5077/5078, in Chrome, Firefox and WebKit, at phone, tablet and laptop sizes.
   - Grayson wants every change clicked through in real browsers before it's pushed.
@@ -168,3 +169,99 @@ For creatures with `boss = 1` (already on the creatures table and copied into co
 3. Commit with a plain message (no AI credit), push to GitHub, and restart the server (end
    the `start-lan.bat` process, then start it again).
 4. Mark the feature **DONE** in this file.
+
+---
+
+# Round 2 (written 2026-10-30)
+
+## Already built since Round 1 (don't redo)
+- **Phase 2 is a tick box** (`creatures.has_phase2`, schema v14). Unticked, the boss never turns.
+  Ticked, it turns at half HP; its phase 2 attacks show only when ticked.
+- **Monster attack cards fold** to one line (`L.attackRows` in `core.js`), with Fold all / Open all.
+- **Earthquake effect:** an earth move with a radius (Harlan Voss's "Earth Shattter", 40 ft) shakes
+  the map and splits the ground across the whole area on every screen (`mapview.js`
+  `drawQuakes` / `quakeShake` / `MapView.cracks`, sound `FX.sound("quake")`). The DM's map sends where
+  the area was (`area.at` on `POST /api/maps/<id>/fx`).
+- **One of each boss per fight** (`combat.one_boss`, by creature id). Adding it again is refused;
+  asking for several adds one.
+- **The boss bar never shows HP numbers** on any screen (players and DM). Only the name and the bar.
+- **Linking a map to a fight** in Map & grid settings puts everyone in that fight on the map (`api_patch`
+  calls `place_encounter_tokens`).
+- Browser tests for these: `e2e_quake.py`, `e2e_linkmap.py`, plus updates to `e2e_boss_extras.py`,
+  `e2e_bosses.py` and `e2e_monrows.py`.
+
+## Boss features (build in this order)
+
+### B1. Pick each move's look on the attack form
+Right now a move's animation is guessed from its name (`MapView.fxStyle`). Add an optional
+"Looks like" select to each card in `L.attackRows`: Auto (today's guess), Slash, Punch, Bite,
+Arrow, Fire, Ice, Lightning, Radiant, Poison, Arcane, Earth, **Earthquake**. Store it in the line
+as `, fx quake` (and keep `lineFromRow` / `rowFromLine` round-tripping exactly). Send it as
+`fx.style` and let it win over the guess. "Earthquake" works on any radius move, so a move can
+shake the ground no matter its name.
+
+### B2. Telegraphed moves ("he raises his hammer...")
+A boss can wind up a big move one turn early. On the DM's map, a "Wind up" button next to an area
+move places the area and shows it to everyone, pulsing red, with "Harlan Voss is about to use Earth
+Shattter!" on the phones. It goes off at the start of the boss's next turn, hitting whoever is still
+inside. Players get one turn to run. Keep the pending move in `combatants.boss_state`. The DM can
+cancel it. Use the same area drawing as zones (`drawZones`).
+
+### B3. Lair actions
+New creature field `lair` (attack lines, like `legendary`), shown in Boss extras. Each round, on
+initiative 20 (losing ties), the DM's panel shows "Lair action" buttons, one use per round. Log it
+like legendary actions (`/api/combatants/<id>/legendary` is the model). Players see a short banner.
+
+### B4. A stronger phase 2
+When phase 2 is ticked, add optional fields: turn at (% of HP, default 50), AC change (+/-),
+heal on turning (HP), a new title ("Harlan Voss, Unbroken") and a banner line. Apply them once,
+when it turns (record it in `boss_state` so Undo can take it back). Optional: summon minions on
+turning (pick a creature and a count; reuse the summon code in `spells.py`).
+
+### B5. Recharge moves (5e "Recharge 5–6")
+Next to cooldown, a move can be `recharge 5` (on the line: `, recharge 5-6`). After use it's spent.
+At the start of each of the boss's turns, the app rolls a d6 (shown in the dice log) and the move is
+back on 5 or 6. Show "recharging (5–6)" on the button like cooldowns do.
+
+### B6. Boss entrance and defeat
+- **Entrance:** when a fight with a boss starts, or a hidden boss is revealed, every screen shows a
+  big banner with its picture, name and an optional title/tagline (new creature field `tagline`),
+  plus a sound.
+- **Defeat:** when it drops, a big "Defeated!" moment on every screen, and an optional loot
+  handout (pick one in Boss extras) sent to everyone automatically (`app/handouts.py`).
+
+### B7. Make a boss from any monster
+On the Creatures page, a "Make it a boss" button. It asks for the party's level and size and
+scales the monster: HP x (party size), +1 or +2 AC, legendary actions 3 (made from its existing
+attacks at lower damage), legendary resistance 1–3, phase 2 ticked. It's a starting point; the DM
+edits the rest.
+
+## App features (after the boss features)
+
+### A1. Players roll their own initiative
+When a fight starts, each player gets "Roll initiative" on their phone (3D dice, their own colors).
+The DM can still roll for anyone who hasn't after a timer or a button.
+
+### A2. Fight recap into the journal
+When a fight ends, offer "Save a recap to the journal": rounds, who went down, the biggest hit,
+the boss's last move, the loot. Built from the combat log; the DM can edit it before saving.
+
+### A3. Turn-start reminders
+At the start of each turn, show that creature's reminders: conditions and how long they have left,
+concentration, ongoing damage, a pending telegraphed move (B2), legendary actions left.
+
+### A4. Encounter difficulty
+On the Combat page, show Easy / Medium / Hard / Deadly from the monsters' challenge ratings
+against the party's levels (5e XP budget). Bosses count fully; summons don't.
+
+### A5. Tidy up
+- Grayson's data has duplicate maps ("Tavern brawl" twice, "Tavern common room" twice). Offer
+  a "Delete unused maps" helper (no tokens, no fight), and ask before deleting anything.
+- Several commits are local only. Push when Grayson asks.
+
+## Rules for Round 2 (same as before)
+- Only add: old fights, monsters and sheets must keep working. New fields get defaults in a
+  migration (`app/db.py`, next is v15), and the migration test in `tests/test_monster_spells.py`
+  must drop them too.
+- Every feature: pytest, plus a browser test in `tests/e2e` run with `--engine all`.
+- Restart the server after (end the `start-lan.bat` process, start it detached), and bump `?v=N`.
