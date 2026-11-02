@@ -1485,3 +1485,12 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .spell-quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .spell-quick-btns .btn { flex: 1 1 150px; justify-content: flex-start; }
 .spell-fields .spell-wide { grid-column: 1 / -1; }
+
+/* made-up maps: the Maps page cards, and the rooms list on the DM's map */
+.dungeon-icon { display: grid; place-items: center; height: 70px; border-radius: var(--radius); background: var(--raised); color: var(--brass); }
+.dungeon-icon .ico { width: 34px; height: 34px; }
+.dg-rooms { list-style: none; margin: 0; padding: 0; }
+.dg-room { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.dg-room .linkish { background: none; border: 0; color: var(--text); cursor: pointer; text-align: left; font: inherit; padding: 4px 0; overflow-wrap: anywhere; }
+.dg-room.is-boss .linkish { color: var(--accent); font-weight: 700; }
+.dg-cells summary { cursor: pointer; margin-top: 6px; }

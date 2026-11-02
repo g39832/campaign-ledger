@@ -372,8 +372,10 @@ def api_move(token_id):
         conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), token_id))
         entered = _zone_check(conn, md)
         _record_move(uctx, snap, t)
+        from .dungeon_maps import after_move
+        went = after_move(conn, md, t, x, y)  # a made-up map: rooms light up; the stairs lead down
         _bump(conn, m["id"])
-    return jsonify({"ok": True, "x": x, "y": y, "move": turn, "zone": entered})
+    return jsonify({"ok": True, "x": x, "y": y, "move": turn, "zone": entered, "next_level": went})
 
 
 def _zone_check(conn, md):
@@ -616,7 +618,7 @@ def api_me_react():
     ident, char_id = _own(None)
     data = request.get_json(silent=True) or {}
     kind = str(data.get("kind") or "")
-    if kind not in ("deflect", "absorb", "sentinel", "redirect", "burn"):
+    if kind not in ("deflect", "absorb", "sentinel", "redirect", "burn", "prime"):
         raise F.ApiError("Which reaction?")
     out = {}
     with tx() as conn:

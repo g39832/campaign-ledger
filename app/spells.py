@@ -269,6 +269,9 @@ def effect_for(ctx, sp, caster, cast_id, nums, slot):
             cond[k] = resolve(sp[k], nums["mod"], sp["name"])
     if sp["adv"]:
         cond["adv"] = sp["adv"]
+    if sp.get("death_ward"):
+        cond["death_ward"] = True
+        cond["note"] = (cond["note"] + " · " if cond["note"] else "") + "the first time they'd drop to 0 HP, they drop to 1 instead"
     if sp["ongoing"]:
         on = {"dice": resolve(sp["ongoing"], nums["mod"], sp["name"]), "kind": sp["ongoing_kind"],
               "type": sp["ongoing_type"] or sp["damage_type"]}

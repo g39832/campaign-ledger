@@ -209,7 +209,9 @@ def maps():
         (camp["id"],)).fetchall()
     from .map_presets import build, listing
     presets = listing()
-    return render_template("maps.html", **_shell("map", camp, maps=[dict(r) for r in rows],
+    from .dungeon import THEMES
+    themes = [{"key": k, "name": v["name"], "about": v["about"]} for k, v in THEMES.items()]
+    return render_template("maps.html", **_shell("map", camp, maps=[dict(r) for r in rows], dungeon_themes=themes,
                                                  encounters=list_encounters(camp["id"]), map_presets=presets,
                                                  preset_terrain={p["key"]: build(p["key"]) for p in presets}))
 

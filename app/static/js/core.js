@@ -126,8 +126,10 @@
       + (Number(s.summon_max) ? "; " + s.summon_max + " out at once at most" : "")
       + (s.on_death ? "; when one is destroyed, enemies within " + (s.on_death.reach || 5) + " ft make a " + (ABIL_SHORT[s.on_death.save] || "Dex") + " save DC " + (s.on_death.dc || 10) + " or lose an action" : ""));
     if (s.reaction === "deflect") bits.push("reaction: when you're hit, cut the damage by " + (s.reduce || "1d10+dex+level") + (s.redirect !== false ? "; cut to 0, send it at an enemy (10 ft, or 60 ft for a projectile)" : ""));
-    if (s.reaction === "absorb") bits.push("reaction: hit by acid, cold, fire, lightning or thunder, +" + (s.bonus_dice || "1d12") + " of it on your next hit");
+    if (s.reaction === "absorb") bits.push((s.prime ? "cast it first on your turn; then " : "reaction: ") + "hit by acid, cold, fire, lightning or thunder, +" + (s.bonus_dice || "1d12") + " of it on your next hit");
+    else if (s.prime && s.reaction) bits.push("cast it first on your turn");
     if (s.reaction === "sentinel") bits.push("reaction: an enemy next to you attacks someone else, and you strike it");
+    if (s.death_ward) bits.push("the first time they'd drop to 0 HP, they drop to 1 instead (then it ends)");
     if (Number(s.extra_moves)) bits.push("+" + s.extra_moves + " action" + (Number(s.extra_moves) === 1 ? "" : "s") + " this turn");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
@@ -1160,6 +1162,7 @@
       toast((you ? "You send" : name + " sends") + " the attack at " + x.target + ": " + x.amount + " damage.", "ok", { ms: 6000 });
       fx("Sent back!", x.amount + " damage to " + x.target, "crit", "hit");
     } else if (x.kind === "burn") toast(x.text, "ok");
+    else if (x.kind === "prime") { toast(x.text, "ok", { ms: 6000 }); fx(x.name + "!", "ready for the next hit", "ac", "ac"); }
     if (window.Dice && Dice.poll) Dice.poll();
   }
   // the DM's screens: a toast when someone can react to what just happened (like the Parry one)

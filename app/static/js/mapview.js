@@ -18,6 +18,7 @@
     rubble: { fill: "#8a7f70", label: "Rubble / crates", rubble: true }, tree: { fill: "#6f8f4e", label: "Tree", tree: true },
     table: { fill: "#7a5a3a", label: "Table / furniture", table: true },
     rock: { fill: "#5d5449", label: "Raised rock (blocks)", rock: true },
+    stairs: { fill: "#b9a67c", label: "Stairs down", stairs: true },
   };
   const KIND_COLOR = { pc: "#c7a25e", npc: "#6f8fae", enemy: "#b2402e", trap: "#7d4f8f", marker: "#8b8273", object: "#7a5a3a" };
   const COND_COLOR = { Blinded: "#555", Charmed: "#d36fb0", Deafened: "#777", Frightened: "#9b6fd3", Grappled: "#b08a3e", Incapacitated: "#8a8a8a",
@@ -535,6 +536,9 @@
       }
       if (T.door) {
         ctx.fillStyle = "rgba(255,230,180,.5)"; ctx.beginPath(); ctx.arc(X + cp * 0.75, Y + cp * 0.5, cp * 0.06, 0, Math.PI * 2); ctx.fill();
+      }
+      if (T.stairs) { // steps going down, darker as they go
+        for (let i = 0; i < 4; i++) { ctx.fillStyle = "rgba(30,20,10," + (0.12 + i * 0.16) + ")"; ctx.fillRect(X + cp * 0.1, Y + cp * (0.1 + i * 0.2), cp * 0.8, cp * 0.16); }
       }
       ctx.restore();
       if (T.tree) {

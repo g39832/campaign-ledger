@@ -585,6 +585,8 @@ def spell_info(spell):
         "bonus_dice": _dice_text(spell.get("bonus_dice")),
         # extra actions this turn when it's used (Action Surge)
         "extra_moves": _num(spell.get("extra_moves"), 0, 10, 0),
+        # Death Ward: the first time the one it's on would drop to 0 HP, they drop to 1 instead and it ends
+        "death_ward": bool(spell.get("death_ward")),
         # summons: how many may be out at once in all (Yamato: 3), and the summoned one's AC and HP
         "summon_max": _num(spell.get("summon_max"), 1, 10),
         "summon_ac": _num(spell.get("summon_ac"), 0, 40),
@@ -613,7 +615,7 @@ def spell_lasts(sp):
     """Does the spell leave something on whoever it lands on (a condition, AC, a roll
     bonus, damage every turn...)? Then it becomes an effect on them."""
     return bool(sp["condition"] or sp["ac"] or sp["roll_mod"] or sp["dmg_mod"] or sp["adv"]
-                or sp["ongoing"] or sp["max_hp"])
+                or sp["ongoing"] or sp["max_hp"] or sp.get("death_ward"))
 
 
 def spell_does_something(sp):

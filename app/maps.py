@@ -22,7 +22,7 @@ bp = Blueprint("maps", __name__, url_prefix="/api")
 
 IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 TERRAIN = ("floor", "wall", "water", "difficult", "pit", "door", "foliage",
-           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table", "rock")
+           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table", "rock", "stairs")
 # Squares a token can't stand in when the app places tokens for you.
 BLOCKING = {"wall", "pit", "water", "lava", "tree", "table", "rock"}
 # Solid squares nobody can walk into or through (a player's move is refused).
@@ -93,6 +93,10 @@ def map_dict(row):
     d["shapes"] = json.loads(row["shapes"] or "[]") if "shapes" in row.keys() else []
     for k in ("id", "uid", "campaign_id", "image", "image_w", "image_h", "revealed", "rev", "created_at", "updated_at"):
         d[k] = row[k]
+    try:  # a made-up map's rooms, start and stairs (the DM's eyes only)
+        d["dungeon"] = json.loads(row["dungeon"]) if "dungeon" in row.keys() and row["dungeon"] else None
+    except ValueError:
+        d["dungeon"] = None
     return d
 
 
@@ -1068,8 +1072,10 @@ def api_move_token(token_id):
         from .play import _zone_check
         _zone_check(conn, m)  # an enemy walking into Spirit Guardians gets hit by it
         _record_move(ctx, snap, t)
+        from .dungeon_maps import after_move
+        went = after_move(conn, m, t, x, y)  # a made-up map: rooms light up; the stairs lead down
         _bump(conn, map_id)
-    return jsonify(dm_state(map_id))
+    return jsonify(dm_state(map_id) | {"next_level": went})
 
 
 @bp.delete("/tokens/<int:token_id>")

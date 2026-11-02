@@ -82,10 +82,46 @@
     S = state;
     revs = { rev: S.map.rev, encounter_rev: S.encounter ? S.encounter.rev : null };
     view.setData(S.map, S.tokens);
-    renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings();
+    renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings(); renderDungeon();
     if (state.pings) view.setPings(state.pings);
     view.setZones(state.zones);
     ensureEnc(); if (!S.map.encounter_id) L.bossBar([]);
+  }
+
+  /* ---- a made-up map (dungeon, cave, prison): its rooms, shown or hidden to the players, and the stairs */
+  let lastNext = S.map.dungeon ? S.map.dungeon.next : null;
+  function renderDungeon() {
+    const box = $("#dungeon-panel"), d = S.map.dungeon;
+    box.hidden = !d;
+    if (!d) return;
+    if (d.next && d.next !== lastNext) { // the party just went down the stairs
+      lastNext = d.next;
+      if (window.FX) { FX.banner("Down the stairs!", "Level " + (d.level + 1) + " is ready", "crit"); FX.sound("start"); }
+      toast("The party took the stairs: level " + (d.level + 1) + " is made" + (S.live ? "" : " and shown to the players") + ".", "ok",
+        { ms: 15000, action: { label: "Go to level " + (d.level + 1), run: () => { location.href = "/map/" + d.next; } } });
+    }
+    const shown = (r) => { const [x0, y0, x1, y1] = r.box, cx = Math.floor((x0 + x1) / 2), cy = Math.floor((y0 + y1) / 2);
+      return S.map.revealed[cy * S.map.cols + cx] === "1"; };
+    const look = (r) => { const [x0, y0, x1, y1] = r.box; view.mark = [Math.floor((x0 + x1) / 2), Math.floor((y0 + y1) / 2)]; view.draw();
+      setTimeout(() => { view.mark = null; view.draw(); }, 2500); };
+    const rooms = d.rooms.map((r, i) => ({ r, i })).filter(({ r }) => r.kind !== "cell");
+    const cells = d.rooms.map((r, i) => ({ r, i })).filter(({ r }) => r.kind === "cell");
+    const row = ({ r, i }) => h("li", { class: "dg-room" + (r.kind === "boss" ? " is-boss" : "") },
+      icon(r.kind === "boss" ? "crown" : r.kind === "start" ? "flag" : r.kind === "cell" ? "key-round" : "square", "sm"),
+      h("button", { type: "button", class: "linkish grow", title: "Show me where it is", onclick: () => look(r) }, r.name),
+      h("button", { type: "button", class: "btn btn-sm" + (shown(r) ? " btn-quiet" : ""), title: shown(r) ? "Hide it from the players again" : "Let the players see it",
+        onclick: () => act("POST", "/api/maps/" + MID + "/rooms/" + i + "/reveal", { reveal: !shown(r) }, (s) => apply(s)) },
+        icon(shown(r) ? "eye-off" : "sun", "sm"), shown(r) ? " Hide" : " Show"));
+    box.replaceChildren(
+      h("h3", { class: "rule-head" }, (d.theme === "prison" ? "Prison" : d.theme === "cave" ? "Cave" : "Dungeon") + " · level " + d.level),
+      h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, "You see everything. Players see the rooms you show, and rooms light up as heroes walk in. The stairs are in the boss room; a hero who steps on them (with no fight running here) takes everyone to the next level. Put monsters anywhere with Add monsters below."),
+      h("ul", { class: "dg-rooms" }, rooms.map(row)),
+      cells.length ? h("details", { class: "dg-cells" }, h("summary", { class: "lbl" }, cells.length + " cells"), h("ul", { class: "dg-rooms" }, cells.map(row))) : null,
+      h("div", { class: "row", style: "gap:6px;margin-top:8px" },
+        d.prev ? h("a", { class: "btn btn-sm btn-quiet", href: "/map/" + d.prev }, icon("chevron-left", "sm"), " Level " + (d.level - 1)) : null,
+        d.next ? h("a", { class: "btn btn-sm", href: "/map/" + d.next }, "Level " + (d.level + 1) + " ", icon("chevron-right", "sm")) : null,
+        (() => { const b = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("skip-forward", "sm"), d.next ? " Take the party down now" : " Make the next level & take the party down");
+          L.armed(b, () => act("POST", "/api/maps/" + MID + "/next-level", {}, () => refresh(true)), "Click again: everyone goes down"); return b; })()));
   }
 
   // ---- top bar -------------------------------------------------------------------
@@ -387,6 +423,9 @@
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
+      ((c.reaction && c.reaction.prime) || []).forEach((r) => out.push({ name: r.name, instant: true, noUse: true, icon: "flame",
+        info: "cast it now · a hit sets it off: +" + (r.bonus || "1d12") + " on the next hit",
+        run: () => dmReact(c, "prime", { name: r.name }).then((d) => { L.reactionDone(d && d.reaction, c.name); if (d) say(c.id, c.name + " casts " + r.name + ".", "heal"); }) }));
       (c.surges || []).forEach((g) => out.push({ name: g.name, instant: true, noUse: true, icon: "zap", cooldown: g.cooldown || 0, cdName: g.name,
         info: "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn",
         run: () => act("POST", "/api/combatants/" + c.id + "/surge", { spell: g.index }, () => { enc = null; say(c.id, c.name + " uses " + g.name + ".", "hit"); refresh(true); },

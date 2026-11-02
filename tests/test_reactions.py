@@ -223,3 +223,44 @@ def test_players_only_see_their_own_reaction_and_no_hidden_attacker(api, battlem
     api.post(f"/api/encounters/{eid}/damage", {"targets": [by["Aria"]["id"]], "amount": 2, "attacker_id": by["Bandit 1"]["id"]})
     assert battlemap["pb"].get("/api/play/state")["character"]["reaction"]["offers"][0]["kind"] == "sentinel"   # no map: offered
     assert not battlemap["pa"].get("/api/play/state")["character"]["reaction"]["offers"]
+
+
+def test_absorb_that_has_to_be_cast_first(api, battlemap, monkeypatch):
+    """Moni's Absorb Elements is cast on her turn (an action); only then can a hit set it off."""
+    monkeypatch.setattr(dice, "_rng", Loaded())
+    aria = api.get(f"/api/characters/{battlemap['a']['id']}")["character"]
+    api.set_char(aria, spells=[dict(ABSORB, prime=True)], current_hp=20)
+    eid, by = start(api, battlemap)   # Bandit 1's turn
+    a = fighters(api, eid)["Aria"]
+    assert a["reaction"]["prime"] == [{"kind": "absorb", "name": "Absorb Elements", "bonus": "1d12"}]
+    api.post(f"/api/encounters/{eid}/damage", {"targets": [by["Aria"]["id"]], "amount": 4, "attacker_id": by["Bandit 1"]["id"]})
+    assert not fighters(api, eid)["Aria"]["reaction"]["offers"], "not cast yet: nothing to react with"
+    battlemap["pa"].post("/api/play/me/react", {"kind": "absorb"}, 400)
+    battlemap["pa"].post("/api/play/me/react", {"kind": "prime"}, 403)   # not her turn
+    api.post(f"/api/encounters/{eid}/next")                             # her turn
+    r = battlemap["pa"].post("/api/play/me/react", {"kind": "prime"})
+    me = r["character"]
+    assert me["actions"]["left"] == 1 and me["reaction"]["primed"] == ["Absorb Elements"] and not me["reaction"]["prime"]
+    battlemap["pa"].post("/api/play/me/react", {"kind": "prime"}, 400)   # already cast
+    api.post(f"/api/encounters/{eid}/next")
+    api.post(f"/api/encounters/{eid}/damage", {"targets": [by["Aria"]["id"]], "amount": 6, "attacker_id": by["Bandit 2"]["id"], "damage_type": "cold"})
+    assert fighters(api, eid)["Aria"]["reaction"]["offers"][0]["kind"] == "absorb"
+    me = battlemap["pa"].post("/api/play/me/react", {"kind": "absorb"})["character"]
+    assert not me["reaction"]["primed"] and me["reaction"]["prime"], "used up: cast it again for the next time"
+    assert any(x.startswith("Absorb Elements") and "cast" not in x for x in me["conditions"])
+
+
+def test_death_ward_drops_them_to_one_hp_once(api, battlemap):
+    """Lux's Death Ward: cast on a teammate; the first hit that would drop them to 0 leaves them at 1, then it's gone."""
+    aria = api.get(f"/api/characters/{battlemap['a']['id']}")["character"]
+    ward = {"name": "Death Ward", "level": 1, "effect": "buff", "condition": "Death Ward", "rounds": 10, "cooldown": 5, "death_ward": True}
+    api.set_char(aria, spells=[ward], current_hp=8, spellcasting_ability="wis")
+    eid, by = start(api, battlemap, {"Aria": 18, "Bandit 1": 12, "Bandit 2": 5})
+    st = battlemap["pa"].post("/api/play/cast", {"spell": 0, "targets": [aria["id"]]})
+    assert any(x.startswith("Death Ward") for x in st["character"]["conditions"])
+    st = api.post(f"/api/encounters/{eid}/damage", {"targets": [by["Aria"]["id"]], "amount": 30, "attacker_id": by["Bandit 1"]["id"]})
+    a = next(c for c in st["combatants"] if c["name"] == "Aria")
+    assert a["hp"] == 1 and a["status"] == "ok" and not any(x["name"] == "Death Ward" for x in a["conditions"])
+    assert any("drops to 1 HP instead" in e["message"] for e in st["log"])
+    st = api.post(f"/api/encounters/{eid}/damage", {"targets": [by["Aria"]["id"]], "amount": 5, "attacker_id": by["Bandit 1"]["id"]})
+    assert next(c for c in st["combatants"] if c["name"] == "Aria")["hp"] == 0   # only once

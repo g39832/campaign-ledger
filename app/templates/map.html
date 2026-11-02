@@ -73,6 +73,8 @@
 
     <div class="panel" id="selected-panel"></div>
 
+    <div class="panel" id="dungeon-panel" hidden></div>
+
     <div class="panel" id="monster-panel">
       <h3 class="rule-head">Add monsters</h3>
       <input type="search" id="mon-q" placeholder="Search: goblin, wolf, dragon…" aria-label="Search monsters">
@@ -140,6 +142,6 @@
 {% endblock %}
 {% block scripts %}
 <script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=130"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=130"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=133"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=133"></script>
 {% endblock %}

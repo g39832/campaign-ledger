@@ -54,8 +54,10 @@
       catch (e) { toast(e.message, "error"); }
     },
     onMove: async (t, x, y) => {
-      try { await api("POST", "/api/play/tokens/" + t.id + "/move", { x, y }); }
-      catch (e) { toast(e.message, "error"); }
+      try {
+        const r = await api("POST", "/api/play/tokens/" + t.id + "/move", { x, y });
+        if (r && r.next_level && r.next_level.blocked) toast(r.next_level.why + ".", "error");
+      } catch (e) { toast(e.message, "error"); }
       load(true);
     },
   });
@@ -481,6 +483,10 @@
       else if (a.heal || a.ac > 0) out.push(card(a.heal ? "heart" : "shield", a.name || "Heal", a.heal ? "heals " + a.damage.trim() + " · on you or a teammate"
         : "+" + a.ac + " AC · on you or a teammate", () => startHelp(a), { heal: true }));
     });
+    ((c.reaction && c.reaction.prime) || []).forEach((r) => { // cast ahead, set off by a hit later (Moni's Absorb Elements)
+      out.push(card("flame", r.name, "Cast it now · when you're hit, use your reaction for +" + (r.bonus || "1d12") + " on your next hit",
+        () => me("react", { kind: "prime", name: r.name }).then((d) => L.reactionDone(d && d.reaction, c.name, true))));
+    });
     (c.surges || []).forEach((g) => { // a spell row with extra actions (Yamato's Action surge)
       if (g.recharging) return;
       out.push(card("zap", g.name, "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn" + (g.cooldown ? " · " + g.cooldown + "-turn cooldown" : ""),
@@ -736,6 +742,9 @@
         { ms: 12000, action: { label: (o.kind === "sentinel" ? "Strike " + o.vs_name : o.name) + " (reaction)",
           run: () => me("react", { kind: o.kind }).then((d) => L.reactionDone(d && d.reaction, b.name, true)) } });
       const box = document.querySelector("#turns .react-box"); if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    if (before.map && now.map && before.map.id !== now.map.id) { // down the stairs (or the DM showed another map)
+      FX.banner(now.map.name || "A new map", "You arrive somewhere new", "crit"); FX.sound("start");
     }
     const ea = before.encounter, eb = now.encounter;
     if (eb && eb.current && (!ea || ea.current !== eb.current || ea.round !== eb.round)) {

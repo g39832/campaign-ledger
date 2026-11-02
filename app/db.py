@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 MIGRATIONS = {
     1: """
@@ -401,6 +401,10 @@ MIGRATIONS = {
     # v16: everyone's reaction in a fight (used this round, the last hit on them, what they can answer).
     16: """
     ALTER TABLE combatants ADD COLUMN reaction TEXT NOT NULL DEFAULT '{}';
+    """,
+    # v17: made-up maps (dungeon, cave, prison): their rooms, start, stairs and the next level.
+    17: """
+    ALTER TABLE maps ADD COLUMN dungeon TEXT NOT NULL DEFAULT '';
     """,
 }
 

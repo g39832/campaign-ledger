@@ -1300,10 +1300,21 @@ def apply_hp(ctx, cid, data, by=None):
                                 max_hp=c["max_hp"], temp_stacking=ctx.settings["temp_hp_stacking"])
     if by:
         label = f"{label} ({by})"
+    ward = None
+    if data.get("op") == "damage" and before["hp"] > 0 and v["hp"] == 0:
+        # Death Ward: they drop to 1 HP instead, and the ward is gone
+        ward = next((x for x in c["conditions"] if isinstance(x, dict) and x.get("death_ward") and not x.get("expired")), None)
+        if ward:
+            v = dict(v, hp=1, status=before["status"])
+            note = f" — {ward['name']}: drops to 1 HP instead of 0, and the ward ends"
     if v == before:
         ctx.log("hp", label + note + " (no change)")
         return v
     ctx.set_vitals(c, **v)
+    if ward:
+        drop_conditions(ctx, ctx.combatant(cid), {ward["id"]}, quiet=True)
+        from .maps import attack_fx
+        attack_fx(ctx.conn, ctx.enc["id"], None, [(cid, "saved")], ward["name"], "heal", "", None, "holy")
     if c["linked"] and before["hp"] > 0 and v["hp"] == 0:
         prone = knocked_prone(c["conditions"])
         if prone is not None:

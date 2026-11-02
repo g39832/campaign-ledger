@@ -618,6 +618,11 @@
       cdLeft(g.name) ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
         : h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On themselves, for the rest of their turn", onclick: () => run("POST", "/api/combatants/" + c.id + "/surge", { spell: g.index }) },
           icon("zap", "sm"), " Use"))) : [];
+    ((c.reaction && c.reaction.prime) || []).forEach((r) => surges.push(h("div", { class: "spell-row does-buff" },
+      h("div", { class: "sr-main" }, h("div", { class: "sr-name" }, h("b", null, r.name)),
+        h("div", { class: "faint sr-what" }, "Cast it first (an action) · then a hit lets them react: +" + (r.bonus || "1d12") + " on the next hit")),
+      h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () => dmReact(c, "prime", { name: r.name }).then((d) => L.reactionDone(d && d.reaction, c.name)) },
+        icon("flame", "sm"), " Cast"))));
     if (!items.length && !fromBook && !surges.length) return null;
     return h("div", { class: "hit-attacks hit-spells" },
       h("div", { class: "lbl" }, "Spells",

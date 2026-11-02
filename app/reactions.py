@@ -61,7 +61,9 @@ def rows_of(ch):
                         "reduce": str(r.get("reduce") or ("1d10+dex+level" if k == "deflect" else "")).strip()[:40],
                         "redirect": bool(r.get("redirect", k == "deflect")),
                         "bonus": str(r.get("bonus_dice") or ("1d12" if k == "absorb" else "")).strip()[:20],
-                        "attack": r.get("attack_row")})
+                        "attack": r.get("attack_row"),
+                        # it has to be cast first, on their turn (Moni's Absorb Elements); then a hit can set it off
+                        "prime": bool(r.get("prime"))})
     return out
 
 
@@ -256,6 +258,9 @@ def info(ctx, c, ch=None):
         return out
     rows = rows_of(ch) if ch else []
     out["rows"] = [{"kind": r["kind"], "name": r["name"]} for r in rows]
+    # reactions that need casting first: the ones not cast yet (a button on their turn), and the cast ones
+    out["prime"] = [{"kind": r["kind"], "name": r["name"], "bonus": r["bonus"]} for r in rows if r["prime"] and not primed(c, r["name"])]
+    out["primed"] = [r["name"] for r in rows if r["prime"] and primed(c, r["name"])]
     offer = st.get("offer") or {}
     if offer.get("kind") == "redirect" and _fresh(ctx, offer):  # part of a Deflect that's already used
         out["offers"].append(dict(offer, targets=_redirect_targets(ctx, c, offer)))
@@ -269,12 +274,46 @@ def info(ctx, c, ch=None):
         if r["kind"] == "deflect" and hit:
             out["offers"].append({"kind": "deflect", "name": r["name"], "amount": hit["amount"], "reduce": resolve_dice(r["reduce"], ch),
                                   "redirect": r["redirect"], "by_name": _name(ctx, hit.get("by"))})
-        elif r["kind"] == "absorb" and hit and (not hit["type"] or hit["type"] in ELEMENTS):
+        elif r["kind"] == "absorb" and hit and (not hit["type"] or hit["type"] in ELEMENTS) and (not r["prime"] or primed(c, r["name"])):
             out["offers"].append({"kind": "absorb", "name": r["name"], "amount": hit["amount"], "type": hit["type"], "bonus": r["bonus"]})
         elif r["kind"] == "sentinel" and offer.get("kind") == "sentinel" and _fresh(ctx, offer) and _standing(ctx, offer.get("vs")):
             out["offers"].append({"kind": "sentinel", "name": r["name"], "vs": offer["vs"], "vs_name": offer.get("vs_name"),
                                   "on": offer.get("on") or [], "attack": _hit_back_row(ch, r)[1] if ch else ""})
     return out
+
+
+def primed(c, name):
+    """The effect a cast-first reaction leaves on them until a hit sets it off, or None."""
+    return next((x for x in c["conditions"] if isinstance(x, dict) and x.get("primed") == name and not x.get("expired")), None)
+
+
+def prime(ctx, cid, name=None):
+    """Cast a reaction that has to be ready before the hit (Absorb Elements): on their own turn,
+    as one of their actions. It waits on them (until a hit sets it off, or the fight ends)."""
+    from .combat import used_a_move
+    from .maps import attack_fx
+    from .movement import check_action
+    c = ctx.combatant(cid)
+    ch = _char(ctx.conn, c["character_id"]) if c["linked"] else None
+    rows = [r for r in rows_of(ch) if r["prime"] and (not name or r["name"] == str(name).strip())] if ch else []
+    if not rows:
+        raise F.ApiError(f"{c['name']} has nothing to cast ahead like that")
+    row = rows[0]
+    if ctx.enc["status"] != "active":
+        raise F.ApiError("That's for a running fight")
+    if ctx.enc["current_id"] != cid:
+        raise F.ApiError(f"Cast {row['name']} on {c['name']}'s turn", status=403)
+    if primed(c, row["name"]):
+        raise F.ApiError(f"{row['name']} is already cast — it's waiting for a hit")
+    check_action(ctx.conn, cid, row["name"])
+    cond = {"id": uuid.uuid4().hex[:12], "name": row["name"] + " (cast)", "primed": row["name"],
+            "note": f"When you're hit, use your reaction: +{row['bonus'] or '1d12'} on your next hit", "rounds_left": None,
+            "encounter_id": ctx.enc["id"], "expired": False, "applied_round": ctx.enc["round"]}
+    ctx.set_vitals(c, conditions=c["conditions"] + [cond])
+    ctx.log("spell", f"{c['name']} casts {row['name']}: ready for the next hit (a reaction)")
+    used_a_move(ctx, cid, row["name"])
+    attack_fx(ctx.conn, ctx.enc["id"], cid, [(cid, "auto")], row["name"], "buff", "", None, "arcane")
+    return {"kind": "prime", "name": row["name"], "text": f"{row['name']} is cast — when you're hit, you can use it."}
 
 
 def _name(ctx, cid):
@@ -360,6 +399,8 @@ def react(ctx, cid, kind, data=None, viewer=None):
         return {"kind": "burn", "text": f"{c['name']} used their reaction ({what})."}
     if kind == "redirect":
         return _redirect(ctx, c, data)
+    if kind == "prime":
+        return prime(ctx, cid, data.get("name"))
     ch = _char(ctx.conn, c["character_id"]) if c["linked"] else None
     if ch is None:
         raise F.ApiError("That reaction is on a character's sheet")
@@ -414,8 +455,11 @@ def react(ctx, cid, kind, data=None, viewer=None):
                     "dmg_mod": "+" + bonus.lstrip("+"), "once": True, "rounds_left": 2 if mine else 1, "tick": "end", "tick_on": cid,
                     "encounter_id": ctx.enc["id"], "auto_expire": True, "expired": False, "applied_round": ctx.enc["round"],
                     "source": {"spell": row["name"], "caster": cid}}
+            if row["prime"] and not primed(c, row["name"]):
+                raise F.ApiError(f"{row['name']} has to be cast first, on {c['name']}'s turn")
             c2 = ctx.combatant(cid)
-            ctx.set_vitals(c2, conditions=[x for x in c2["conditions"] if x.get("name") != row["name"] or x.get("cooldown")] + [cond])
+            ctx.set_vitals(c2, conditions=[x for x in c2["conditions"] if (x.get("name") != row["name"] or x.get("cooldown"))
+                                           and x.get("primed") != row["name"]] + [cond])
             ctx.conn.execute("UPDATE hp_changes SET label = label || ? WHERE id = ?", (" " + MARK["absorb"], hit["change"]))
             ctx.log("condition", f"{c['name']} uses {row['name']} (reaction): +{bonus}{' ' + typ if typ else ''} damage on their next hit")
             out.update(bonus=bonus, type=typ)

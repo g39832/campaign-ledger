@@ -448,7 +448,7 @@
     ["swords", "Attack one enemy", { effect: "damage", hit: "attack", dice: "1d10", targets: 1 }],
     ["wand-sparkles", "Hit an area", { effect: "damage", hit: "dex", dice: "3d6", area: "15 ft cone", save_half: true }],
     ["heart", "Heal", { effect: "heal", dice: "1d8+mod" }],
-    ["shield-plus", "Help an ally", { effect: "buff", ac: 2, rounds: 10 }],
+    ["shield-plus", "Help an ally", { effect: "buff", rounds: 10 }],
     ["zap", "Hinder an enemy", { effect: "debuff", hit: "wis", condition: "Frightened", rounds: 10, repeat_save: true }],
     ["users", "Summon a creature", { effect: "buff", summon: "" }],
     ["shield", "Reaction: when I'm hit", { effect: "", reaction: "deflect", reduce: "1d10+dex+level", redirect: true }],
@@ -522,7 +522,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone, s.summon_count, s.summon_max, s.on_death].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.death_ward, s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone, s.summon_count, s.summon_max, s.on_death].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const burst = s.on_death || null;
       const setBurst = (k, val) => set(i, "on_death", val === null ? null : Object.assign({ save: "dex", dc: 10, reach: 5 }, burst || {}, k ? { [k]: val } : {}), true);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
@@ -533,6 +533,7 @@
           does === "buff" ? field("Extra damage on hits", text(i, "dmg_mod", { short: true, placeholder: "1d4", title: "Divine Favor: 1d4" })) : null,
           does !== "heal" ? field("Advantage", pick(i, "adv", ADV_PICK)) : null,
           does === "buff" || does === "heal" ? field("Temp HP", text(i, "temp_hp", { short: true, placeholder: "1d4+4", title: "False Life: 1d4+4" })) : null,
+          does === "buff" ? chk(i, "death_ward", "Death Ward: the first time they'd drop to 0 HP, they drop to 1 instead", !!s.death_ward) : null,
           does === "buff" ? field("More max HP", num(i, "max_hp", { min: 0, max: 100, placeholder: "e.g. 5", title: "Aid: 5. It goes away again when the effect ends." })) : null,
           field("Every turn", h("div", { class: "row", style: "gap:4px;flex-wrap:nowrap" },
             text(i, "ongoing", { short: true, placeholder: "2d10", title: "Rolled at the start of the target's turn while it lasts (Moonbeam 2d10, Heroism mod, Regenerate 1)", style: "flex:1 1 60px;min-width:0" }),
@@ -585,6 +586,7 @@
         rk === "deflect" ? field("Cuts the hit by", text(i, "reduce", { short: true, placeholder: "1d10+dex+level", title: "Dice, plus str/dex/con/int/wis/cha (that modifier), level, prof" })) : null,
         rk === "deflect" ? chk(i, "redirect", "Cut to 0: send it at an enemy (10 ft, 60 ft for a projectile)", s.redirect !== false) : null,
         rk === "absorb" ? field("Extra dice on the next hit", text(i, "bonus_dice", { short: true, placeholder: "1d12" })) : null,
+        rk === "absorb" || rk === "deflect" ? chk(i, "prime", "Has to be cast first (on your turn, uses an action); then a hit sets it off", !!s.prime) : null,
         rk === "sentinel" ? field("Hits back with", h("select", { onchange: (e) => set(i, "attack_row", e.target.value === "" ? null : Number(e.target.value), true) },
           atkPick.map(([v, l]) => h("option", { value: v, selected: String(s.attack_row ?? "") === v }, l)))) : null,
         field("Extra actions this turn", num(i, "extra_moves", { min: 0, max: 10, placeholder: "0", title: "Action Surge: using it gives this many more actions this turn" })),
