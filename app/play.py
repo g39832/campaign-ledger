@@ -212,10 +212,19 @@ def _own_character(conn, char_id):
         a["recharging"] = cooldown_left(c["conditions"], (a["name"] or "Attack").strip() or "Attack", fight["eid"]) if fight else 0
     out["my_turn"] = None if fight is None else fight["current_id"] == fight["cb_id"]
     out["parry"] = None
+    out["reaction"] = None
     if fight is not None:
         from .combat import Ctx, parry_state
-        me = Ctx(conn, fight["eid"]).combatant(fight["cb_id"])
+        from .reactions import info as reaction_info
+        fctx = Ctx(conn, fight["eid"])
+        me = fctx.combatant(fight["cb_id"])
         out["parry"] = parry_state(conn, me, c)
+        out["reaction"] = reaction_info(fctx, me, c)  # ready or used, and what they can answer right now
+    # spell rows that give extra actions (Yamato's Action surge)
+    out["surges"] = [{"index": i, "name": (str(s.get("name") or "").strip() or "Action Surge"), "extra_moves": extra_moves(s),
+                      "cooldown": spell_info(s)["cooldown"],
+                      "recharging": cooldown_left(c["conditions"], (str(s.get("name") or "").strip() or "Action Surge"), fight["eid"]) if fight else 0}
+                     for i, s in enumerate(c.get("spells") or []) if isinstance(s, dict) and extra_moves(s)]
     out["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(c.get("spells") or [])
                      if spell_does_something(spell_info(s))]
     from .aura import is_on
@@ -237,7 +246,9 @@ def _own_character(conn, char_id):
     from .movement import actions as acts_of, turn_info
     from .spells import clone_attacks, my_clones
     clones, cf = my_clones(conn, char_id)
+    from .reactions import ready as reaction_ready
     out["clones"] = [{"id": k["id"], "name": k["name"], "hp": k["hp"], "max_hp": k["max_hp"], "my_turn": cf["current_id"] == k["id"],
+                      "ac": k["ac"], "reaction_ready": reaction_ready(conn, k["id"]),
                       "actions": acts_of(conn, k["id"]), "move": (lambda t: t and {x: t[x] for x in ("my_turn", "speed", "used", "left", "held", "budget", "from")})(turn_info(conn, k["id"])),
                       "attacks": [{x: a[x] for x in ("index", "name", "damage", "reach")} for a in clone_attacks(k)]} for k in clones]
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
@@ -264,7 +275,7 @@ def _player_encounter(conn, campaign_id, live_map):
     rows = conn.execute(
         """SELECT c.id, c.kind, c.hidden, c.character_id, COALESCE(ch.name, c.name) AS name,
                   COALESCE(ch.current_hp, c.current_hp) AS hp, COALESCE(ch.max_hp, c.max_hp) AS max_hp,
-                  COALESCE(ch.status, c.status) AS status, c.init_roll, c.statblock, cr.boss AS cr_boss, cr.has_phase2 AS cr_has_phase2, cr.portrait AS cr_portrait
+                  COALESCE(ch.status, c.status) AS status, c.init_roll, c.statblock, cr.boss AS cr_boss, cr.has_phase2 AS cr_has_phase2, cr.portrait AS cr_portrait, cr.tagline AS cr_tagline
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""", (enc["id"],)).fetchall()
     order, current_name = [], None
@@ -285,7 +296,8 @@ def _player_encounter(conn, campaign_id, live_map):
             if sb.get("boss") or r["cr_boss"]:  # the boss bar: in quarters, never the HP itself
                 p2 = sb["has_phase2"] if sb.get("has_phase2") is not None else r["cr_has_phase2"]
                 item.update(boss=True, quarters=0 if r["hp"] <= 0 else max(1, math.ceil(r["hp"] * 4 / r["max_hp"])),
-                            phase=2 if p2 and 0 < r["hp"] * 2 <= r["max_hp"] else 1, portrait=r["cr_portrait"])
+                            phase=2 if p2 and 0 < r["hp"] * 2 <= r["max_hp"] else 1, portrait=r["cr_portrait"],
+                            tagline=str(sb.get("tagline") or r["cr_tagline"] or ""), fresh=r["hp"] >= r["max_hp"])
         if item["is_current"]:
             current_name = r["name"]
         order.append(item)
@@ -584,9 +596,102 @@ def api_me_surge():
         if cb is None:
             raise F.ApiError("Action Surge is for fights, and there's no fight running")
         ctx = Ctx(conn, cb["encounter_id"])
-        surge(ctx, cb["id"], data.get("index"), by_player=True)
+        if data.get("spell") is not None:  # a spell row with extra actions
+            surge(ctx, cb["id"], data.get("spell"), by_player=True, where="spells")
+        else:
+            surge(ctx, cb["id"], data.get("index"), by_player=True)
         conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
     return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/react")
+def api_me_react():
+    """The player uses their reaction (any time, not just on their turn): {kind: deflect | absorb |
+    sentinel | redirect | burn, target (redirect), what (burn), as (their clone, for burn)}."""
+    from .combat import Ctx
+    from .db import claim_op
+    from .reactions import react
+    from .rest import active_combatant
+    from .rolls import AC_NOTE, roll_dict
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    kind = str(data.get("kind") or "")
+    if kind not in ("deflect", "absorb", "sentinel", "redirect", "burn"):
+        raise F.ApiError("Which reaction?")
+    out = {}
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("Reactions are for fights, and there's no fight running")
+        who = cb["id"]
+        if data.get("as"):  # their clone
+            from .spells import my_clones
+            k = next((k for k in my_clones(conn, char_id)[0] if k["id"] == data["as"]), None)
+            if k is None:
+                raise F.ApiError("That clone isn't in the fight any more", status=403)
+            if kind != "burn":
+                raise F.ApiError(f"{k['name']} can only use its reaction by hand")
+            who = k["id"]
+        if claim_op(conn, data.get("op_id")):
+            ctx = Ctx(conn, cb["encounter_id"], viewer=ident)
+            from .spells import record, snapshot
+            snap = snapshot(ctx)
+            out = react(ctx, who, kind, data, ident)
+            record(ctx, snap)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+            live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+            if live:
+                _bump(conn, live)
+    if out.get("rolls"):
+        conn = get_db()
+        out["rolls"] = [roll_dict(r, ident) for r in conn.execute(
+            f"SELECT * FROM rolls WHERE id IN ({','.join('?' * len(out['rolls']))}) ORDER BY id", out["rolls"]).fetchall()]
+    if out.get("summary"):
+        out["summary"] = AC_NOTE.sub("", out["summary"])  # players never see an Armor Class
+    for t in out.get("targets") or []:
+        t["text"] = AC_NOTE.sub("", t.get("text") or "")
+        t.pop("vs", None)
+    return jsonify({"character": _own_character(get_db(), char_id), "reaction": out})
+
+
+@bp.post("/api/play/me/dismiss")
+def api_me_dismiss():
+    """The player sends one of their clones away (de-summoned: no burst). {as: clone id}"""
+    from .combat import Ctx
+    from .rest import active_combatant
+    from .spells import my_clones
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        cb = active_combatant(conn, char_id)
+        if cb is None:
+            raise F.ApiError("There's no fight running")
+        k = next((k for k in my_clones(conn, char_id)[0] if k["id"] == data.get("as")), None)
+        if k is None:
+            raise F.ApiError("That clone isn't in the fight any more", status=403)
+        ctx = Ctx(conn, cb["encounter_id"])
+        from .spells import record, snapshot
+        snap = snapshot(ctx)
+        dismiss(ctx, k)
+        ctx.log("roster", f"{ident['name']} dismissed {k['name']}")
+        record(ctx, snap)
+        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), cb["encounter_id"]))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
+    return jsonify({"character": _own_character(get_db(), char_id)})
+
+
+def dismiss(ctx, k):
+    """A summoned clone goes away: off the map and out of the fight (on its turn, the turn moves on)."""
+    from .combat import next_turn
+    if ctx.enc["current_id"] == k["id"]:
+        next_turn(ctx)
+    ctx.conn.execute("UPDATE hp_changes SET combatant_id = NULL WHERE combatant_id = ?", (k["id"],))
+    for m in ctx.conn.execute("SELECT DISTINCT map_id FROM map_tokens WHERE combatant_id = ?", (k["id"],)).fetchall():
+        ctx.conn.execute("DELETE FROM map_tokens WHERE map_id = ? AND combatant_id = ?", (m["map_id"], k["id"]))
+        _bump(ctx.conn, m["map_id"])
+    ctx.conn.execute("DELETE FROM combatants WHERE id = ?", (k["id"],))
 
 
 @bp.post("/api/play/me/end-turn")

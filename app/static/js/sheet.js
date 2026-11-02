@@ -293,6 +293,10 @@
         cols.map((c) => {
           const box = c.type === "check"
             ? h("input", { type: "checkbox", checked: !!row[c.key], "aria-label": c.label, onchange: (e) => update(i, c.key, e.target.checked) })
+            : c.type === "select"
+              ? h("select", { "aria-label": c.label, title: c.title || null, onchange: (e) => { update(i, c.key, e.target.value);
+                if (c.key === "reaction") update(i, "parry", e.target.value === "parry"); } },
+                c.options.map(([v, l]) => h("option", { value: v, selected: (row[c.key] || (c.key === "reaction" && row.parry ? "parry" : "")) === v }, l)))
             : c.type === "number"
               ? h("input", { type: "number", value: row[c.key] ?? "", placeholder: c.placeholder || "", "aria-label": c.label,
                 oninput: (e) => update(i, c.key, e.target.value === "" ? null : Number(e.target.value)) })
@@ -335,6 +339,8 @@
     { key: "condition", label: "On a hit, they're", placeholder: "e.g. Grappled" },
     { key: "extra_moves", label: "Extra moves", type: "number", placeholder: "0" },
     { key: "dmg_mult", label: "Damage ×", type: "number", placeholder: "1" },
+    { key: "reaction", label: "Reaction", type: "select", options: [["", "No"], ["sentinel", "Sentinel: hit back"], ["parry", "Parry: roll-off"]],
+      title: "Used off your turn, once a round. Sentinel: when an enemy next to you attacks someone else, you strike it with your first melee attack." },
   ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "", extra_moves: null, dmg_mult: null }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
     fold: { summary: attackSummary },
@@ -364,6 +370,7 @@
       n(r.extra_moves) ? "+" + n(r.extra_moves) + " extra moves" : "",
       n(r.dmg_mult) > 1 ? (noDice ? "your damage ×" + n(r.dmg_mult) + " this turn" : "×" + n(r.dmg_mult) + " damage on a hit") : "",
       n(r.cooldown) ? n(r.cooldown) + "-turn cooldown" : "",
+      r.reaction === "sentinel" ? "reaction: hit back an enemy next to you that attacks someone else" : r.reaction === "parry" || r.parry ? "reaction: parry" : "",
       String(r.area || "").trim(),
       String(r.notes || "").trim().slice(0, 70)].filter(Boolean).join(" · ");
   }
@@ -435,6 +442,22 @@
     ["attacked_adv", "Attacks against it have advantage"], ["attacked_dis", "Attacks against it have disadvantage"]];
   const ONGOING_PICK = [["damage", "damage"], ["heal", "healing"], ["temp", "temp HP"]];
   const SPELL_BLANK = { prepared: false, level: 1, name: "", notes: "", effect: "", dice: "", hit: "", condition: "", rounds: null, ac: null };
+  /* Quick starts: pick what it does and the card fills in the usual fields (you change them after).
+     The name, level and notes you've typed stay. */
+  const SPELL_PRESETS = [
+    ["swords", "Attack one enemy", { effect: "damage", hit: "attack", dice: "1d10", targets: 1 }],
+    ["wand-sparkles", "Hit an area", { effect: "damage", hit: "dex", dice: "3d6", area: "15 ft cone", save_half: true }],
+    ["heart", "Heal", { effect: "heal", dice: "1d8+mod" }],
+    ["shield-plus", "Help an ally", { effect: "buff", ac: 2, rounds: 10 }],
+    ["zap", "Hinder an enemy", { effect: "debuff", hit: "wis", condition: "Frightened", rounds: 10, repeat_save: true }],
+    ["users", "Summon a creature", { effect: "buff", summon: "" }],
+    ["shield", "Reaction: when I'm hit", { effect: "", reaction: "deflect", reduce: "1d10+dex+level", redirect: true }],
+    ["swords", "Reaction: hit back", { effect: "", reaction: "sentinel" }],
+    ["zap", "Extra actions this turn", { effect: "", extra_moves: 1, cooldown: 3 }],
+  ];
+  const REACTION_PICK = [["", "No — it's used on your turn"], ["parry", "Parry: roll off d20 vs the DM, win = take half"],
+    ["deflect", "Cut the hit by dice (Deflect Attacks)"], ["absorb", "Extra dice on your next hit (Absorb Elements)"],
+    ["sentinel", "Hit back an enemy next to you that attacks someone else (Sentinel)"]];
   /* Spells fold up to one line (name, what it does, its roll buttons); click the arrow
      or the summary to open one and edit it. Which ones are open is remembered on this
      device. A spell that was just added opens by itself. */
@@ -499,7 +522,9 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone, s.summon_count, s.summon_max, s.on_death].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const burst = s.on_death || null;
+      const setBurst = (k, val) => set(i, "on_death", val === null ? null : Object.assign({ save: "dex", dc: 10, reach: 5 }, burst || {}, k ? { [k]: val } : {}), true);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
         h("summary", { class: "lbl" }, "More effects (bonus to rolls, advantage, temp HP, every turn, upcasting…)"),
         h("div", { class: "spell-fields" },
@@ -519,8 +544,16 @@
           does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
           field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
-          field("Summons (a creature from the library)", text(i, "summon", { short: true, placeholder: "e.g. Yamato clone", title: "It joins the fight on your side, next to you, and acts right after you" })),
-          chk(i, "parry", "Parry: when hit, roll off d20 vs the DM — win and take half", !!s.parry, "A reaction: a Parry? button shows when they're hit"),
+          field("Summons (a creature from the library)", text(i, "summon", { short: true, placeholder: "e.g. Yamato clone", title: "It joins the fight on your side, next to you, and acts right after you", onchange: () => redrawSoon() })),
+          s.summon ? field("How many each time", num(i, "summon_count", { min: 1, max: 10, placeholder: "1" })) : null,
+          s.summon ? field("Most out at once (all your summons)", num(i, "summon_max", { min: 1, max: 10, placeholder: "add them up", title: "Yamato: 3. Left empty, each summon spell adds its own count" })) : null,
+          s.summon ? field("Its AC (empty: the creature's)", num(i, "summon_ac", { min: 0, max: 40, placeholder: "creature's" })) : null,
+          s.summon ? field("Its HP (empty: the creature's)", num(i, "summon_hp", { min: 1, max: 9999, placeholder: "creature's" })) : null,
+          s.summon ? h("label", { class: "check", style: "font-size:.88rem" }, h("input", { type: "checkbox", checked: !!burst, onchange: (e) => setBurst(null, e.target.checked ? {} : null) }),
+            "When one is destroyed it bursts: enemies next to it save or lose an action") : null,
+          s.summon && burst ? field("Burst save", pick(i, "_burst_save", SPELL_ABIL, { onchange: (e) => setBurst("save", e.target.value) }, burst.save || "dex")) : null,
+          s.summon && burst ? field("Burst DC", h("input", { type: "number", min: 1, max: 40, value: burst.dc ?? 10, onchange: (e) => setBurst("dc", Number(e.target.value) || 10) })) : null,
+          s.summon && burst ? field("Burst reaches (ft)", h("input", { type: "number", min: 5, max: 120, step: 5, value: burst.reach ?? 5, onchange: (e) => setBurst("reach", Number(e.target.value) || 5) })) : null,
           chk(i, "aura", "Switched on and off (a magic item's aura): lasts until switched off", !!s.aura, "Reaches allies within its Area (default 60 ft)"),
           chk(i, "zone", "Stays up around the caster (Spirit Guardians): enemies in its Area are hit once, then it lasts its Rounds", !!s.zone, "Set the Area (20 ft radius = 20 ft all around) and Rounds; the cooldown starts when it goes down"),
           s.zone ? field("Enemies' speed in it", pick(i, "zone_speed", [["", "Normal"], ["0.5", "Half"], ["0.25", "Quarter"]], { title: "Enemies inside move this fast" })) : null,
@@ -528,6 +561,35 @@
           field("Changes the map", pick(i, "terrain", [["", "No"], ["rock", "Raise solid rock (blocks movement)"], ["mend", "Mend the ground"]], { title: "Aim it on the battle map; it needs an Area" })))) : null;
       const open = openSpells.has(i);
       const toggle = () => { setOpen(i, !open); renderSpells(); };
+      const preset = (label, vals) => {
+        const l = clone(model.spells) || [];
+        const keep = { name: l[i].name, level: l[i].level, notes: l[i].notes, prepared: l[i].prepared };
+        l[i] = Object.assign({}, SPELL_BLANK, vals, keep, { parry: vals.reaction === "parry" });
+        if (vals.summon === "" && !l[i].summon) l[i].summon = "";
+        b.set("spells", l, true); renderSpells();
+        toast("Filled in for “" + label + "”. Change anything below.", "ok");
+      };
+      const quick = open && !does && !s.reaction && !s.parry && !Number(s.extra_moves) ? h("div", { class: "spell-quick" },
+        h("span", { class: "lbl" }, "What does it do? Tap one to fill it in"),
+        h("div", { class: "spell-quick-btns" }, SPELL_PRESETS.map(([ic, label, vals]) => h("button", { type: "button", class: "btn btn-sm", onclick: () => preset(label, vals) }, icon(ic, "sm"), " " + label)))) : null;
+      const rk = s.reaction || (s.parry ? "parry" : "");
+      const atkPick = [["", "Your first melee attack"]].concat((model.attacks || []).map((a, k) => [String(k), (a.name || "Attack").trim() || "Attack"]));
+      const reactBits = open ? [
+        field("Reaction (off your turn, once a round)", h("select", { onchange: (e) => {
+          const l = clone(model.spells) || [];
+          l[i] = Object.assign({}, SPELL_BLANK, l[i], { reaction: e.target.value, parry: e.target.value === "parry" });
+          if (e.target.value === "deflect" && !l[i].reduce) Object.assign(l[i], { reduce: "1d10+dex+level", redirect: true });
+          if (e.target.value === "absorb" && !l[i].bonus_dice) l[i].bonus_dice = "1d12";
+          b.set("spells", l, true); renderSpells();
+        } }, REACTION_PICK.map(([v, l]) => h("option", { value: v, selected: rk === v }, l))), "spell-wide"),
+        rk === "deflect" ? field("Cuts the hit by", text(i, "reduce", { short: true, placeholder: "1d10+dex+level", title: "Dice, plus str/dex/con/int/wis/cha (that modifier), level, prof" })) : null,
+        rk === "deflect" ? chk(i, "redirect", "Cut to 0: send it at an enemy (10 ft, 60 ft for a projectile)", s.redirect !== false) : null,
+        rk === "absorb" ? field("Extra dice on the next hit", text(i, "bonus_dice", { short: true, placeholder: "1d12" })) : null,
+        rk === "sentinel" ? field("Hits back with", h("select", { onchange: (e) => set(i, "attack_row", e.target.value === "" ? null : Number(e.target.value), true) },
+          atkPick.map(([v, l]) => h("option", { value: v, selected: String(s.attack_row ?? "") === v }, l)))) : null,
+        field("Extra actions this turn", num(i, "extra_moves", { min: 0, max: 10, placeholder: "0", title: "Action Surge: using it gives this many more actions this turn" })),
+      ] : [];
+      const plain = open ? [L.spellWhat(v), does ? L.spellLands(v, sp ? { dc: sp.dc, attack: sp.atk } : null, true) : ""].filter(Boolean).join(" · ") : "";
       const brief = [L.levelWord(v), L.spellWhat(v) || (does ? "" : "notes"), Number(s.cooldown) ? s.cooldown + "-turn cooldown" : "", s.notes ? String(s.notes).slice(0, 80) : ""].filter(Boolean).join(" · ");
       return h("div", { class: "spell-card" + (does ? " does-" + does : "") + (open ? " is-open" : " is-folded") },
         h("div", { class: "spell-top" },
@@ -538,10 +600,14 @@
             s.aura ? L.auraButton(Object.assign({}, s, { index: i, aura_on: auraOn(s), used: !!s.used }), "/api/characters/" + char.id + "/aura", (d) => { if (d && d.character) { b.refresh(d.character); renderConds(); renderSpells(); } }) : null),
           back, del),
         open ? null : h("button", { type: "button", class: "spell-brief", onclick: toggle, title: "Open it to edit" }, brief || "Click to open"),
+        open ? h("div", { class: "spell-plain" + (plain ? "" : " is-empty") }, icon("wand-sparkles", "sm"),
+          h("span", null, plain ? "In a fight: " + plain : "Only notes for now — it won't have a button in a fight. Pick what it does below.")) : null,
+        quick,
         open ? h("div", { class: "spell-fields" },
           field("Does", pick(i, "effect", SPELL_DOES, null, does)),
           field("Level", pick(i, "level", [["0", "Cantrip"]].concat([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), "Level " + n])), null, String(Number(s.level) || 0))),
-          does ? field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "none", title: "Turns to wait before using it again (no spell slots: this is what limits it)" })) : null,
+          does || rk || Number(s.extra_moves) ? field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "none", title: "Turns to wait before using it again (no spell slots: this is what limits it)" })) : null,
+          ...reactBits,
           does ? chk(i, "per_fight", "Once per fight", !!s.per_fight, "Usable once in each fight (Echo Knight); it's back in the next fight") : null,
           does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
             text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => redrawSoon() })) : null,

@@ -355,7 +355,10 @@ def add_fx(map_id, fx):
     store[map_id] = keep[-40:]
 
 
-def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type="", area=None):
+LOOKS = ("slash", "punch", "bite", "arrow", "flames", "frost", "sparks", "holy", "venom", "arcane", "rock", "quake")
+
+
+def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type="", area=None, style=""):
     """Show an attack on every map of this fight: from the attacker's token to each target's.
     hits: [(combatant id, how)] with how = hit, crit, miss, saved, failed, auto."""
     from .movement import _token_of
@@ -373,7 +376,8 @@ def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type=
         add_fx(m["id"], {"name": str(name or "")[:60], "kind": kind or "damage", "type": str(damage_type or "")[:20],
                          "from": [round(a["x"] + a["size"] / 2, 2), round(a["y"] + a["size"] / 2, 2)] if a else None,
                          "to": to, "how": hows, "area": {"kind": area["kind"], "squares": round(area["size"] / 5, 1)}
-                         | ({"at": area["at"]} if area.get("at") else {}) if area else None})
+                         | ({"at": area["at"]} if area.get("at") else {}) if area else None}
+               | ({"style": style} if style in LOOKS else {}))
 
 
 @bp.post("/maps/<int:map_id>/fx")
@@ -389,7 +393,19 @@ def api_fx(map_id):
     area = data.get("area") if isinstance(data.get("area"), dict) and data["area"].get("kind") in ("cone", "line", "circle", "square") else None
     attack_fx(conn, m["encounter_id"], int(data["by"]) if str(data.get("by", "")).isdigit() else None, hits,
               data.get("name"), data.get("kind") or "damage", data.get("damage_type") or "",
-              {"kind": area["kind"], "size": max(5, min(200, int(area.get("size") or 15))), "at": _area_at(area)} if area else None)
+              {"kind": area["kind"], "size": max(5, min(200, int(area.get("size") or 15))), "at": _area_at(area)} if area else None,
+              str(data.get("style") or ""))
+    if str(data.get("by", "")).isdigit() and hits and (data.get("kind") or "damage") == "damage":
+        # an attack, hit or miss: Gnocchi's Sentinel can answer an enemy next to her attacking someone else
+        from .combat import Ctx
+        from .reactions import load, note_attack
+        with tx() as wconn:
+            ctx = Ctx(wconn, m["encounter_id"])
+            if ctx.enc["status"] == "active":
+                before = {c["id"]: load(wconn, c["id"]).get("offer") for c in ctx.combatants() if c["linked"]}
+                note_attack(ctx, int(data["by"]), [cid for cid, _how in hits])
+                if any(load(wconn, k).get("offer") != v for k, v in before.items()):
+                    wconn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), ctx.enc["id"]))
     return jsonify({"pings": recent_pings(map_id)})
 
 

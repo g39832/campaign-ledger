@@ -43,6 +43,9 @@ moni = call("GET", "/api/characters/2")["character"]
 item = next((i for i, s in enumerate(moni["spells"]) if s.get("aura")), None)
 if item is not None:
     call("POST", "/api/characters/2/aura", {"index": item, "on": False})
+for pl in call("GET", "/api/campaigns/1/players")["players"]:  # the copy may have Moni claimed by someone
+    if pl.get("character_id") == 2:
+        call("DELETE", f"/api/players/{pl['id']}")
 code = call("POST", "/api/campaigns/1/join-code", {"action": "new"})["join_code"]
 
 with sync_playwright() as p:

@@ -83,7 +83,8 @@ def _combatant_rows(conn, enc_id):
                   ch.class_name AS ch_class, ch.level AS ch_level, ch.exhaustion AS ch_exhaustion,
                   ch.attacks AS ch_attacks, ch.abilities AS ch_abilities, ch.level AS ch_lvl, ch.prof_override AS ch_prof,
                   cr.portrait AS cr_portrait, cr.boss AS cr_boss, cr.legendary AS cr_legendary, cr.legendary_per_round AS cr_lpr,
-                  cr.phase2 AS cr_phase2, cr.has_phase2 AS cr_has_phase2, cr.legendary_resistance AS cr_lr
+                  cr.phase2 AS cr_phase2, cr.has_phase2 AS cr_has_phase2, cr.legendary_resistance AS cr_lr,
+                  cr.tagline AS cr_tagline, cr.loot AS cr_loot
            FROM combatants c LEFT JOIN characters ch ON ch.id = c.character_id LEFT JOIN creatures cr ON cr.id = c.creature_id
            WHERE c.encounter_id = ? ORDER BY c.sort_order, c.id""",
         (enc_id,),
@@ -151,6 +152,7 @@ def boss_info(d, r):
     hp, mx = d["hp"] or 0, d["max_hp"] or 0
     return {"legendary": str(pick("legendary", "cr_legendary", "") or ""), "per_round": per,
             "left": max(0, per - int(moved.get("legendary") or 0)), "phase2": phase2, "has_phase2": has_phase2,
+            "tagline": str(pick("tagline", "cr_tagline", "") or ""), "has_loot": bool(str(pick("loot", "cr_loot", "") or "").strip()),
             "phase": 2 if has_phase2 and mx and 0 < hp * 2 <= mx else 1, "lr": lr, "lr_left": max(0, lr - int(state.get("lr_used") or 0))}
 
 
@@ -194,6 +196,24 @@ def _add_spells(conn, c):
     c["parry"] = parry_state(conn, c, ch)
 
 
+def _add_turn_info(conn, enc_id, combatants):
+    """Everyone's reaction (ready or used, and what they can answer right now), and for whoever's
+    turn it is, the actions and movement they have left."""
+    from .movement import actions, turn_info
+    from .reactions import info as reaction_info
+    ctx = Ctx(conn, enc_id)
+    for c in combatants:
+        ch = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (c["character_id"],)).fetchone(), F.CHARACTER) if c["linked"] else None
+        c["reaction"] = reaction_info(ctx, c, ch)
+        c["actions"] = actions(conn, c["id"]) if ctx.enc["status"] == "active" and ctx.enc["current_id"] == c["id"] else None
+        t = turn_info(conn, c["id"]) if c["actions"] else None
+        c["move"] = {k: t[k] for k in ("speed", "left", "budget", "dash", "held")} if t else None
+        if ch:
+            c["surges"] = [{"index": i, "name": (str(s.get("name") or "").strip() or "Action Surge"), "extra_moves": extra_moves(s),
+                            "cooldown": spell_info(s)["cooldown"]} for i, s in enumerate(ch.get("spells") or [])
+                           if isinstance(s, dict) and extra_moves(s)]
+
+
 def slots_used(campaign_id):
     """Whether this table uses spell slots (house rule: off, spells only have cooldowns)."""
     return bool(get_campaign(campaign_id)["settings"]["combat"].get("spell_slots", False))
@@ -206,6 +226,7 @@ def encounter_state(enc_id, conn=None, log_limit=400):
     for c in combatants:
         if c["linked"]:
             _add_spells(conn, c)
+    _add_turn_info(conn, enc_id, combatants)
     log = [dict(r) for r in conn.execute(
         "SELECT * FROM (SELECT * FROM combat_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id",
         (enc_id, log_limit),
@@ -451,6 +472,8 @@ def api_start(eid):
             _resort(ctx)
             order = ctx.combatants()
         first = _first_eligible(ctx, order)
+        from .reactions import reset_all
+        reset_all(ctx.conn, ctx.enc["id"])
         ctx.save_enc(status="active", round=1, current_id=first["id"], started_at=now_iso(), ended_at=None)
         ctx.log("system", "Combat begins — round 1")
         ctx.log("turn", f"{first['name']}'s turn")
@@ -604,8 +627,10 @@ def _tick(ctx, owner_id, phase):
 
 def on_turn(ctx, cid, phase):
     from .spells import on_turn as spell_turn
-    if phase == "start":  # a fresh turn: full movement and actions again
+    if phase == "start":  # a fresh turn: full movement and actions again, and their reaction is back
         ctx.conn.execute("UPDATE combatants SET moved = '' WHERE id = ?", (cid,))
+        from .reactions import reset as reaction_back
+        reaction_back(ctx.conn, cid)
         # "this turn only" effects (Action Surge, Reckless, Disengage) left over from an earlier
         # turn that ended without Next (the DM set the turn): they're over now
         c = ctx.combatant(cid)
@@ -799,19 +824,21 @@ def extra_moves(row):
         return 0
 
 
-def surge(ctx, cid, index, by_player=False):
+def surge(ctx, cid, index, by_player=False, where="attacks"):
     """Use a row like Action Surge: extra moves for the rest of this turn, then the
     row's cooldown starts. Kept as an effect that counts down as moves are made and
-    goes away at the end of their turn."""
+    goes away at the end of their turn. where: "attacks" (the usual) or "spells" (a spell
+    row with Extra actions, like Yamato's Action surge)."""
     c = ctx.combatant(cid)
     if not c["linked"]:
         raise F.ApiError("Extra moves come from a character sheet")
-    rows = json.loads(ctx.conn.execute("SELECT attacks FROM characters WHERE id = ?", (c["character_id"],)).fetchone()["attacks"] or "[]")
+    col = "spells" if where == "spells" else "attacks"
+    rows = json.loads(ctx.conn.execute(f"SELECT {col} FROM characters WHERE id = ?", (c["character_id"],)).fetchone()[col] or "[]")
     try:
         row = rows[int(index)]
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That move isn't on the sheet any more")
-    n, mult = extra_moves(row), stance_mult(row)
+    n, mult = extra_moves(row), stance_mult(row) if col == "attacks" else 1
     name = (row.get("name") or SURGE).strip() or SURGE
     if not n and mult == 1:
         raise F.ApiError(f"{name} isn't used on yourself — set Extra moves (or Damage × with no dice) on the sheet")
@@ -840,6 +867,8 @@ def surge(ctx, cid, index, by_player=False):
     turns = parse_cooldown(row)
     if turns:
         start_cooldown(ctx, cid, name, turns)
+    from .maps import attack_fx
+    attack_fx(ctx.conn, ctx.enc["id"], cid, [(cid, "auto")], name, "buff", "", None, "sparks")
 
 
 def used_a_move(ctx, cid, what):
@@ -879,12 +908,17 @@ def parry_state(conn, c, ch):
     row = parry_row(ch)
     if row is None:
         return None
+    from .reactions import load as reaction_state
     enc_id = conn.execute("SELECT encounter_id FROM combatants WHERE id = ?", (c["id"],)).fetchone()["encounter_id"]
     left = cooldown_left(c["conditions"], row["name"], enc_id)
+    st = reaction_state(conn, c["id"])
     out = {"name": row["name"], "ready": not left, "pending": None}
     hit = conn.execute("SELECT * FROM hp_changes WHERE encounter_id = ? AND combatant_id = ? AND undone = 0 ORDER BY id DESC LIMIT 1",
                        (enc_id, c["id"])).fetchone()
-    if hit and not left and not hit["label"].endswith("(parried)"):
+    rec = st.get("hit") or {}
+    enc = conn.execute("SELECT round, current_id FROM encounters WHERE id = ?", (enc_id,)).fetchone()
+    stale = rec.get("change") == (hit["id"] if hit else None) and (rec.get("round"), rec.get("turn")) != (enc["round"], enc["current_id"])
+    if hit and not left and not st.get("used") and not stale and not any(hit["label"].endswith(m) for m in ("(parried)", "(deflected)", "(absorbed)")):
         before, after = json.loads(hit["before"]), json.loads(hit["after"])
         m = re.search(r"takes (\d+) damage", hit["label"])
         now = {k: c[k] for k in VITAL_KEYS}
@@ -907,8 +941,14 @@ def parry(ctx, cid, viewer=None):
         raise F.ApiError(f"{c['name']} has no parry — tick Parry on a move on their sheet")
     if not st["ready"]:
         raise F.ApiError(f"{st['name']} is recharging")
+    from .reactions import ready as reaction_ready
+    if not reaction_ready(ctx.conn, cid):
+        raise F.ApiError(f"{c['name']} has already used their reaction this round — it comes back at the start of their turn", status=409)
     if not st["pending"]:
         raise F.ApiError(f"There's no hit on {c['name']} to parry right now")
+    from .reactions import spend as spend_reaction
+    if ctx.enc["status"] == "active":
+        spend_reaction(ctx, cid, st["name"], quiet=True)  # a parry is their reaction for the round
     hit = ctx.conn.execute("SELECT * FROM hp_changes WHERE id = ?", (st["pending"]["change"],)).fetchone()
     amount = st["pending"]["amount"]
     viewer = viewer or ctx.viewer or {"role": "dm", "name": "DM"}
@@ -961,10 +1001,39 @@ def api_parry(cid):
 
 @bp.post("/combatants/<int:cid>/surge")
 def api_surge(cid):
-    """The DM uses a character's Action Surge (or any row with extra moves). {index}"""
+    """The DM uses a character's Action Surge (or any row with extra moves). {index} for an
+    attack row, {spell: index} for a spell row."""
     eid = _enc_of_combatant(cid)
     data = _body()
+    if data.get("spell") is not None:
+        return mutate(eid, lambda ctx: surge(ctx, cid, data.get("spell"), where="spells"), data.get("op_id"))
     return mutate(eid, lambda ctx: surge(ctx, cid, data.get("index")), data.get("op_id"))
+
+
+@bp.post("/combatants/<int:cid>/react")
+def api_react(cid):
+    """Someone's reaction, used by the DM: {kind: deflect | absorb | sentinel | redirect | burn,
+    target (redirect), what (burn)}. The response says what happened."""
+    from .reactions import react
+    eid = _enc_of_combatant(cid)
+    data = _body()
+    out = {}
+
+    def fn(ctx):
+        out.update(react(ctx, cid, str(data.get("kind") or ""), data))
+    resp = mutate(eid, fn, data.get("op_id"))
+    if out.get("rolls"):
+        from .spells import _rolls_for
+        out["rolls"] = _rolls_for(out["rolls"], {"role": "dm", "name": "DM"})
+    return jsonify(resp.get_json() | {"reaction": out or None})
+
+
+@bp.post("/combatants/<int:cid>/reaction-back")
+def api_reaction_back(cid):
+    """The DM gives someone their reaction back (a misclick)."""
+    from .reactions import give_back
+    eid = _enc_of_combatant(cid)
+    return mutate(eid, lambda ctx: give_back(ctx, cid), _body().get("op_id"))
 
 
 ONCE_PER_FIGHT = 999  # a "cooldown" this long is once per fight; ending the fight clears it
@@ -1242,14 +1311,48 @@ def apply_hp(ctx, cid, data, by=None):
             note += " and is knocked prone"
     hp_line = f" — {v['hp']}/{v['max_hp']} HP" + (f" +{v['temp_hp']} temp" if v["temp_hp"] else "")
     ctx.log("hp", label + note + hp_line)
-    ctx.conn.execute(
+    cur = ctx.conn.execute(
         "INSERT INTO hp_changes (encounter_id, combatant_id, character_id, label, before, after, created_at) "
         "VALUES (?,?,?,?,?,?,?)",
         (ctx.enc["id"], cid, c["character_id"] if c["linked"] else None, label, json.dumps(before), json.dumps(v), now_iso()))
     if data.get("op") == "damage" and (before["hp"] + before["temp_hp"]) > (v["hp"] + v["temp_hp"]):
+        from .reactions import death_burst, note_hit
+        note_hit(ctx, cid, cur.lastrowid, int(data.get("amount") or 0))  # a reaction (Deflect, Parry...) can answer it
         from .spells import concentration_check
         concentration_check(ctx, ctx.combatant(cid), int(data.get("amount") or 0))
+        if not c["linked"] and before["hp"] > 0 and v["hp"] == 0 and (c["statblock"] or {}).get("on_death"):
+            death_burst(ctx, ctx.combatant(cid))  # Yamato's Phantasmal Killers clone bursts
     return v
+
+
+@bp.post("/combatants/<int:cid>/loot")
+def api_loot(cid):
+    """The boss is down: send its loot to everyone as a handout. Only once a fight, even if a
+    kill is undone and it goes down again (an earlier loot handout from this fight counts)."""
+    eid = _enc_of_combatant(cid)
+    with tx() as conn:
+        ctx = Ctx(conn, eid)
+        c = ctx.combatant(cid)
+        b = c.get("boss")
+        if not b:
+            raise F.ApiError(f"{c['name']} isn't a boss")
+        if c["hp"] > 0 and c["status"] not in ("dead", "defeated"):
+            raise F.ApiError(f"{c['name']} isn't defeated yet")
+        row = conn.execute("SELECT loot FROM creatures WHERE id = ?", (c["creature_id"],)).fetchone() if c["creature_id"] else None
+        loot = str(c["statblock"].get("loot") or (row["loot"] if row else "") or "").strip()
+        if not loot:
+            return jsonify({"sent": False})
+        title = f"{c['name']}'s loot"
+        since = ctx.enc["started_at"] or ctx.enc["created_at"]
+        if conn.execute("SELECT 1 FROM handouts WHERE campaign_id = ? AND title = ? AND created_at >= ?",
+                        (ctx.enc["campaign_id"], title, since)).fetchone():
+            return jsonify({"sent": False})
+        ts = now_iso()
+        conn.execute("INSERT INTO handouts (uid, campaign_id, title, body, image, to_characters, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                     (new_uid(), ctx.enc["campaign_id"], title, loot, None, None, ts, ts))
+        conn.execute("INSERT INTO combat_log (encounter_id, round, kind, message, created_at) VALUES (?, ?, 'system', ?, ?)",
+                     (eid, ctx.enc["round"], f"{c['name']} is defeated — the loot was sent to everyone", ts))
+    return jsonify({"sent": True})
 
 
 @bp.post("/combatants/<int:cid>/legendary")
@@ -1312,8 +1415,15 @@ def api_damage_targets(eid):
         by = None
         if data.get("attacker_id") is not None:
             by = ("from " if op == "damage" else "by ") + ctx.combatant(int(data["attacker_id"]))["name"]
+            # for a reaction to the hit: who made it, with what (Deflect sends a projectile farther)
+            ctx.attack = {"by": int(data["attacker_id"]), "name": str(data.get("move") or "")[:60],
+                          "type": str(data.get("damage_type") or "")[:20], "ranged": data.get("ranged") if isinstance(data.get("ranged"), bool) else None}
         for cid in dict.fromkeys(targets):
             apply_hp(ctx, cid, {"op": op, "amount": amount}, by)
+        ctx.attack = None
+        if op == "damage" and data.get("attacker_id") is not None:
+            from .reactions import note_attack
+            note_attack(ctx, int(data["attacker_id"]), targets)  # Sentinel: an enemy next to Gnocchi hit someone else
     return mutate(eid, fn, data.get("op_id"))
 
 

@@ -153,6 +153,8 @@ with sync_playwright() as p:
         if x.get("cooldown"):
             call("DELETE", f"/api/combatants/{ycb['id']}/conditions/{x['id']}")
     y0 = ycb["hp"]
+    if not ycb["reaction"]["ready"]:  # he parried earlier this round: one reaction a round, so the DM gives it back
+        call("POST", f"/api/combatants/{ycb['id']}/reaction-back")
     call("POST", f"/api/encounters/{eid}/damage", {"targets": [ycb["id"]], "amount": 6})
     pp.wait_for_timeout(4000)
     check("You were hit for 6!" in pp.locator("body").inner_text(), "his screen says he was hit for 6 and offers Parry")

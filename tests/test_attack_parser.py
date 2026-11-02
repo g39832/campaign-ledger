@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="Node.js isn't installed")
 
 RUNNER = r"""
 const src = require("fs").readFileSync(process.argv[1], "utf8");
-eval(src.match(/const CONDITION_WORDS[\s\S]*?const attackNotes[^\n]*\n/)[0] + "global.T = { attackLines, attackNotes };");
+eval(src.match(/const LOOKS = [\s\S]*?const attackNotes[^\n]*\n/)[0] + "global.T = { attackLines, attackNotes };");
 const lines = JSON.parse(require("fs").readFileSync(0, "utf8"));
 console.log(JSON.stringify(lines.map((t) => ({ acts: T.attackLines(t), notes: T.attackNotes(t) }))));
 """

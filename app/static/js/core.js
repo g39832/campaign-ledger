@@ -121,7 +121,14 @@
     if (Number(s.speed_mult) > 1) bits.push((s.speed_mult == 2 ? "double" : "×" + s.speed_mult) + " speed");
     if (s.zone) bits.push(((s.area && s.area.size) || 15) + " ft all around the caster for " + (s.rounds || 3) + " rounds, enemies only" + (Number(s.zone_speed) < 1 ? ": they move at " + (Number(s.zone_speed) === 0.5 ? "half" : Math.round(s.zone_speed * 100) + "%") + " speed in it" : ""));
     if (s.aura) bits.push("for allies within " + ((s.area && s.area.size) || 60) + " ft, until switched off");
-    if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you");
+    if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you"
+      + (s.summon_ac != null && s.summon_ac !== "" || s.summon_hp ? " (" + [s.summon_ac != null && s.summon_ac !== "" ? s.summon_ac + " AC" : "", s.summon_hp ? s.summon_hp + " HP" : ""].filter(Boolean).join(", ") + ")" : "")
+      + (Number(s.summon_max) ? "; " + s.summon_max + " out at once at most" : "")
+      + (s.on_death ? "; when one is destroyed, enemies within " + (s.on_death.reach || 5) + " ft make a " + (ABIL_SHORT[s.on_death.save] || "Dex") + " save DC " + (s.on_death.dc || 10) + " or lose an action" : ""));
+    if (s.reaction === "deflect") bits.push("reaction: when you're hit, cut the damage by " + (s.reduce || "1d10+dex+level") + (s.redirect !== false ? "; cut to 0, send it at an enemy (10 ft, or 60 ft for a projectile)" : ""));
+    if (s.reaction === "absorb") bits.push("reaction: hit by acid, cold, fire, lightning or thunder, +" + (s.bonus_dice || "1d12") + " of it on your next hit");
+    if (s.reaction === "sentinel") bits.push("reaction: an enemy next to you attacks someone else, and you strike it");
+    if (Number(s.extra_moves)) bits.push("+" + s.extra_moves + " action" + (Number(s.extra_moves) === 1 ? "" : "s") + " this turn");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
     if (s.terrain === "mend") bits.push("mends rock, rubble and pits back to plain ground");
@@ -192,6 +199,7 @@
       } else return;
       if (dc) spec.dc = Number(dc[1]);
       if (p.cooldown) spec.cooldown = p.cooldown;
+      if (p.look) spec.look = p.look;
       out.push(spellView(spec));
     });
     return out;
@@ -250,12 +258,12 @@
      o: {text, kind: "attacks" | "spells", onChange(text)} */
   const DMG_TYPES = ["", "acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
   const SHAPES = [["cone", "cone"], ["line", "line"], ["square", "cube"], ["circle", "radius"]];
-  function rowFromLine(line, kind) {
-    const p = parseAttack(line);
-    if (!p || p.note) return { raw: line, note: true, text: line };
+  function rowFromLine(raw, kind) {
+    const p = parseAttack(raw), line = unLook(raw);
+    if (!p || p.note) return { raw, note: true, text: raw };
     const type = DMG_TYPES.find((t) => t && new RegExp("\\b" + t + "\\b", "i").test(line)) || "";
     const ar = parseArea(line), dc = /\bDC\s*(\d+)/i.exec(line);
-    return { raw: line, name: p.name, hit: p.hit || "", dice: p.dmg || p.check || "", type,
+    return { raw, look: p.look || "", name: p.name, hit: p.hit || "", dice: p.dmg || p.check || "", type,
       does: p.check ? "check" : p.heal ? "heal" : p.condition && !p.dmg ? "condition" : "damage",
       condition: p.condition || "", rounds: p.rounds || "", beat: p.beat != null ? p.beat : p.check && p.dc != null ? p.dc : "",
       dc: dc && !p.check ? Number(dc[1]) : "", area: ar ? ar.size : "", shape: ar ? ar.kind : "cone", range: ar ? ar.range || "" : "",
@@ -286,6 +294,7 @@
       const p = parseAttack(line), got = p && !p.note ? lineReach(line, p) : want;
       if (got !== want) line += want == null ? ", ranged" : ", reach " + want + " ft";
     }
+    if (r.look) line += ", look " + r.look;
     return line;
   }
   function attackRows(o) {
@@ -304,7 +313,7 @@
         p.heal ? "heals " + p.dmg : "", !p.check && !p.heal && p.hit ? p.hit + " to hit" : !p.check && !p.heal && (p.dmg || p.condition) ? "d20 to hit" : "",
         !p.check && !p.heal && p.dmg ? p.dmg + " damage" : "", p.condition ? p.condition + (p.rounds ? " for " + p.rounds + " rounds" : "") : "",
         p.aimArea ? p.aimArea.size + " ft " + p.aimArea.kind + " (aimed on the map)" : "", kind === "attacks" && !p.aimArea && !p.heal && !p.check ? (lineReach(line, p) ? "reaches " + lineReach(line, p) + " ft" : "any distance") : "",
-        p.cooldown ? p.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · ");
+        p.cooldown ? p.cooldown + "-turn cooldown" : "", p.look ? "looks like " + (LOOKS.find(([k]) => k === p.look) || ["", p.look])[1].toLowerCase() : ""].filter(Boolean).join(" · ");
     };
     function card(r, i) {
       const set = (k, v) => { r[k] = v; r.dirty = true; changed(); prev.textContent = "In a fight: " + fight(r); };
@@ -343,7 +352,8 @@
           kind === "attacks" && does !== "heal" && does !== "check" && !r.area ? fld("Reach", h("span", { class: "mr-area" },
             inp("reach", { placeholder: "5", "aria-label": "Reach in feet", inputmode: "numeric", class: "mr-tiny", disabled: !!r.ranged }), h("span", { class: "faint" }, "ft"),
             h("label", { class: "check", style: "font-size:.85rem" }, h("input", { type: "checkbox", checked: !!r.ranged, onchange: (e) => { set("ranged", e.target.checked); draw(); } }), "Ranged"))) : null,
-          fld("Cooldown", h("span", { class: "mr-area" }, inp("cooldown", { placeholder: "0", "aria-label": "Cooldown in turns", inputmode: "numeric", class: "mr-tiny" }), h("span", { class: "faint" }, "turns")))),
+          fld("Cooldown", h("span", { class: "mr-area" }, inp("cooldown", { placeholder: "0", "aria-label": "Cooldown in turns", inputmode: "numeric", class: "mr-tiny" }), h("span", { class: "faint" }, "turns"))),
+          does !== "check" ? fld("Looks like", sel("look", LOOKS, { "aria-label": "Looks like", title: "How it looks on the battle map" })) : null),
         prev);
     }
     function draw() {
@@ -467,10 +477,19 @@
        "Fire bolt +5 2d10"                                              -> { name, hit: "+5", dmg: "2d10" }
        "Healing word heal 1d4+2"                                        -> { name, heal: true, dmg: "1d4+2" }
        "Web: Restrained 10 rounds"                                      -> { name, condition: "Restrained", rounds: 10 } */
+  /* How a move looks on the map: picked on the attack form, written at the end of its line
+     (", look quake"). None of these words is a damage type or a reach word, so the tag never changes
+     what the move does. Empty = guessed from its name. */
+  const LOOKS = [["", "Auto (from its name)"], ["slash", "Slash"], ["punch", "Punch"], ["bite", "Bite"], ["arrow", "Arrow"],
+    ["flames", "Fire"], ["frost", "Ice"], ["sparks", "Lightning"], ["holy", "Radiant"], ["venom", "Poison"], ["arcane", "Magic"],
+    ["rock", "Earth"], ["quake", "Earthquake"]];
+  const LOOK_RE = /\s*,?\s*\blook\s+(slash|punch|bite|arrow|flames|frost|sparks|holy|venom|arcane|rock|quake)\b/i;
+  const lookOf = (line) => { const m = LOOK_RE.exec(String(line || "")); return m ? m[1].toLowerCase() : ""; };
+  const unLook = (line) => String(line || "").replace(LOOK_RE, "");
   const CONDITION_WORDS = ["Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated", "Invisible",
     "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
   function parseAttack(raw) {
-    const line = String(raw || "").trim();
+    const look = lookOf(raw), line = unLook(raw).trim();
     if (!line) return null;
     const hitM = line.match(/([+-]\s*\d+)\s*to hit/i) || line.match(/(?:^|\s)([+-]\d+)(?=\s+\d*d\d)/i);
     const diceM = line.match(/(\d*d\d+(?:\s*[+-]\s*\d+)?)/i);
@@ -490,13 +509,13 @@
     const heal = /\bheal(?:s|ing)?\b/i.test(line) && !!expr;
     if (expr && /^1d20([+-]\d+)?$/i.test(expr) && !hit && !heal && !cond && !/damage|dmg/i.test(line)) {
       const dc = line.match(/\b(?:beat|beats)\s+(?:a\s+)?(\d+)/i), dcM = line.match(/\bDC\s*(\d+)/i);
-      return { name, check: expr, beat: dc ? Number(dc[1]) : null, dc: dcM ? Number(dcM[1]) : null };
+      return { name, check: expr, beat: dc ? Number(dc[1]) : null, dc: dcM ? Number(dcM[1]) : null, look };
     }
     // breath weapons and other areas reach several creatures
     const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
     const cd = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i.exec(line);
     return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line),
-      cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0 };
+      cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0, look };
   }
   /* "15 ft cone", "20-foot radius", "10 ft cone, range 20" -> { kind, size, range } to aim on the map.
      Same rule as rules.parse_area on the server; without a range the area starts at the attacker. */
@@ -523,7 +542,7 @@
     if (/\b(ranged?|bows?|crossbows?|longbow|shortbow|slings?|darts?|thrown|throws?|javelins?)\b/i.test(line) && !/\bmelee\b/i.test(line)) return null;
     return 5;
   }
-  const attackLines = (text) => String(text || "").split(/\n+/).map((l) => { const a = parseAttack(l); if (a && !a.note) a.reach = lineReach(l, a); return a; }).filter((a) => a && !a.note);
+  const attackLines = (text) => String(text || "").split(/\n+/).map((l) => { const a = parseAttack(l); if (a && !a.note) a.reach = lineReach(unLook(l), a); return a; }).filter((a) => a && !a.note);
   const attackNotes = (text) => String(text || "").split(/\n+/).map(parseAttack).filter((a) => a && a.note).map((a) => a.note);
   // "Spread: 7 — beats 5" for a roll with a target number
   function checkVerdict(a, total) {
@@ -945,10 +964,45 @@
     watchForUpdates();
   });
 
+  // a boss in the fight, as the DM's screens hand it to the boss bar
+  const dmBoss = (c) => ({ id: c.id, name: c.name, frac: c.max_hp ? Math.max(0, c.hp) / c.max_hp : 0, text: "", phase: c.boss.phase, portrait: c.portrait,
+    tagline: c.boss.tagline || "", fresh: c.hp >= c.max_hp, down: c.hp <= 0 || ["dead", "defeated"].includes(c.status), loot: c.boss.has_loot });
+  /* A boss's big moments, once on each screen: its entrance (the first time this screen sees it in
+     a running fight, still untouched) and its defeat (when this screen sees it go down). The DM's
+     screen also sends its loot then (the server sends it only once). */
+  const bossSeen = new Map(); // id -> was it standing, on this page
+  const once = (key) => { try { if (localStorage.getItem(key)) return false; localStorage.setItem(key, "1"); } catch (e) { /* still show it */ } return true; };
+  function bossMoment(b, kind) {
+    if (window.FX && !FX.prefs.effects) return;
+    const old = document.querySelector(".boss-moment"); if (old) old.remove();
+    const el = h("div", { class: "boss-moment is-" + kind, role: "status", onclick: () => el.remove() },
+      h("div", { class: "bm-card" },
+        b.portrait ? h("img", { class: "bm-pic", src: "/api/uploads/" + b.portrait, alt: "" }) : h("div", { class: "bm-pic bm-crown" }, icon("crown")),
+        h("div", { class: "bm-kicker" }, kind === "intro" ? "A boss appears" : "Victory"),
+        h("div", { class: "bm-name" }, b.name),
+        kind === "intro" ? (b.tagline ? h("div", { class: "bm-tag" }, b.tagline) : null) : h("div", { class: "bm-tag" }, "Defeated!")));
+    document.body.append(el);
+    if (window.FX) FX.sound(kind === "intro" ? "bossintro" : "victory");
+    if (kind === "down" && window.FX) FX.burst(el.querySelector(".bm-card"), "crit", 60);
+    setTimeout(() => { el.classList.add("is-out"); setTimeout(() => el.remove(), 500); }, kind === "intro" ? 4200 : 3800);
+  }
+  function bossMoments(items) {
+    for (const b of items) {
+      const was = bossSeen.get(b.id);
+      bossSeen.set(b.id, !b.down);
+      if (!b.down && b.fresh && once("boss-intro-" + b.id)) bossMoment(b, "intro");
+      if (b.down && was === true && once("boss-down-" + b.id)) bossMoment(b, "down");
+      if (b.down && b.loot && once("boss-loot-" + b.id)) api("POST", "/api/combatants/" + b.id + "/loot", {}).catch(() => {
+        try { localStorage.removeItem("boss-loot-" + b.id); } catch (e) { /* ignore */ } });
+    }
+  }
   /* The boss bar: across the top of the page while a boss is in the fight. items: [{id, name,
-     frac (0-1), text (written on it; empty, so nobody sees its HP), phase, portrait}].
-     Phase 2 gets a banner the first time each screen sees it. */
-  function bossBar(items) {
+     frac (0-1), text (written on it; empty, so nobody sees its HP), phase, portrait, tagline,
+     fresh (untouched), down, loot (DM: it has loot to send)}]. Down bosses aren't drawn, but
+     their defeat is shown. Phase 2 gets a banner the first time each screen sees it. */
+  function bossBar(all) {
+    bossMoments(all || []);
+    const items = (all || []).filter((b) => !b.down);
     let bar = document.getElementById("boss-bar");
     if (!items || !items.length) { if (bar) bar.remove(); return; }
     if (!bar) {
@@ -1020,5 +1074,111 @@
     setInterval(check, 8000);
   }
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  /* ---- reactions, and what's left this turn ------------------------------------------------
+     turnStrip: "2 of 2 actions · 30 of 30 ft to move · Reaction ready", big and plain, for whoever's
+     turn it is (the pips fill in as actions are used). c: { actions, move, reaction } from the server. */
+  function turnStrip(c, opts) {
+    opts = opts || {};
+    const a = c && c.actions, mv = c && c.move, r = c && c.reaction;
+    if (!a && !mv && !r) return null;
+    const items = [];
+    if (a) {
+      const pips = h("span", { class: "ts-pips", "aria-hidden": "true" },
+        Array.from({ length: Math.max(a.limit, a.used || 0, 1) }, (_, i) => h("span", { class: "ts-pip" + (i < a.left ? " on" : "") })));
+      items.push(h("span", { class: "ts-item ts-acts" + (a.left ? "" : " is-out") }, pips,
+        h("span", null, a.left ? h("b", null, a.left + " of " + a.limit) : h("b", null, "No"), a.left ? (a.limit === 1 ? " action left" : " actions left") : " actions left"),
+        a.extra ? h("small", null, " (+" + a.extra + " surge)") : null, a.lost ? h("small", null, " (−" + a.lost + " shaken)") : null));
+    }
+    if (mv && (opts.mine !== false)) {
+      items.push(h("span", { class: "ts-item ts-move" + (mv.left ? "" : " is-out") }, icon("footprints", "sm"),
+        mv.held ? h("span", null, h("b", null, "Can't move"), " (" + mv.held + ")")
+          : h("span", null, h("b", null, mv.left + " of " + mv.budget + " ft"), " to move" + (!mv.left && !mv.dash ? " (Dash for more)" : mv.dash ? " (dashed)" : ""))));
+    }
+    if (r) {
+      items.push(h("span", { class: "ts-item ts-react" + (r.ready ? "" : " is-out"), title: r.ready ? "One reaction a round: used off your turn (Parry, Deflect, Sentinel…). It comes back at the start of your turn." : "Used: " + (r.used || "") + ". It comes back at the start of the turn." },
+        icon(r.ready ? "shield-check" : "shield-off", "sm"),
+        h("span", null, h("b", null, r.ready ? "Reaction ready" : "Reaction used"), r.ready ? "" : (r.used ? " (" + r.used + ")" : "") + " — back next turn")));
+    }
+    return h("div", { class: "turn-strip" + (opts.big ? " is-big" : ""), role: "status" }, opts.title ? h("b", { class: "ts-title" }, opts.title) : null, items);
+  }
+
+  const REACT_ICON = { deflect: "shield", absorb: "flame", sentinel: "swords", redirect: "undo-2", burn: "shield-off" };
+  /* What someone can do with their reaction right now, as buttons. run(kind, body) sends it and
+     returns a promise of the response. who: "you" on a player's screen, otherwise their name. */
+  function reactionBox(c, run, opts) {
+    opts = opts || {};
+    const r = c && c.reaction;
+    if (!r) return null;
+    const you = opts.you, name = you ? "You" : c.name, offers = r.offers || [];
+    const out = offers.map((o) => {
+      if (o.kind === "redirect") return h("div", { class: "react-box is-redirect" }, icon("undo-2", "sm"),
+        h("span", { class: "grow" }, h("b", null, (you ? "You" : name) + " deflected it to 0!"), " Send the attack (" + o.amount + " damage) at an enemy within " + o.range + " ft:"),
+        h("div", { class: "row", style: "gap:6px;flex-wrap:wrap" }, (o.targets || []).length ? o.targets.map((t) => h("button", { type: "button", class: "btn btn-sm btn-primary",
+          onclick: () => go("redirect", { target: t.id }) }, icon("undo-2", "sm"), " " + t.name + (t.ft != null ? " (" + t.ft + " ft)" : "")))
+          : h("span", { class: "faint" }, "No enemy close enough.")));
+      const what = o.kind === "deflect" ? [h("b", null, (you ? "You were" : name + " was") + " hit for " + o.amount + (o.by_name ? " by " + o.by_name : "") + "."),
+        " " + o.name + ": cut it by " + o.reduce + (o.redirect ? " — down to 0 and " + (you ? "you" : "they") + " can send it back." : ".")]
+        : o.kind === "absorb" ? [h("b", null, (you ? "You were" : name + " was") + " hit for " + o.amount + (o.type ? " " + o.type : "") + "."),
+          " " + o.name + ": +" + o.bonus + (o.type ? " " + o.type : "") + " damage on " + (you ? "your" : "their") + " next hit."]
+        : o.kind === "sentinel" ? [h("b", null, o.vs_name + " attacked " + ((o.on || []).join(", ") || "someone") + (you ? " next to you!" : " next to " + name + "!")),
+          " " + o.name + ": strike it with " + (o.attack || "a melee attack") + "."] : [o.name];
+      const label = o.kind === "deflect" ? "Deflect!" : o.kind === "absorb" ? "Absorb" : o.kind === "sentinel" ? "Strike " + o.vs_name : o.name;
+      return h("div", { class: "react-box is-" + o.kind }, icon(REACT_ICON[o.kind] || "shield", "sm"), h("span", { class: "grow" }, what),
+        h("button", { type: "button", class: "btn btn-primary", onclick: () => go(o.kind, {}) }, label + " (reaction)"));
+    });
+    // any other reaction (an opportunity attack, a monster's parry): spend it by hand
+    let armedBurn = false;
+    const burn = r.ready && opts.burn !== false && (opts.active !== false) ? h("button", { type: "button", class: "btn btn-sm btn-quiet react-burn",
+      title: "Mark the reaction as used this round (for a reaction the app doesn't do by itself, like an opportunity attack)",
+      onclick: (e) => {
+        if (!armedBurn) { armedBurn = true; e.currentTarget.classList.add("is-armed"); e.currentTarget.textContent = "Tap again: use the reaction"; return; }
+        go("burn", { what: "a reaction" });
+      } }, icon("shield-off", "sm"), " Use reaction") : null;
+    const back = !r.ready && opts.giveBack ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "A misclick? Give the reaction back", onclick: opts.giveBack },
+      icon("undo-2", "sm"), " Give reaction back") : null;
+    if (!out.length && !burn && !back) return null;
+    return h("div", { class: "react-wrap" }, out, burn || back ? h("div", { class: "row", style: "gap:6px;margin-top:4px" }, burn, back) : null);
+
+    function go(kind, body) {
+      Promise.resolve(run(kind, body)).then((d) => reactionDone(d && d.reaction, c.name, you));
+    }
+  }
+  // what a reaction did: a toast, a banner and a sound on this screen (the map shows it to everyone)
+  function reactionDone(x, name, you) {
+    if (!x) return;
+    const fx = (title, sub, kind, sound) => { if (window.FX) { FX.banner(title, sub, kind); FX.sound(sound); } };
+    if (x.kind === "deflect") {
+      toast(x.name + ": cut by " + x.cut + " — " + (you ? "you take " : name + " takes ") + x.taken + " instead of " + x.amount + "." + (x.redirect ? " Pick who to send it at." : ""), "ok", { ms: 7000 });
+      fx(x.taken ? "Deflected!" : "Deflected — 0 damage!", "−" + x.cut + " (" + x.expr + ")", "heal", "ac");
+    } else if (x.kind === "absorb") {
+      toast(x.name + ": +" + x.bonus + (x.type ? " " + x.type : "") + " damage on " + (you ? "your" : name + "'s") + " next hit.", "ok", { ms: 6000 });
+      fx("Absorbed!", "+" + x.bonus + (x.type ? " " + x.type : "") + " on the next hit", "ac", "ac");
+    } else if (x.kind === "sentinel") {
+      const go = () => { toast(x.summary, "ok", { ms: 8000 }); fx("Sentinel!", x.attack + " on " + x.vs_name, "crit", "hit"); };
+      if (window.Dice && Dice.showAll && x.rolls && x.rolls.length) Dice.showAll(x.rolls).then(go); else go();
+    } else if (x.kind === "redirect") {
+      toast((you ? "You send" : name + " sends") + " the attack at " + x.target + ": " + x.amount + " damage.", "ok", { ms: 6000 });
+      fx("Sent back!", x.amount + " damage to " + x.target, "crit", "hit");
+    } else if (x.kind === "burn") toast(x.text, "ok");
+    if (window.Dice && Dice.poll) Dice.poll();
+  }
+  // the DM's screens: a toast when someone can react to what just happened (like the Parry one)
+  function offerReactions(state, before, run) {
+    if (!state || !state.combatants) return;
+    for (const c of state.combatants) {
+      const was = before && before.find((x) => x.id === c.id);
+      if (!was) continue;
+      const old = new Set(((was.reaction || {}).offers || []).map((o) => o.kind + ":" + (o.vs || o.amount || "")));
+      for (const o of ((c.reaction || {}).offers || [])) {
+        if (old.has(o.kind + ":" + (o.vs || o.amount || "")) || o.kind === "redirect") continue;
+        const text = o.kind === "sentinel" ? c.name + " can strike " + o.vs_name + " (Sentinel)" : c.name + " can use " + o.name + " on that hit";
+        toast(text + "?", "ok", { ms: 12000, action: { label: o.name + " (reaction)", run: () => Promise.resolve(run(c, o.kind, {})).then((d) => reactionDone(d && d.reaction, c.name, false)) } });
+      }
+    }
+  }
+  // a combatant's reaction, used from the DM's screens
+  const dmReact = (c, kind, body, done) => act("POST", "/api/combatants/" + c.id + "/react", Object.assign({ kind }, body || {}), (d) => { if (done) done(d); return d; },
+    { onError: (e) => toast(e.message, "error") });
+
+  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

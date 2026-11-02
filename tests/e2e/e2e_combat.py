@@ -1,6 +1,6 @@
 """E2E 2: casting in a fight on the Combat screen, with real clicks. Setup (the fight and
 who's in it) goes through the API; every spell is cast by clicking."""
-import json
+import json, re
 from common import APP_DIR, DM_URL, LAN_IP, LAN_URL, SHOTS_DIR, TMP_DIR  # noqa: E402,F401  (paths and addresses for this computer)
 import sys
 import urllib.request
@@ -64,7 +64,8 @@ with sync_playwright() as p:
             pg.wait_for_timeout(200)
 
     def select(name):
-        pg.locator("#init-list li.combatant").filter(has_text=name).first.locator(".c-name").click()
+        # by the name itself (a row can mention others, like Gnocchi's "Strike Cult mage")
+        pg.locator("#init-list li.combatant").filter(has=pg.locator(".c-name > span:first-child", has_text=re.compile("^" + re.escape(name) + "$"))).first.locator(".c-name").click()
         pg.wait_for_timeout(300)
 
     def fresh_turn(name):

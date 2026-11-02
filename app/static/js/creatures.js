@@ -39,12 +39,34 @@
     renderList();
     renderEditor(list.find((c) => c.id === id));
   }
+  /* "Make it a boss": a boss copy of this monster, scaled for the party (the server does the sums),
+     opened right away to fine-tune. The original monster stays as it was. */
+  function makeBoss(c) {
+    const size = h("input", { type: "number", min: 1, max: 12, class: "mr-tiny", "aria-label": "Party size" });
+    const level = h("input", { type: "number", min: 1, max: 20, class: "mr-tiny", "aria-label": "Party level" });
+    api("GET", "/api/creatures/boss-party" + (window.CAMPAIGN_ID ? "?campaign_id=" + window.CAMPAIGN_ID : ""))
+      .then((p) => { if (!size.value) size.value = p.size; if (!level.value) level.value = p.level; }).catch(() => { /* type them in */ });
+    const go = h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () => act("POST", "/api/creatures/" + c.id + "/make-boss",
+      { campaign_id: window.CAMPAIGN_ID || null, party_size: Number(size.value) || null, party_level: Number(level.value) || null }, (d) => {
+        const n = d.creature;
+        list.push(n); list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+        open(n.id);
+        const legs = (n.legendary || "").split("\n").filter(Boolean).length;
+        toast("Made " + n.name + ": HP " + d.from.max_hp + " → " + n.max_hp + ", AC " + d.from.ac + " → " + n.ac + ", " + legs + " legendary action" + (legs === 1 ? "" : "s")
+          + ", " + n.legendary_resistance + " legendary resistance, phase 2 on. Change anything you like.", "ok");
+      }) }, icon("crown", "sm"), " Make it");
+    const box = h("div", { class: "make-boss", hidden: true },
+      h("span", { class: "faint" }, "A boss copy for a party of"), size, h("span", { class: "faint" }, "heroes at level"), level, go);
+    return h("div", { class: "make-boss-row" },
+      h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: (e) => { box.hidden = !box.hidden; e.currentTarget.hidden = true; } },
+        icon("wand-sparkles", "sm"), " Make it a boss…"), box);
+  }
   function renderEditor(c) {
     const box = $("#editor");
     if (!c) { box.replaceChildren(h("div", { class: "empty" }, h("h3", null, "No creature selected"), "Pick one from the list or create a new stat block.")); return; }
     const model = {};
     ["name", "creature_type", "cr", "max_hp", "ac", "initiative_mod", "speed", "abilities", "attacks", "spells", "traits", "resistances", "immunities",
-      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss", "legendary", "legendary_per_round", "has_phase2", "phase2", "legendary_resistance"].forEach((k) => { model[k] = c[k]; });
+      "vulnerabilities", "condition_immunities", "senses", "languages", "notes", "boss", "legendary", "legendary_per_round", "has_phase2", "phase2", "legendary_resistance", "tagline", "loot"].forEach((k) => { model[k] = c[k]; });
     const b = new Binder({ url: "/api/creatures/" + c.id, model, onSaved: (rec) => {
       const i = list.findIndex((x) => x.id === rec.id); if (i >= 0) list[i] = rec; renderList();
     } });
@@ -106,6 +128,7 @@
         b.set("boss", e.target.checked, true); c.boss = e.target.checked;
         const i = list.findIndex((x) => x.id === c.id); if (i >= 0) list[i] = Object.assign({}, list[i], { boss: e.target.checked });
         renderList(); renderEditor(list.find((x) => x.id === c.id) || c); } }), icon("crown", "sm"), " Boss", h("span", { class: "faint", style: "font-size:.85rem" }, " — listed in the Bosses section")),
+      model.boss ? null : makeBoss(c),
       h("hr"),
       h("div", { class: "sb-props" },
         prop("Hit points", "max_hp", { type: "number", min: 1 }),
@@ -127,6 +150,7 @@
           L.attackRows({ text: model.spells || "", kind: "spells", onChange: (t) => b.set("spells", t) })),
         model.boss ? h("div", { class: "full boss-extras" },
           h("h4", { class: "lbl" }, icon("crown", "sm"), " Boss extras"),
+          prop("Title (on its entrance)", "tagline", { placeholder: "The Iron Warden", maxlength: 200 }),
           h("div", { class: "field" }, h("span", null, "Legendary actions (used at the end of other creatures' turns)"),
             L.attackRows({ text: model.legendary || "", kind: "attacks", onChange: (t) => b.set("legendary", t) })),
           h("div", { class: "row", style: "gap:14px;flex-wrap:wrap" },
@@ -138,7 +162,8 @@
             renderEditor(list.find((x) => x.id === c.id) || c); } }), " Has a phase 2",
             h("span", { class: "faint", style: "font-size:.85rem" }, " — at half HP it turns to phase 2")),
           model.has_phase2 ? h("div", { class: "field" }, h("span", null, "Phase 2 attacks (from half HP)"),
-            L.attackRows({ text: model.phase2 || "", kind: "attacks", onChange: (t) => b.set("phase2", t) })) : null) : null,
+            L.attackRows({ text: model.phase2 || "", kind: "attacks", onChange: (t) => b.set("phase2", t) })) : null,
+          prop("Loot when it's defeated (sent to everyone as a handout)", "loot", { rows: 3, placeholder: "A cracked warhammer, 120 gold, a map to the mine" })) : null,
         h("div", { class: "full" }, prop("DM notes", "notes", { rows: 3 })))),
       toEncounter,
       h("div", { class: "row", style: "margin-top:12px;justify-content:flex-end" }, del));

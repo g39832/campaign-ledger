@@ -148,6 +148,10 @@
     ping: (a) => { tone(a, { type: "sine", from: 1200, to: 900, dur: 0.25, vol: 0.15 }); },
     roll: (a) => { for (let i = 0; i < 4; i++) noise(a, { dur: 0.04, vol: 0.2, freq: 1800 + i * 300, delay: i * 0.05 }); },
     start: (a) => { [196, 262, 330].forEach((f, i) => tone(a, { type: "square", from: f, dur: 0.25, vol: 0.08, delay: i * 0.12 })); },
+    bossintro: (a) => { // war drums, then a low horn
+      for (let i = 0; i < 3; i++) { tone(a, { type: "sine", from: 90, to: 45, dur: 0.35, vol: 0.45, delay: i * 0.28 }); noise(a, { dur: 0.12, vol: 0.3, freq: 160, delay: i * 0.28 }); }
+      tone(a, { type: "sawtooth", from: 110, to: 104, dur: 1.4, vol: 0.14, delay: 0.85 }); tone(a, { type: "sawtooth", from: 165, to: 156, dur: 1.4, vol: 0.09, delay: 0.85 }); },
+    victory: (a) => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(a, { type: "triangle", from: f, dur: i === 5 ? 0.7 : 0.18, vol: 0.22, delay: i * 0.13 })); },
     quake: (a) => { // a deep rumble that rolls on, with rocks cracking over it
       tone(a, { type: "sawtooth", from: 55, to: 32, dur: 1.8, vol: 0.32 }); tone(a, { type: "triangle", from: 70, to: 40, dur: 1.4, vol: 0.3, delay: 0.05 });
       for (let i = 0; i < 6; i++) noise(a, { dur: 0.35, vol: 0.4, freq: 120 + i * 25, delay: i * 0.22 });

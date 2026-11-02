@@ -285,9 +285,17 @@ def actions(conn, cb_id):
     extra = sum(int(x.get("extra_total") or 0) for x in json.loads(conds or "[]")
                 if isinstance(x, dict) and x.get("extra_moves") is not None and not x.get("expired")
                 and x.get("encounter_id") in (None, row["eid"]) and x.get("applied_round") in (None, row["round"]))
+    # Shaken by a clone's burst (Phantasmal Killers): one action fewer on their next turn
+    now = f"{row['round']}:{row['cb_id']}"
+    lost = sum(int(x.get("lose_actions") or 0) for x in json.loads(conds or "[]")
+               if isinstance(x, dict) and x.get("lose_actions") and not x.get("expired") and x.get("skip_turn") != now
+               and x.get("encounter_id") in (None, row["eid"]))
     used = _turn(row).get("acts", 0)
-    limit = ACTIONS_PER_TURN + extra
-    return {"used": used, "limit": limit, "left": max(0, limit - used), "extra": extra}
+    limit = max(0, ACTIONS_PER_TURN + extra - lost)
+    out = {"used": used, "limit": limit, "left": max(0, limit - used), "extra": extra}
+    if lost:
+        out["lost"] = lost
+    return out
 
 
 def check_action(conn, cb_id, what="that"):

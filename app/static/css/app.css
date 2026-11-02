@@ -604,6 +604,28 @@ mark { background: var(--brass-soft); color: inherit; padding: 0 1px; }
   100% { opacity: 0; transform: translate(calc(-50% + var(--drift, 0px)), -260%) scale(1); } }
 .fx-banner { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; padding: 14px 34px; border-radius: 6px;
   background: rgba(16, 12, 9, .88); border: 2px solid var(--brass); box-shadow: 0 10px 40px rgba(0,0,0,.6); animation: fx-in .35s cubic-bezier(.2,1.4,.4,1); max-width: 92vw; }
+.make-boss-row { margin: 2px 0 4px; }
+.make-boss { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: .9rem; }
+.make-boss .mr-tiny { width: 58px; }
+/* a boss's entrance and defeat: a big card in the middle of every screen (tap to close) */
+.boss-moment { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(40,6,4,.72), rgba(0,0,0,.82)); animation: bm-in .45s ease-out; cursor: pointer; }
+.boss-moment.is-down { background: radial-gradient(ellipse at center, rgba(60,44,8,.6), rgba(0,0,0,.78)); }
+.boss-moment.is-out { animation: bm-out .5s ease-in forwards; }
+.bm-card { display: grid; justify-items: center; gap: 6px; text-align: center; max-width: min(92vw, 560px); animation: bm-pop .6s cubic-bezier(.2,1.4,.4,1); }
+.bm-pic { width: min(38vw, 180px); aspect-ratio: 1; border-radius: 50%; object-fit: cover; border: 4px solid #e0714f;
+  box-shadow: 0 0 60px rgba(224,113,79,.65); display: grid; place-items: center; background: #2a1712; color: #f3d58a; }
+.bm-crown svg { width: 45%; height: 45%; }
+.is-down .bm-pic { border-color: #f3d58a; box-shadow: 0 0 60px rgba(243,213,138,.6); filter: grayscale(.7) brightness(.8); }
+.bm-kicker { font: 700 .85rem/1 var(--caps); letter-spacing: .18em; text-transform: uppercase; color: #e0714f; margin-top: 8px; }
+.is-down .bm-kicker { color: #f3d58a; }
+.bm-name { font: 700 clamp(1.8rem, 7vw, 3.4rem)/1.05 var(--caps); color: #f3ead6; text-shadow: 0 4px 24px rgba(0,0,0,.8); overflow-wrap: anywhere; }
+.bm-tag { font-size: clamp(1rem, 3.6vw, 1.35rem); color: #d9c39a; font-style: italic; overflow-wrap: anywhere; }
+.is-down .bm-tag { font: 700 clamp(1.4rem, 5vw, 2.2rem)/1.1 var(--caps); font-style: normal; color: #f3d58a; letter-spacing: .06em; }
+@keyframes bm-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bm-out { to { opacity: 0; } }
+@keyframes bm-pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .boss-moment, .bm-card { animation: none; } }
 .fx-banner.is-out { animation: fx-out .35s ease-in forwards; }
 .fx-banner-title { font: 700 2rem/1.1 var(--caps); letter-spacing: .03em; color: #f3ead6; overflow-wrap: break-word; }
 .fx-banner-sub { font-size: .95rem; color: #c9b896; margin-top: 4px; overflow-wrap: break-word; }
@@ -1200,7 +1222,9 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
 #attacks .list-editor thead { display: none; }
 #attacks .list-editor tr { display: grid; position: static; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--line);
   grid-template-columns: 96px minmax(0, 2fr) minmax(64px, .6fr) minmax(0, 1.5fr) minmax(72px, .6fr) 30px;
-  grid-template-areas: "acts name bonus damage cooldown del" "acts notes notes area area area" "acts condition extra_moves dmg_mult . ."; align-items: start; }
+  grid-template-areas: "acts name bonus damage cooldown del" "acts notes notes area area area" "acts condition extra_moves dmg_mult reaction ."; align-items: start; }
+#attacks td.f-reaction { grid-area: reaction; }
+#attacks td.f-reaction select { min-height: 32px; padding: 4px 6px; }
 #attacks td.f-condition { grid-area: condition; }
 #attacks td.f-extra_moves { grid-area: extra_moves; }
 #attacks td.f-dmg_mult { grid-area: dmg_mult; }
@@ -1225,7 +1249,7 @@ button.mod.roll-link, .ability .roll-link { border-bottom: 0; }
    name on top (with its fold arrow), fields under it, buttons along the bottom. */
 @container (max-width: 540px) {
   #attacks .list-editor tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
-    grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "condition extra_moves dmg_mult ." "acts acts acts acts"; }
+    grid-template-areas: "name name name del" "bonus damage damage damage" "cooldown area area area" "notes notes notes notes" "condition extra_moves dmg_mult reaction" "acts acts acts acts"; }
   #attacks td.acts-cell .roll-row { flex-direction: row; flex-wrap: wrap; }
 }
 
@@ -1431,3 +1455,33 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .sheet-handout img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; }
 .sheet-handout .sh-text { display: grid; gap: 2px; min-width: 0; }
 .sheet-handout .sh-text .faint { font-size: .82rem; }
+
+/* what's left this turn: actions (pips), movement and the reaction, big and plain */
+.turn-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 8px 0; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--raised); font-size: .92rem; }
+.turn-strip.is-big { border: 2px solid var(--brass); background: var(--brass-soft); font-size: 1rem; }
+.turn-strip .ts-title { flex: 1 0 100%; font: 600 .78rem/1 var(--caps); letter-spacing: .04em; text-transform: uppercase; color: var(--brass); }
+.turn-strip .ts-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.turn-strip .ts-item.is-out { color: var(--text-3); }
+.turn-strip .ts-item.is-out b { color: var(--hp-low); }
+.turn-strip .ts-react:not(.is-out) b { color: var(--ok); }
+.turn-strip small { color: var(--text-2); }
+.ts-pips { display: inline-flex; gap: 3px; }
+.ts-pip { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--brass); background: transparent; }
+.ts-pip.on { background: var(--brass); }
+.turn-strip.is-big .ts-pip { width: 16px; height: 16px; }
+/* a reaction that can be used right now (Deflect, Absorb, Sentinel, sending a deflected hit back) */
+.react-wrap { margin: 6px 0 8px; }
+.react-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; padding: 8px 10px; border: 2px solid var(--brass); border-radius: var(--radius); background: var(--brass-soft); }
+.react-box .grow { min-width: 160px; flex: 1 1 200px; overflow-wrap: anywhere; }
+.react-box.is-sentinel { border-color: var(--accent); background: var(--accent-soft); }
+.react-box.is-redirect { border-color: var(--ok); }
+.react-burn.is-armed { border-color: var(--accent); color: var(--text); }
+
+/* the spell builder: what it does in plain words, and quick starts for a new one */
+.spell-plain { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 2px; padding: 6px 9px; border-radius: var(--radius); background: var(--brass-soft); font-size: .9rem; overflow-wrap: anywhere; }
+.spell-plain.is-empty { background: transparent; border: 1px dashed var(--line-strong); color: var(--text-2); }
+.spell-quick { margin: 8px 0 4px; }
+.spell-quick .lbl { display: block; margin-bottom: 6px; }
+.spell-quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.spell-quick-btns .btn { flex: 1 1 150px; justify-content: flex-start; }
+.spell-fields .spell-wide { grid-column: 1 / -1; }

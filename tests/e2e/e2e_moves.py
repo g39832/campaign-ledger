@@ -246,15 +246,15 @@ with sync_playwright() as p:
         n = "Gnocchi"; pg = ph[n]; wait_turn(n)
         if rnd == 1:
             print("   cards:", cards(pg))
-            check({"Great Axe", "Reckless attack", "Frenzy"} <= set(cards(pg)), f"Gnocchi has every move on her screen ({DEVICES[n]})")
+            check({"Pasta", "Reckless attack", "Frenzy"} <= set(cards(pg)), f"Gnocchi has every move on her screen ({DEVICES[n]})")
             tap(pg, "Frenzy"); pg.wait_for_timeout(1200)
             check("of 3" in pg.locator("body").inner_text(), "Gnocchi: Frenzy gives a third action")
             tap(pg, "Reckless attack"); pg.wait_for_timeout(1200)
-            r = attack(pg, n, "Great Axe", "Goblin 4")
-            check("missed" in r or "doubled" in r, "Gnocchi: Reckless doubles the Great Axe")
-            attack(pg, n, "Great Axe", "Goblin 4")
+            r = attack(pg, n, "Pasta", "Goblin 4")
+            check("missed" in r or "doubled" in r, "Gnocchi: Reckless doubles the Pasta")
+            attack(pg, n, "Pasta", "Goblin 4")
         else:
-            attack(pg, n, "Great Axe", "Goblin 4")
+            attack(pg, n, "Pasta", "Goblin 4")
         end(pg, n)
         # the goblins' turns: the DM moves on
         while current().startswith("Goblin"):

@@ -367,8 +367,7 @@
   // the boss bar for the DM: real HP
   function dmBossBar() {
     const live = enc && enc.encounter && enc.encounter.status === "active";
-    L.bossBar(live ? enc.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
-      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: "", phase: c.boss.phase, portrait: c.portrait })) : []);
+    L.bossBar(live ? enc.combatants.filter((c) => c.boss && !c.hidden && c.status !== "fled").map(L.dmBoss) : []);
   }
   function actionsFor(c) {
     const out = [], rule = toHitRule();
@@ -388,6 +387,10 @@
         toHit: a.heal ? null : a.has_hit ? () => roll({ check: { type: "attack", key: i, combatant_id: c.id } })
           : rule ? () => roll({ expression: "1d20", label: (a.name || "Attack") + " attack", kind: "attack", subject: c.name }) : null,
         dmg: a.has_dmg ? (crit) => roll({ check: { type: "damage", key: i, combatant_id: c.id }, crit }) : null }));
+      (c.surges || []).forEach((g) => out.push({ name: g.name, instant: true, noUse: true, icon: "zap", cooldown: g.cooldown || 0, cdName: g.name,
+        info: "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn",
+        run: () => act("POST", "/api/combatants/" + c.id + "/surge", { spell: g.index }, () => { enc = null; say(c.id, c.name + " uses " + g.name + ".", "hit"); refresh(true); },
+          { onError: (e) => toast(e.message, "error") }) }));
       (c.spells || []).forEach((s) => out.push(s.aura
         ? { name: s.name, instant: true, noUse: true, icon: s.aura_on ? "check" : "zap", heal: !!s.aura_on,
           info: (s.aura_on ? "ON · click to switch off · " : "click to switch on · ") + L.spellWhat(L.spellView(s)),
@@ -424,6 +427,7 @@
       const was = enc && enc.combatants;
       enc = d;
       L.offerParry(d, was, (cid) => L.parry(cid, () => { enc = null; refresh(true); }));
+      L.offerReactions(d, was, dmReact);
       const r = d.cast, hows = r.targets.map((t) => t.how);
       const kind = r.kind === "heal" || L.spellHelps(r) ? "heal" : hows.includes("crit") ? "crit" : hows.length && hows.every((x) => x === "miss" || x === "saved") ? "miss" : "hit";
       say(c.id, r.summary, kind, r.targets.some((t) => t.amount != null));
@@ -460,8 +464,8 @@
     const aimArea = a.aimArea || null, shown = (aimArea ? areaText(aimArea) + " · " : "") + info;
     return spell || a.area || aimArea
       ? { name: a.name, many: true, heal: a.heal, icon, info: shown, toHit, effect, aimArea, dmg, roll: dmg ? () => dmg(false) : null, crit: dmg && !a.heal ? () => dmg(true) : null,
-        cooldown: a.cooldown || 0, cdName: a.name }
-      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg, cooldown: a.cooldown || 0, cdName: a.name, reach: spell ? null : a.reach };
+        cooldown: a.cooldown || 0, cdName: a.name, look: a.look || "" }
+      : { name: a.name, single: true, heal: a.heal, icon, info: shown, toHit, effect, dmg, cooldown: a.cooldown || 0, cdName: a.name, reach: spell ? null : a.reach, look: a.look || "" };
   }
   function say(by, text, kind, undo) {
     lastResult = { by, text, kind, undo };
@@ -469,9 +473,13 @@
     if (window.FX) FX.sound(kind === "miss" ? "fumble" : kind === "heal" ? "heal" : kind === "crit" ? "crit" : "hit");
   }
   const undoHp = () => act("POST", "/api/encounters/" + EID() + "/undo", {}, () => { lastResult = null; refresh(true); });
+  // a reaction to the hit (Deflect Attacks) wants to know the move, and whether it came from range
+  const moveInfo = () => moveNow ? { move: moveNow.name || "", ranged: moveNow.reach == null && !moveNow.heal } : {};
+  const dmReact = (c, kind, body) => L.dmReact(c, kind, body, () => { enc = null; refresh(true); });
   const hpTo = (target, op, amount, by, after) => act("POST", "/api/encounters/" + EID() + "/damage",
-    { targets: [target.id], amount, op, attacker_id: by.id }, (d) => {
+    Object.assign({ targets: [target.id], amount, op, attacker_id: by.id }, op === "damage" ? moveInfo() : {}), (d) => {
       L.offerParry(d, enc && enc.combatants, (cid) => L.parry(cid, () => { enc = null; refresh(true); }));
+      L.offerReactions(d, enc && enc.combatants, dmReact);
       refresh(true); if (after) after();
     }, { onError: (e) => toast(e.message, "error") });
   const putEffect = (c, target, s, after) => act("POST", "/api/encounters/" + EID() + "/conditions",
@@ -567,7 +575,7 @@
   }
   // everyone watching sees the attack: a slash, a bite, a fire bolt... (how: hit, crit, miss, saved)
   function showFx(c, a, hits, at) {
-    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", area: a.aimArea ? Object.assign({}, a.aimArea, at ? { at } : {}) : null, targets: hits.map(([id, how]) => ({ id, how })) })
+    api("POST", "/api/maps/" + MID + "/fx", { by: c.id, name: a.name, kind: a.heal ? "heal" : "damage", style: a.look || "", area: a.aimArea ? Object.assign({}, a.aimArea, at ? { at } : {}) : null, targets: hits.map(([id, how]) => ({ id, how })) })
       .then((d) => view.setPings(d.pings)).catch(() => { /* the animation is a nicety */ });
   }
   function useMove(c, a) {
@@ -578,8 +586,10 @@
   const cdLeft = (c, name) => { const x = (c.conditions || []).find((k) => k.cooldown === name && !k.expired && k.rounds_left > 0 && k.encounter_id === EID()); return x ? x.rounds_left : 0; };
   let offTurnArmed = null; // "combatant:move" armed by a first click when it isn't their turn
 
+  let moveNow = null; // the move being made right now (for the hit's details)
   async function arm(c, a) {
     lastResult = null;
+    moveNow = a;
     if (a.instant) { if (!a.noUse) useMove(c, a); await a.run(); return; } // a plain roll: no target to pick
     if (a.cast && a.cast.spell.zone) { castNow(c, a, []); return; } // Spirit Guardians: around the caster, it finds who's in it
     if (a.cast && !a.aimArea) {
@@ -759,6 +769,9 @@
       c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
         h("span", { class: "grow" }, h("b", null, "Hit for " + c.parry.pending.amount + "."), " Roll off d20 vs you; win = " + Math.floor(c.parry.pending.amount / 2) + " instead."),
         h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () => L.parry(c.id, () => { enc = null; refresh(true); }) }, c.parry.name + "?")) : null,
+      enc.encounter.status === "active" ? L.turnStrip(isTurn ? c : { reaction: c.reaction }, { title: isTurn ? c.name + " has" : null }) : null,
+      enc.encounter.status === "active" ? L.reactionBox(c, (kind, body) => dmReact(c, kind, body),
+        { giveBack: () => act("POST", "/api/combatants/" + c.id + "/reaction-back", {}, () => { enc = null; refresh(true); }) }) : null,
       h("div", { class: "fight-head" },
         h("b", { class: "fight-name" }, c.name), isTurn ? h("span", { class: "tag is-good" }, "Their turn") : null,
         h("span", { class: "grow" }), h("span", { class: "fight-ac", title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : "Armor class" }, h("b", null, c.ac), " AC")),

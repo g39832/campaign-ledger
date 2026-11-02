@@ -277,10 +277,10 @@ def combat(pg):
     pg.locator("#detail .cond-quick button", has_text="Poisoned").click(); settle(pg, 900)
     b1 = next(c for c in call("GET", f"/api/encounters/{eid}")["combatants"] if c["name"] == "Bandit 1")
     check(any(x["name"] == "Poisoned" for x in b1["conditions"]), "Poisoned added")
-    # hit a target with an attack: Gnocchi's Great Axe on Bandit 2
+    # hit a target with an attack: Gnocchi's Pasta on Bandit 2
     pg.locator("#init-list li.combatant").filter(has_text="Gnocchi").locator(".c-name").click(); settle(pg, 300)
     pg.locator("#detail .target-chip").filter(has_text="Bandit 2").click(); settle(pg, 200)
-    pg.locator("#detail .hit-attacks .roll-row").filter(has_text="Great Axe").get_by_role("button", name=re.compile(r"^Dmg")).click()
+    pg.locator("#detail .hit-attacks .roll-row").filter(has_text="Pasta").get_by_role("button", name=re.compile(r"^Dmg")).click()
     pg.wait_for_function("() => /^\d+$/.test((document.querySelector(\"#detail input[aria-label='Damage to deal']\") || {}).value || '')", timeout=15000)  # after the dice land
     settle(pg, 300)
     close_dice(pg)

@@ -205,6 +205,11 @@ def with_effects(conn, ids, check_type, expr, label, mode):
     if mods and len(with_mods(expr, mods)) <= dice.MAX_LENGTH:
         expr = with_mods(expr, mods)
         label = f"{label} ({', '.join(f'{n} {m}' for m, n in mods)})"
+        if check_type == "damage" and any(x.get("once") and x.get("dmg_mod") and not x.get("expired") for x in conds if isinstance(x, dict)):
+            # extra dice for one hit only (Absorb Elements): used up now
+            left = [x for x in conds if not (isinstance(x, dict) and x.get("once") and x.get("dmg_mod") and not x.get("expired"))]
+            table, key = ("characters", ids["character_id"]) if ids.get("character_id") else ("combatants", ids["combatant_id"])
+            conn.execute(f"UPDATE {table} SET conditions = ? WHERE id = ?", (json.dumps(left), key))
     if check_type in ("attack", "spell_attack"):
         auto, why = attack_mode(conds)
         if auto != "normal":

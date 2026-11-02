@@ -333,13 +333,18 @@ def summon_limit(conn, caster, sp):
     """How many of this creature the caster can have out at once: every spell on their sheet that
     summons it adds its count (Yamato: Phantasmal Force and Echo Knight, one clone each, so two)."""
     from .rules import spell_info
-    total = 0
+    total, cap = 0, []
     if caster.get("character_id"):
         row = conn.execute("SELECT spells FROM characters WHERE id = ?", (caster["character_id"],)).fetchone()
         for s in json.loads((row and row["spells"]) or "[]"):
             if isinstance(s, dict) and str(s.get("summon") or "").strip().lower() == sp["summon"].strip().lower():
-                total += spell_info(s)["summon_count"]
-    return max(total, sp["summon_count"])
+                info = spell_info(s)
+                total += info["summon_count"]
+                if info["summon_max"]:
+                    cap.append(info["summon_max"])  # "at most 3 at once" on any of them wins over the sum
+    if sp.get("summon_max"):
+        cap.append(sp["summon_max"])
+    return max(cap) if cap else max(total, sp["summon_count"])
 
 
 def summon(ctx, caster, sp, at=None):
@@ -381,6 +386,12 @@ def summon(ctx, caster, sp, at=None):
     block = F.decode_row(cr, F.CREATURE)
     statblock = {k: block[k] for k in F.CREATURE if k != "name"}
     statblock.update(base_name=cr["name"], follows=caster["id"], summoned_by=caster["name"])
+    # the spell can set the summoned one's AC and HP (Phantasmal Killers: AC 10, 1 HP), and a burst when it's destroyed
+    ac = sp["summon_ac"] if sp.get("summon_ac") is not None else cr["ac"]
+    hp = sp.get("summon_hp") or cr["max_hp"]
+    if sp.get("on_death"):
+        statblock["on_death"] = dict(sp["on_death"], name=sp["on_death"].get("name") or sp["name"])
+    statblock.update(ac=ac, max_hp=hp, from_spell=sp["name"])
     names = _instance_names(ctx, cr["name"], min(sp["summon_count"], limit - len(standing)))
     new_ids = []
     for n in names:
@@ -388,7 +399,7 @@ def summon(ctx, caster, sp, at=None):
             """INSERT INTO combatants (uid, encounter_id, creature_id, kind, name, init_mod, init_roll, sort_order, max_hp,
                current_hp, ac, statblock, created_at) VALUES (?, ?, ?, 'npc', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (uuid.uuid4().hex, ctx.enc["id"], cr["id"], n, cr["initiative_mod"], caster["init_roll"], _next_sort(ctx),
-             cr["max_hp"], cr["max_hp"], cr["ac"], json.dumps(statblock), now_iso()))
+             hp, hp, ac, json.dumps(statblock), now_iso()))
         new_ids.append(cur.lastrowid)
     _resort(ctx)
     # tokens next to the caster on every map of this fight
@@ -602,6 +613,8 @@ def cast(ctx, caster_id, data, viewer=None):
 
     lines, results = [], []
     melee = bool(re.search(r"\btouch\b|\bmelee\b", sp["notes"], re.I))
+    # who's hitting, with what: a reaction to the hit (Deflect Attacks) reads it
+    ctx.attack = {"by": caster["id"], "name": sp["name"], "type": sp["damage_type"], "ranged": False if melee else None}
     # an area attack (Wide Slash): ONE attack roll, checked against each one's AC, and one
     # damage roll for everyone it hits (a natural 20 crits them all)
     one_roll = lands == "attack" and bool(sp["area"]) and len(people) > 1
@@ -698,6 +711,12 @@ def cast(ctx, caster_id, data, viewer=None):
         res["text"] = f"{t['name']}" + (f" {verdict}" if verdict else "") + (f" ({how})" if how else "") + (" — " + ", ".join(parts) if parts else "")
         lines.append(res["text"])
         results.append(res)
+    ctx.attack = None
+    if lands == "attack" and not helps and results:
+        from .reactions import note_attack
+        note_attack(ctx, caster["id"], [r["id"] for r in results])  # Sentinel: an enemy next to Gnocchi attacked someone else
+    if sp["kind"] == "damage" and any((r.get("amount") or 0) > 0 for r in results):
+        spend_once(ctx, caster["id"])  # Absorb Elements: its extra dice were on this hit
     if sp["zone"]:
         lines.insert(0, raise_zone(ctx, caster, sp, cast_id, [r["id"] for r in results], nums, slot) + ("" if results else " — no enemies in it right now"))
     if sp["terrain"]:
@@ -718,10 +737,22 @@ def cast(ctx, caster_id, data, viewer=None):
     ctx.log("spell", head + (": " + "; ".join(lines) if lines else ""))
     from .maps import attack_fx
     attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
-              "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"], sp["area"] if not sp["zone"] else None)
+              "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"], sp["area"] if not sp["zone"] else None,
+              str(data["spell"].get("look") or "") if isinstance(data.get("spell"), dict) else "")
     return {"cast_id": cast_id, "spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
             "spent": spent, "lands": lands, "targets": results, "summary": head + (": " + "; ".join(lines) if lines else ""),
             "rolls": roller.ids, "concentration": sp["concentration"], "move": move}
+
+
+def spend_once(ctx, cid):
+    """Extra damage that's only for the next hit (Absorb Elements) is used up."""
+    from .combat import drop_conditions
+    c = ctx.combatant(cid)
+    gone = {x["id"] for x in c["conditions"] if isinstance(x, dict) and x.get("once") and x.get("dmg_mod") and not x.get("expired") and x.get("id")}
+    if gone:
+        names = ", ".join(dict.fromkeys(x["name"] for x in c["conditions"] if x.get("id") in gone))
+        drop_conditions(ctx, c, gone, quiet=True)
+        ctx.log("condition", f"{c['name']}'s {names} bonus went into that hit")
 
 
 def raise_zone(ctx, caster, sp, cast_id, hit=(), nums=None, slot=None):
@@ -807,7 +838,7 @@ def _undo_store():
 def snapshot(ctx):
     """Everything a cast can change in this fight, to put back."""
     conn, eid = ctx.conn, ctx.enc["id"]
-    cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id, boss_state "
+    cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id, boss_state, reaction, statblock "
                                          "FROM combatants WHERE encounter_id = ?", (eid,))]
     chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots "
                                            "FROM characters WHERE id IN (SELECT character_id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))]
@@ -898,6 +929,8 @@ def restore(ctx, snap):
                      (c["current_hp"], c["max_hp"], c["temp_hp"], c["status"], c["conditions"], c["moved"], c["sort_order"], c["id"]))
         if "boss_state" in c:
             conn.execute("UPDATE combatants SET boss_state = ? WHERE id = ?", (c["boss_state"], c["id"]))
+        if "reaction" in c:
+            conn.execute("UPDATE combatants SET reaction = ?, statblock = ? WHERE id = ?", (c["reaction"], c["statblock"], c["id"]))
     for ch in snap["chars"]:
         conn.execute("UPDATE characters SET current_hp = ?, max_hp = ?, temp_hp = ?, status = ?, conditions = ?, death_successes = ?, "
                      "death_failures = ?, spell_slots = ?, updated_at = ? WHERE id = ?",

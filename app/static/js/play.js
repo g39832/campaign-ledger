@@ -227,10 +227,18 @@
       const hows = d.cast ? d.cast.targets.map((t) => t.how) : [];
       const missed = hows.length && hows.every((x) => x === "miss" || x === "saved");
       if (window.FX) { FX.banner(missed ? "Missed" : hows.includes("crit") ? "Critical hit!" : "Hit!", k.name, missed ? "dmg" : "crit"); FX.sound(missed ? "miss" : "hit"); }
+      actionsLeftToast(d.character, k.as);
     } catch (e) { toast(e.message, "error"); k.busy = false; k.chosen.clear(); render(); return; }
     k.busy = false;
     render(); // the result, now that the dice have landed (the refresh below may have nothing new to draw)
     load(true);
+  }
+  // after a move on your turn: how many actions are left (so nobody has to count)
+  function actionsLeftToast(ch, as) {
+    const a = as ? (((ch && ch.clones) || []).find((x) => x.id === as) || {}).actions : ch && ch.actions;
+    if (!a) return;
+    toast(a.left ? (as ? "It has " : "You have ") + a.left + " of " + a.limit + " action" + (a.limit === 1 ? "" : "s") + " left this turn."
+      : "That was the last action this turn — tap End turn when you're done.", a.left ? "ok" : "error", { ms: 5000 });
   }
   function useBox() {
     const k = using;
@@ -390,6 +398,7 @@
       k.result = d.cast || null;
       const healing = k.spell.kind === "heal";
       if (window.FX) { FX.float($("#party"), healing && d.roll ? "+" + d.roll.total : "✦", healing ? "heal" : "ac"); FX.sound(healing ? "heal" : "ac"); }
+      actionsLeftToast(d.character);
     } catch (e) { toast(e.message, "error"); }
     k.busy = false;
     render();
@@ -446,9 +455,16 @@
     const out = (k.attacks || []).map((a) => h("button", { type: "button", class: "fight-act", disabled: noActs,
       onclick: () => startUse("attack", a.index, a.name, true, 0, a.reach) }, icon("swords", "sm"), h("b", null, a.name),
       h("span", { class: "faint" }, a.damage + " · reaches " + a.reach + " ft")));
+    let armedGo = false;
+    const dismiss = h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Send " + k.name + " away (no burst)",
+      onclick: (e) => {
+        if (!armedGo) { armedGo = true; e.currentTarget.textContent = "Tap again to dismiss " + k.name; return; }
+        me("dismiss", { as: k.id }).then((d) => { if (d) toast(k.name + " is gone.", "ok"); });
+      } }, icon("x", "sm"), " Dismiss " + k.name);
     return h("div", { class: "fight-acts your-moves", style: "margin-top:10px" },
+      L.turnStrip({ actions: k.actions, move: k.move, reaction: { ready: k.reaction_ready } }, { big: true, title: k.name + "'s turn" }),
       h("div", { class: "lbl" }, noActs ? "No actions left this turn" : k.name + "'s moves — tap one, then tap who"),
-      out.length ? out : h("p", { class: "faint" }, k.name + " has no attacks."));
+      out.length ? out : h("p", { class: "faint" }, k.name + " has no attacks."), h("div", { style: "margin-top:6px" }, dismiss));
   }
   /* On their turn: every move they can use right now, as cards like the DM's map panel. Tap one,
      then tap who on the map (or in the list that opens right here). */
@@ -464,6 +480,11 @@
         () => startUse("attack", a.index, a.name || "Attack", !a.area, 0, a.reach)));
       else if (a.heal || a.ac > 0) out.push(card(a.heal ? "heart" : "shield", a.name || "Heal", a.heal ? "heals " + a.damage.trim() + " · on you or a teammate"
         : "+" + a.ac + " AC · on you or a teammate", () => startHelp(a), { heal: true }));
+    });
+    (c.surges || []).forEach((g) => { // a spell row with extra actions (Yamato's Action surge)
+      if (g.recharging) return;
+      out.push(card("zap", g.name, "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn" + (g.cooldown ? " · " + g.cooldown + "-turn cooldown" : ""),
+        () => me("surge", { spell: g.index }).then((d) => { if (d) { toast(g.name + "! +" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + ".", "ok"); if (window.FX) { FX.banner(g.name + "!", "+" + g.extra_moves + " this turn", "crit"); FX.sound("crit"); } } }), { free: true }));
     });
     (c.spells || []).forEach((s) => {
       if (s.recharging) return;
@@ -516,7 +537,11 @@
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
-    $("#turns").replaceChildren(h("h3", { class: "rule-head" }, e ? "Round " + e.round : "Turn order"),
+    const ch = S.character;
+    $("#turns").replaceChildren(
+      ch && ch.in_fight ? L.reactionBox(ch, (kind, body) => me("react", Object.assign({ kind }, body)), { you: true, burn: !ch.my_turn }) : null,
+      ch && ch.in_fight && !ch.my_turn && ch.reaction ? L.turnStrip({ reaction: ch.reaction }, { title: "Off your turn" }) : null,
+      h("h3", { class: "rule-head" }, e ? "Round " + e.round : "Turn order"),
       e ? h("ol", { class: "mini-order" }, e.order.map((o) => h("li", { class: (o.is_current ? "is-current" : "") + (o.status === "dead" || o.status === "defeated" ? " is-out" : "") },
         h("span", { class: "i" }, o.init ?? "—"), h("span", { class: "grow" }, o.name),
         o.hp != null ? h("span", { class: "faint num" }, o.hp + "/" + o.max_hp) : o.health ? h("span", { class: "tag is-bad", style: "font-size:.72rem" }, o.health) : null,
@@ -524,8 +549,10 @@
         : h("p", { class: "faint", style: "margin:0" }, "No fight right now."),
       e && e.current ? h("p", { style: "margin:8px 0 0;font-weight:700" }, e.order.some((o) => o.is_current && S.character && o.name === S.character.name) ? "It's your turn!"
         : acting() ? "It's " + acting().name + "'s turn — you control it!" : e.current + "'s turn") : null,
+      S.character && S.character.my_turn ? L.turnStrip({ actions: S.character.actions, move: S.character.move, reaction: S.character.reaction }, { big: true, title: "You have" }) : null,
       S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null,
       S.character && S.character.my_turn ? yourMoves(S.character) : null,
+
       acting() ? h("div", { style: "margin-top:8px" }, endTurnBtn(acting())) : null,
       acting() ? cloneMoves(acting()) : null,
       using ? useBox() : casting ? castBox() : null);
@@ -570,7 +597,7 @@
 
           c.my_turn ? h("div", { style: "margin:0 0 8px" }, endTurnBtn()) : null,
           c.actions ? h("p", { class: "actions-left" + (c.actions.left ? "" : " is-out"), style: "margin:0 0 6px;font-size:.88rem;font-weight:700" },
-            c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives two more)")) : null,
+            c.actions.left ? "Actions left this turn: " + c.actions.left + " of " + c.actions.limit : "No actions left this turn" + (c.actions.extra ? "" : " (Action Surge gives more)")) : null,
           ...c.attacks.map((a) => a.recharging ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
           h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, a.recharging - (c.my_turn ? 1 : 0)); if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })()))
           : c.my_turn === false ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
@@ -625,8 +652,9 @@
     }
     if (keep) { const el = document.querySelector('[data-keep="' + keep + '"]'); if (el) el.focus(); }
     newHandouts();
-    L.bossBar(e ? e.order.filter((o) => o.boss && !["dead", "defeated", "fled"].includes(o.status))
-      .map((o) => ({ id: o.id, name: o.name, frac: (o.quarters || 0) / 4, text: "", phase: o.phase, portrait: o.portrait })) : []);
+    L.bossBar(e ? e.order.filter((o) => o.boss && o.status !== "fled")
+      .map((o) => ({ id: o.id, name: o.name, frac: (o.quarters || 0) / 4, text: "", phase: o.phase, portrait: o.portrait,
+        tagline: o.tagline || "", fresh: !!o.fresh, down: !o.quarters || ["dead", "defeated"].includes(o.status) })) : []);
     $("#party").replaceChildren(c ? "" : handoutsPanel() || "", h("h3", { class: "rule-head" }, "Party"),
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),
@@ -698,6 +726,17 @@
       if (b.current_hp === 0 && a.current_hp > 0) { FX.banner("You're down!", "Knocked prone · roll death saves on your turn", "down"); FX.sound("down"); }
     }
     if (a && b && (b.ac || 0) > (a.ac || 0)) { FX.float($("#me"), "+" + (b.ac - a.ac) + " AC", "ac"); FX.sound("ac"); }
+    const key = (o) => o.kind + ":" + (o.vs || o.amount || "");
+    const had = new Set((((a && a.reaction) || {}).offers || []).map(key));
+    const fresh = (((b && b.reaction) || {}).offers || []).filter((o) => !had.has(key(o)) && o.kind !== "redirect");
+    if (fresh.length) {
+      const o = fresh[0];
+      FX.banner("Reaction!", o.kind === "sentinel" ? o.vs_name + " attacked next to you — " + o.name + "?" : o.name + "?", "crit"); FX.sound("yourturn");
+      toast(o.kind === "sentinel" ? o.vs_name + " attacked " + ((o.on || []).join(", ") || "someone") + " next to you." : "You were hit for " + o.amount + ".", "ok",
+        { ms: 12000, action: { label: (o.kind === "sentinel" ? "Strike " + o.vs_name : o.name) + " (reaction)",
+          run: () => me("react", { kind: o.kind }).then((d) => L.reactionDone(d && d.reaction, b.name, true)) } });
+      const box = document.querySelector("#turns .react-box"); if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
     const ea = before.encounter, eb = now.encounter;
     if (eb && eb.current && (!ea || ea.current !== eb.current || ea.round !== eb.round)) {
       const mine = b && eb.order.some((o) => o.is_current && o.name === b.name);

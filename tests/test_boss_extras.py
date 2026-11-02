@@ -119,6 +119,9 @@ def test_migration_keeps_phase_two_on_for_bosses_that_had_its_attacks(data_dir):
     path = os.path.join(data_dir, "dnd_tracker.sqlite3")
     conn = sqlite3.connect(path)
     conn.execute("ALTER TABLE creatures DROP COLUMN has_phase2")
+    conn.execute("ALTER TABLE creatures DROP COLUMN tagline")
+    conn.execute("ALTER TABLE creatures DROP COLUMN loot")
+    conn.execute("ALTER TABLE combatants DROP COLUMN reaction")
     conn.execute("PRAGMA user_version = 13")
     conn.commit(); conn.close()
     api = Api(create_app({"DATA_DIR": data_dir}).test_client())
@@ -149,3 +152,70 @@ def test_a_boss_is_in_a_fight_only_once(api, battlemap):
     api.post(f"/api/encounters/{other}/combatants", {"creature_id": ogre["id"], "count": 2})
     api.post(f"/api/encounters/{other}/combatants", {"creature_id": ogre["id"], "count": 1})
     assert sum(c["name"].startswith("Ogre") for c in api.get(f"/api/encounters/{other}")["combatants"]) == 3
+
+
+def test_entrance_title_and_loot_once(api, battlemap):
+    """A boss's title reaches every screen (the players' list too), and its loot goes out to
+    everyone as a handout once it's down: only once a fight, even if the kill is undone and redone."""
+    cr = api.post("/api/creatures", dict(DRAGON, tagline="Terror of the Peaks", loot="A dragon scale shield and 300 gold",
+                                         campaign_id=battlemap["camp"]["id"]), 201)["creature"]
+    assert cr["tagline"] == "Terror of the Peaks" and cr["loot"].startswith("A dragon scale")
+    eid = battlemap["eid"]
+    api.post(f"/api/encounters/{eid}/combatants", {"creature_id": cr["id"], "count": 1})
+    api.post(f"/api/encounters/{eid}/start")
+    d = dragon(api, eid)
+    assert d["boss"]["tagline"] == "Terror of the Peaks" and d["boss"]["has_loot"] is True
+    mine = next(o for o in battlemap["pa"].get("/api/play/state")["encounter"]["order"] if o["name"] == "Young dragon")
+    assert mine["tagline"] == "Terror of the Peaks" and mine["fresh"] is True and "loot" not in str(mine)
+    err = api.post(f"/api/combatants/{d['id']}/loot", {}, 400)
+    assert "isn't defeated yet" in err["error"]
+    camp = battlemap["camp"]["id"]
+    count = lambda: sum(h["title"] == "Young dragon's loot" for h in api.get(f"/api/campaigns/{camp}/handouts")["handouts"])
+    api.post(f"/api/combatants/{d['id']}/hp", {"op": "damage", "amount": 100})
+    assert api.post(f"/api/combatants/{d['id']}/loot", {})["sent"] is True and count() == 1
+    assert api.post(f"/api/combatants/{d['id']}/loot", {})["sent"] is False and count() == 1
+    api.post(f"/api/encounters/{eid}/undo", {})                                        # the kill is taken back...
+    assert dragon(api, eid)["hp"] > 0
+    api.post(f"/api/combatants/{d['id']}/hp", {"op": "damage", "amount": 100})          # ...and done again
+    assert api.post(f"/api/combatants/{d['id']}/loot", {})["sent"] is False and count() == 1
+    h = next(h for h in api.get(f"/api/campaigns/{camp}/handouts")["handouts"] if h["title"] == "Young dragon's loot")
+    assert h["body"] == "A dragon scale shield and 300 gold" and h["to"] is None
+    assert any("loot was sent to everyone" in x["message"] for x in api.get(f"/api/encounters/{eid}")["log"])
+
+
+def test_a_boss_without_loot_sends_nothing(api, battlemap):
+    eid, by = fight(api, battlemap)
+    d = dragon(api, eid)
+    api.post(f"/api/combatants/{d['id']}/hp", {"op": "damage", "amount": 100})
+    assert api.post(f"/api/combatants/{d['id']}/loot", {})["sent"] is False
+    assert api.get(f"/api/campaigns/{battlemap['camp']['id']}/handouts")["handouts"] == []
+
+
+def test_make_it_a_boss(api):
+    """A boss copy scaled for the party; the original monster stays as it was."""
+    from app.creatures import legendary_from
+    camp = api.campaign()
+    orc = api.post("/api/creatures", {"name": "Orc", "max_hp": 15, "ac": 13, "campaign_id": camp["id"],
+                                      "attacks": "Greataxe: +5 to hit, 1d12+3 slashing damage\nJavelin: +5 to hit, 2d6+3 piercing damage, ranged\n"
+                                                 "Roar: DC 12, Frightened, 15 ft radius\nCleave: +5 to hit, 2d8 slashing damage, 3 turn cooldown"}, 201)["creature"]
+    r = api.post(f"/api/creatures/{orc['id']}/make-boss", {"campaign_id": camp["id"], "party_size": 4, "party_level": 5}, 201)
+    b = r["creature"]
+    assert b["name"] == "Orc (Boss)" and b["boss"] and b["has_phase2"] and b["max_hp"] == 60 and b["ac"] == 15
+    assert b["legendary_per_round"] == 3 and b["legendary_resistance"] == 2
+    assert b["legendary"] == "Greataxe: +5 to hit, 1d10+3 slashing damage\nJavelin: +5 to hit, 1d6+3 piercing damage, ranged"
+    assert b["attacks"] == orc["attacks"] and r["from"] == {"max_hp": 15, "ac": 13}
+    kept = next(c for c in api.get(f"/api/creatures?campaign_id={camp['id']}")["creatures"] if c["id"] == orc["id"])
+    assert kept["max_hp"] == 15 and not kept["boss"] and kept["legendary"] == ""            # the original is untouched
+    assert legendary_from("Bite: 1d4 piercing damage\nHeal: heal 2d8") == "Bite: 1d4 piercing damage"
+    small = api.post(f"/api/creatures/{orc['id']}/make-boss", {"party_size": 1, "party_level": 1}, 201)["creature"]
+    assert small["max_hp"] == 30 and small["ac"] == 14 and small["legendary_resistance"] == 1   # at least x2 HP
+
+
+def test_make_it_a_boss_uses_the_campaign_party(api):
+    camp = api.campaign()
+    for n, lvl in (("A", 3), ("B", 4), ("C", 3)):
+        api.character(camp["id"], name=n, level=lvl)
+    assert api.get(f"/api/creatures/boss-party?campaign_id={camp['id']}") == {"size": 3, "level": 3}
+    gob = api.post("/api/creatures", {"name": "Goblin", "max_hp": 7, "ac": 15, "campaign_id": camp["id"], "attacks": "Scimitar: +4 to hit, 1d6+2 slashing damage"}, 201)["creature"]
+    b = api.post(f"/api/creatures/{gob['id']}/make-boss", {"campaign_id": camp["id"]}, 201)["creature"]
+    assert b["max_hp"] == 21 and b["ac"] == 16 and b["legendary"] == "Scimitar: +4 to hit, 1d4+2 slashing damage"

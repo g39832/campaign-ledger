@@ -43,6 +43,7 @@ Phones join the test server over your Wi-Fi address, which is worked out each ru
 | Script | What it checks |
 |---|---|
 | `e2e_players.py` | A full round played only from players' devices: moves panel, movement, Dash/End turn, off-turn private rolls, Parry, Yamato's clones, pings, leave and rejoin |
+| `e2e_reactions.py` | Reactions from players' devices and the DM: Moni's Deflect (and sending it back) and Absorb Elements, Gnocchi's Sentinel, burning and giving back a reaction, Yamato's three clones (Phantasmal Killers burst, Dismiss), his Action surge, the "what's left this turn" strip, and the spell builder |
 | `e2e_moves.py` | Every move on every hero's sheet, used from their own screen |
 | `e2e_clonespot.py` | Picking where Yamato's clones appear (phone, laptop, DM tablet, fog, hidden traps) |
 | `e2e_dicecolors.py` | Dice colors from the phone and the sheet; others see them |

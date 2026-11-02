@@ -512,6 +512,23 @@ def _flag(spell, key, default):
     return default if v is None or v == "" else bool(v)
 
 
+REACTION_KINDS = ("parry", "deflect", "absorb", "sentinel")
+
+
+def _reaction(spell):
+    k = str(spell.get("reaction") or "").strip().lower()
+    return k if k in REACTION_KINDS else ("parry" if spell.get("parry") else "")
+
+
+def _on_death(v):
+    """{save, dc, reach, name}: a summoned creature's burst when it's destroyed, or None."""
+    if not isinstance(v, dict) or not v:
+        return None
+    save = v.get("save") if v.get("save") in ABILITIES else "dex"
+    return {"save": save, "dc": _num(v.get("dc"), 1, 40, 10), "reach": _num(v.get("reach"), 5, 120, 5),
+            "name": str(v.get("name") or "")[:60]}
+
+
 def spell_info(spell):
     """Normalise one spell row from the sheet (or the spell book). Rows written before
     spells could do anything have only prepared/level/name/notes; they come back as
@@ -560,6 +577,20 @@ def spell_info(spell):
         "summon_count": _num(spell.get("summon_count"), 1, 10, 1),
         # a reaction: when they're hit, a d20 roll-off against the DM; win and the hit does half
         "parry": bool(spell.get("parry")),
+        # a reaction (one a round, off your turn): parry, deflect (cut a hit by dice, e.g. 1d10+dex+level),
+        # absorb (extra dice on your next hit) or sentinel (hit back an enemy next to you that attacks someone else)
+        "reaction": _reaction(spell),
+        "reduce": str(spell.get("reduce") or "").strip()[:40],
+        "redirect": bool(spell.get("redirect", spell.get("reaction") == "deflect")),
+        "bonus_dice": _dice_text(spell.get("bonus_dice")),
+        # extra actions this turn when it's used (Action Surge)
+        "extra_moves": _num(spell.get("extra_moves"), 0, 10, 0),
+        # summons: how many may be out at once in all (Yamato: 3), and the summoned one's AC and HP
+        "summon_max": _num(spell.get("summon_max"), 1, 10),
+        "summon_ac": _num(spell.get("summon_ac"), 0, 40),
+        "summon_hp": _num(spell.get("summon_hp"), 1, 9999),
+        # when the summoned one is destroyed, enemies next to it save or lose an action (Phantasmal Killers)
+        "on_death": _on_death(spell.get("on_death")),
         # Reckless attack: on a hit the damage is multiplied (2 = double)
         "dmg_mult": _num(spell.get("dmg_mult"), 1, 10, 1),
         # a real saving throw even with the "everything rolls to hit" house rule on

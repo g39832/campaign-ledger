@@ -315,6 +315,8 @@ CREATURE = {
     "has_phase2": Bool(),  # ticked: it goes into phase 2 at half HP
     "phase2": Text(),
     "legendary_resistance": Int(0, 10),
+    "tagline": Text(200),  # a boss's title, on its entrance ("The Iron Warden")
+    "loot": Text(5000),  # sent to everyone as a handout when the boss is defeated
 }
 
 ENCOUNTER = {

@@ -262,13 +262,13 @@ with sync_playwright() as p:
     goblin_next_to(n, "Goblin 3"); pg.wait_for_timeout(2500)
     g3 = hp("Goblin 3")
     tap_move(pg, "Reckless attack"); pg.wait_for_timeout(1500)
-    tap_move(pg, "Great Axe"); tap_token(pg, "Goblin 3"); res = wait_done(pg)
-    print("    Great Axe:", res.replace("\n", " / ")[:120])
+    tap_move(pg, "Pasta"); tap_token(pg, "Goblin 3"); res = wait_done(pg)
+    print("    Pasta:", res.replace("\n", " / ")[:120])
     rolls = call("GET", f"/api/rolls?encounter_id={eid}")["rolls"]
-    dmg = next((r for r in rolls if r["kind"] == "damage" and "Great Axe" in (r["label"] or "")), None)
+    dmg = next((r for r in rolls if r["kind"] == "damage" and "Pasta" in (r["label"] or "")), None)
     m = re.search(r"(\d+) damage, doubled", res)
     check("missed" in res or (m and dmg and int(m.group(1)) == 2 * dmg["total"] and g3 - hp("Goblin 3") == int(m.group(1))),
-          "Reckless + Great Axe: the rolled damage is doubled, and that's what comes off")
+          "Reckless + Pasta: the rolled damage is doubled, and that's what comes off")
     end_turn(pg, n)
 
     # ---- the goblins: Yamato parries ---------------------------------------------------------

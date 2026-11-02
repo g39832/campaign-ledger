@@ -35,6 +35,8 @@
   const token = (c) => h("span", { class: "token" + (c.kind === "enemy" ? " enemy" : "") },
     c.portrait ? h("img", { src: "/api/uploads/" + c.portrait, alt: "" }) : initials(c.name));
 
+  // someone's reaction (Deflect, Sentinel...) used from this screen
+  const dmReact = (c, kind, body) => L.dmReact(c, kind, body, (d) => { if (d && d.encounter) apply(d); });
   // ---- apply + focus preservation -----------------------------------------------
   function apply(state) {
     const a = document.activeElement;
@@ -44,9 +46,11 @@
     if (selected && !byId(selected)) selected = null;
     if (!selected && S.combatants.length) selected = (current() || S.combatants[0]).id;
     renderBar(); renderList(); renderDetail(); renderLog(); renderAdd();
-    L.bossBar(S.encounter.status === "active" ? S.combatants.filter((c) => c.boss && !c.hidden && !["dead", "defeated", "fled"].includes(c.status))
-      .map((c) => ({ id: c.id, name: c.name, frac: c.max_hp ? c.hp / c.max_hp : 0, text: "", phase: c.boss.phase, portrait: c.portrait })) : []);
-    if (before !== state) { celebrate(before, state); L.offerParry(state, before && before.combatants, (cid) => L.parry(cid, (d) => { if (d && d.encounter) apply(d); })); }
+    L.bossBar(S.encounter.status === "active" ? S.combatants.filter((c) => c.boss && !c.hidden && c.status !== "fled").map(L.dmBoss) : []);
+    if (before !== state) {
+      celebrate(before, state); L.offerParry(state, before && before.combatants, (cid) => L.parry(cid, (d) => { if (d && d.encounter) apply(d); }));
+      L.offerReactions(state, before && before.combatants, dmReact);
+    }
     if (keep) {
       const el = document.querySelector('[data-keep="' + keep.key + '"]');
       if (el) { el.focus(); try { el.setSelectionRange(keep.start, keep.end); } catch (e) { /* number inputs */ } }
@@ -159,9 +163,12 @@
           c.parry && c.parry.pending ? h("div", { class: "c-parry-row" }, h("button", { type: "button", class: "btn btn-sm btn-primary c-parry",
             title: "Roll off d20 vs the DM; win and the last hit does half",
             onclick: () => L.parry(c.id, (d) => { if (d && d.encounter) apply(d); }) }, icon("shield", "sm"), " " + c.parry.name + "? (hit for " + c.parry.pending.amount + ")")) : null,
+          active && c.reaction && (c.reaction.offers || []).some((o) => o.kind !== "redirect") ? h("div", { class: "c-parry-row" }, c.reaction.offers.filter((o) => o.kind !== "redirect").map((o) =>
+            h("button", { type: "button", class: "btn btn-sm btn-primary c-parry", title: "Use their reaction", onclick: () => dmReact(c, o.kind, {}).then((d) => L.reactionDone(d && d.reaction, c.name)) },
+              icon(o.kind === "sentinel" ? "swords" : o.kind === "absorb" ? "flame" : "shield", "sm"), " " + (o.kind === "sentinel" ? o.name + ": strike " + o.vs_name : o.name + "?")))) : null,
           c.follows && byId(c.follows) ? h("div", { class: "c-sub" }, "acts right after " + byId(c.follows).name) : null,
           h("div", { class: "c-sub" }, [c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC") + (c.subtitle ? " · " + c.subtitle : ""),
-            c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : ""].join("")),
+            c.status !== "ok" ? " · " + STATUS_LABEL[c.status] : "", active && c.reaction && !c.reaction.ready ? " · reaction used" : ""].join("")),
           c.conditions.length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" + (x.expired ? " is-warn" : "") },
             x.name + (x.ac && !x.expired ? " " + signed(x.ac) + " AC" : "") + (x.dmg_mult > 1 && !x.expired ? " · damage ×" + x.dmg_mult : "") + (x.speed_mult > 1 ? " · speed ×" + x.speed_mult : "") + (x.aura && x.max_hp ? " · +" + x.max_hp + " max HP" : "") + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left"
               : x.rounds_left != null ? " · " + x.rounds_left : "") + (x.expired ? " — expired" : "")))) : null,
@@ -235,6 +242,12 @@
         h("div", { class: "faint", style: "font-size:.9rem" }, c.kind === "enemy" ? (c.subtitle || "Enemy") : (c.kind === "pc" ? "Player character" : "NPC"),
           c.linked ? [" · ", h("a", { href: "/characters/" + c.character_id }, "open sheet")] : null)),
       statusSel));
+    if (S.encounter.status === "active") {
+      const mine = S.encounter.current_id === cid;
+      const strip = L.turnStrip(mine ? c : { reaction: c.reaction }, { title: mine ? c.name + " has" : null });
+      if (strip) sections.push(h("div", { class: "detail-sec", style: "padding-top:0" }, strip,
+        L.reactionBox(c, (kind, body) => dmReact(c, kind, body), { giveBack: () => run("POST", "/api/combatants/" + cid + "/reaction-back", {}) })));
+    }
 
     // Notes sit right under the name so they're seen before anything else.
     const notes = h("textarea", { rows: 3, placeholder: "Notes for this combatant", "aria-label": "Combatant notes", "data-keep": "notes-" + cid, class: "note-input" },
@@ -599,13 +612,19 @@
           book.filter((s) => s.effect === k).map((s) => h("option", { value: s.name, selected: s.name === bookPick }, s.name + " (" + L.levelWord(s).toLowerCase() + ")"))))),
       h("button", { type: "button", class: "btn btn-sm", onclick: () => { const s = bookPick && L.bookSpell(bookPick); if (s) startCast(c, s, { book: s.name }); else toast("Pick a spell from the list first.", "error"); } },
         icon("wand-sparkles", "sm"), " Cast it")) : null;
-    if (!items.length && !fromBook) return null;
+    const surges = c.linked ? (c.surges || []).map((g) => h("div", { class: "spell-row does-buff" },
+      h("div", { class: "sr-main" }, h("div", { class: "sr-name" }, h("b", null, g.name)),
+        h("div", { class: "faint sr-what" }, "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn" + (g.cooldown ? " · " + g.cooldown + "-turn cooldown" : ""))),
+      cdLeft(g.name) ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
+        : h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On themselves, for the rest of their turn", onclick: () => run("POST", "/api/combatants/" + c.id + "/surge", { spell: g.index }) },
+          icon("zap", "sm"), " Use"))) : [];
+    if (!items.length && !fromBook && !surges.length) return null;
     return h("div", { class: "hit-attacks hit-spells" },
       h("div", { class: "lbl" }, "Spells",
         sc ? h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" }, " · save DC " + sc.dc + " · attack " + signed(sc.attack)) : null),
       slots.length ? h("div", { class: "sr-slots" }, slots.map(([lv, v]) => h("span", { class: "tag" + (v.max - v.used <= 0 ? " is-off" : ""), title: "Level " + lv + " slots left" },
         "Lv " + lv + ": " + (v.max - v.used) + "/" + v.max))) : null,
-      items.map(row),
+      items.map(row), surges,
       fromBook);
   }
 

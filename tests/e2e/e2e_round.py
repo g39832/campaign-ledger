@@ -137,9 +137,9 @@ with sync_playwright() as p:
             check("No actions left" in pg.locator("body").inner_text(), "after 4, no actions left")
         elif n == "Gnocchi":
             pg.get_by_role("button", name=re.compile("^ ?Reckless attack$")).click(); pg.wait_for_timeout(2000)
-            t = use(pg, "Great Axe", "Goblin 2")
+            t = use(pg, "Pasta", "Goblin 2")
             print("    ", t.replace("\n", " / "))
-            check("Goblin 2" in t, "Gnocchi's reckless Great Axe at Goblin 2 resolves")
+            check("Goblin 2" in t, "Gnocchi's reckless Pasta at Goblin 2 resolves")
         elif n == "Yamato":
             card = pg.locator(".move-card").filter(has_text="Phantasaml force").first
             btn = card.get_by_role("button", name=re.compile("Cast|Use"))

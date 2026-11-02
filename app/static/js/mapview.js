@@ -162,15 +162,20 @@
       return kind === "damage" && /piercing|slashing|bludgeoning/.test(t) ? "punch" : kind === "damage" ? "slash" : "arcane";
     }
     attackFx(fx, age) {
-      const style = MapView.fxStyle(fx.name, fx.kind, fx.type), start = performance.now() - (age || 0) * 1000;
+      // a look picked on the attack form wins over the guess from its name
+      const LOOK = { slash: "slash", punch: "punch", bite: "bite", arrow: "arrow", flames: "fire", frost: "ice", sparks: "lightning",
+        holy: "radiant", venom: "poison", arcane: "arcane", rock: "earth", quake: "earth" };
+      const style = LOOK[fx.style] || MapView.fxStyle(fx.name, fx.kind, fx.type), start = performance.now() - (age || 0) * 1000;
       const COLORS = { fire: "#ff7a2f", ice: "#8fdcff", lightning: "#fff27a", radiant: "#ffe9a3", poison: "#8fe36b", arcane: "#c08bff",
         arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a" };
       const color = COLORS[style] || "#ffffff", hows = fx.how || [];
       // Earth Shatter: an earth move with a radius shakes the map and splits the ground across all of it
-      const quakeAt = fx.area && fx.area.kind === "circle" && (style === "earth" || /quake|tremor|seismic|fissure/i.test(fx.name || ""))
-        ? fx.area.at || fx.from || (fx.to && fx.to[0]) : null;
+      // (or any move given the Earthquake look: without a radius it shakes 10 ft around who it hits)
+      const circle = fx.area && fx.area.kind === "circle";
+      const quake = fx.style ? fx.style === "quake" : circle && (style === "earth" || /quake|tremor|seismic|fissure/i.test(fx.name || ""));
+      const quakeAt = !quake ? null : circle ? fx.area.at || fx.from || (fx.to && fx.to[0]) : (fx.to && fx.to[0]) || fx.from;
       if (quakeAt) {
-        const r = Math.max(1, (fx.area.squares || 3) * 5 / ((this.map && this.map.scale_value) || 5));
+        const r = circle ? Math.max(1, (fx.area.squares || 3) * 5 / ((this.map && this.map.scale_value) || 5)) : 2;
         this.addFx({ type: "quake", x: quakeAt[0], y: quakeAt[1], r, cracks: MapView.cracks(r), ms: 2600, start });
         if (window.FX) FX.sound("quake");
       }

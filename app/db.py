@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 16
 
 MIGRATIONS = {
     1: """
@@ -392,6 +392,15 @@ MIGRATIONS = {
     14: """
     ALTER TABLE creatures ADD COLUMN has_phase2 INTEGER NOT NULL DEFAULT 0;
     UPDATE creatures SET has_phase2 = 1 WHERE trim(phase2) != '';
+    """,
+    # v15: a boss's title (its entrance) and loot (a handout to everyone when it's defeated).
+    15: """
+    ALTER TABLE creatures ADD COLUMN tagline TEXT NOT NULL DEFAULT '';
+    ALTER TABLE creatures ADD COLUMN loot TEXT NOT NULL DEFAULT '';
+    """,
+    # v16: everyone's reaction in a fight (used this round, the last hit on them, what they can answer).
+    16: """
+    ALTER TABLE combatants ADD COLUMN reaction TEXT NOT NULL DEFAULT '{}';
     """,
 }
 
