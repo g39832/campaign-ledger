@@ -157,7 +157,28 @@
       for (let i = 0; i < 6; i++) noise(a, { dur: 0.35, vol: 0.4, freq: 120 + i * 25, delay: i * 0.22 });
       for (let i = 0; i < 4; i++) noise(a, { dur: 0.06, vol: 0.3, freq: 1500 + i * 400, delay: 0.15 + i * 0.3 }); },
     ac: (a) => { tone(a, { type: "triangle", from: 440, to: 880, dur: 0.25, vol: 0.18 }); },
+    descend: (a) => { // footsteps going down, then a low hum
+      for (let i = 0; i < 6; i++) { tone(a, { type: "sine", from: 260 - i * 28, dur: 0.12, vol: 0.2, delay: i * 0.16 }); noise(a, { dur: 0.05, vol: 0.18, freq: 500 - i * 50, delay: i * 0.16 }); }
+      tone(a, { type: "triangle", from: 98, to: 82, dur: 1.2, vol: 0.2, delay: 1.0 }); },
   };
+  /** Going down to a new level (or a new map made): the screen sinks into darkness down a flight of
+     steps, the level's name comes up, then it fades away. About two seconds; tap to skip. */
+  function descend(title, sub) {
+    if (!prefs.effects) { banner(title, sub, "crit"); return; }
+    const el = document.createElement("div");
+    el.className = "fx-descend" + (calm() ? " is-calm" : "");
+    el.setAttribute("role", "status");
+    const steps = document.createElement("div"); steps.className = "fx-steps";
+    for (let i = 0; i < 7; i++) { const s = document.createElement("span"); s.style.setProperty("--i", i); steps.append(s); }
+    const t = document.createElement("div"); t.className = "fx-descend-title"; t.textContent = title;
+    el.append(steps, t);
+    if (sub) { const s = document.createElement("div"); s.className = "fx-descend-sub"; s.textContent = sub; el.append(s); }
+    const go = () => { el.classList.add("is-out"); setTimeout(() => el.remove(), 500); };
+    el.addEventListener("click", go);
+    document.body.append(el);
+    sound("descend");
+    setTimeout(go, calm() ? 1400 : 2400);
+  }
   function sound(name) {
     if (!prefs.sounds || !SOUNDS[name]) return;
     const a = ac();
@@ -166,7 +187,7 @@
   }
 
   window.FX = {
-    float, flash, banner, burst, sound,
+    float, flash, banner, burst, sound, descend,
     get prefs() { return Object.assign({}, prefs); },
     set(k, v) { prefs[k] = v; save(); if (k === "sounds" && v) { ac(); sound("ping"); } },
   };

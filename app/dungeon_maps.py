@@ -164,3 +164,65 @@ def api_room(map_id, index):
         _reveal_box(conn, map_id, rooms[index]["box"], bool(data.get("reveal", True)))
         M._bump(conn, map_id)
     return jsonify(M.dm_state(map_id))
+
+
+def _party_ids(conn, cid):
+    return [r["id"] for r in conn.execute("SELECT id FROM characters WHERE campaign_id = ? AND kind = 'pc' AND archived = 0 ORDER BY name", (cid,))]
+
+
+@bp.post("/maps/<int:map_id>/party-to-start")
+def api_party_to_start(map_id):
+    """Every hero in the campaign stands at the start: the ones already on the map move there,
+    the rest are added."""
+    M = _maps()
+    with tx() as conn:
+        m = M.map_dict(M._map_row(conn, map_id))
+        d = m.get("dungeon")
+        if not d:
+            raise F.ApiError("That isn't a made-up map")
+        sx, sy = d["start"]
+        mine = {r["character_id"]: r["id"] for r in conn.execute(
+            "SELECT id, character_id FROM map_tokens WHERE map_id = ? AND character_id IS NOT NULL", (map_id,))}
+        party = _party_ids(conn, m["campaign_id"])
+        others = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute(
+            "SELECT x, y, character_id FROM map_tokens WHERE map_id = ?", (map_id,)) if r["character_id"] not in party}
+        spots = M._open_spots(m, others, sx, sy, len(party))
+        for cid, (x, y) in zip(party, spots):
+            if cid in mine:
+                conn.execute("UPDATE map_tokens SET x = ?, y = ?, updated_at = ? WHERE id = ?", (x, y, now_iso(), mine[cid]))
+            else:
+                conn.execute("INSERT INTO map_tokens (uid, map_id, kind, character_id, x, y, size, hidden, created_at, updated_at) "
+                             "VALUES (?,?,'pc',?,?,?,1,0,?,?)", (uuid.uuid4().hex, map_id, cid, x, y, now_iso(), now_iso()))
+        start = next(r for r in d["rooms"] if r["kind"] == "start")
+        _reveal_box(conn, map_id, start["box"], True)
+        M._bump(conn, map_id)
+    return jsonify(M.dm_state(map_id))
+
+
+@bp.post("/maps/<int:map_id>/reroll")
+def api_reroll(map_id):
+    """Don't like it? A brand new layout for this map (same kind, same level). The heroes go to the
+    new start; monsters and markers placed on the old layout are taken off."""
+    M = _maps()
+    with tx() as conn:
+        m = M.map_dict(M._map_row(conn, map_id))
+        d = m.get("dungeon")
+        if not d:
+            raise F.ApiError("That isn't a made-up map")
+        g = generate(d["theme"], None, int(d.get("level") or 1))
+        info = dict(d, **{k: g[k] for k in ("seed", "rooms", "start", "exit")})
+        conn.execute("UPDATE maps SET terrain = ?, dungeon = ?, cols = ?, rows = ?, revealed = ? WHERE id = ?",
+                     (json.dumps(g["terrain"]), json.dumps(info), g["cols"], g["rows"], "0" * (g["cols"] * g["rows"]), map_id))
+        gone = [r["id"] for r in conn.execute("SELECT t.id, t.character_id, t.combatant_id FROM map_tokens t WHERE t.map_id = ?", (map_id,))
+                if not _is_hero(conn, r)]
+        for tid in gone:
+            conn.execute("DELETE FROM map_tokens WHERE id = ?", (tid,))
+        m = M.map_dict(M._map_row(conn, map_id))
+        heroes = [r for r in conn.execute("SELECT * FROM map_tokens WHERE map_id = ?", (map_id,))]
+        sx, sy = g["start"]
+        for t, (x, y) in zip(heroes, M._open_spots(m, set(), sx, sy, len(heroes))):
+            conn.execute("UPDATE map_tokens SET x = ?, y = ? WHERE id = ?", (x, y, t["id"]))
+        start = next(r for r in g["rooms"] if r["kind"] == "start")
+        _reveal_box(conn, map_id, start["box"], True)
+        M._bump(conn, map_id)
+    return jsonify(M.dm_state(map_id))

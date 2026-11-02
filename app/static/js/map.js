@@ -90,14 +90,18 @@
 
   /* ---- a made-up map (dungeon, cave, prison): its rooms, shown or hidden to the players, and the stairs */
   let lastNext = S.map.dungeon ? S.map.dungeon.next : null;
+  const THEME_NAME = { dungeon: "Dungeon", cave: "Cave", prison: "Prison", jungle: "Jungle", swamp: "Swamp", desert: "Desert ruins", ice: "Ice cavern", sewer: "Sewer", volcano: "Volcano" };
+  try { // just made on the Maps page: a little moment as it opens
+    if (sessionStorage.getItem("map-made") === String(MID)) { sessionStorage.removeItem("map-made"); setTimeout(() => window.FX && FX.descend(S.map.name, "Your new map is ready"), 300); }
+  } catch (e) { /* ignore */ }
   function renderDungeon() {
     const box = $("#dungeon-panel"), d = S.map.dungeon;
     box.hidden = !d;
     if (!d) return;
     if (d.next && d.next !== lastNext) { // the party just went down the stairs
       lastNext = d.next;
-      if (window.FX) { FX.banner("Down the stairs!", "Level " + (d.level + 1) + " is ready", "crit"); FX.sound("start"); }
-      toast("The party took the stairs: level " + (d.level + 1) + " is made" + (S.live ? "" : " and shown to the players") + ".", "ok",
+      if (window.FX) FX.descend("Down the stairs!", "Level " + (d.level + 1) + " is ready");
+      toast("The party took the stairs: level " + (d.level + 1) + " is ready.", "ok",
         { ms: 15000, action: { label: "Go to level " + (d.level + 1), run: () => { location.href = "/map/" + d.next; } } });
     }
     const shown = (r) => { const [x0, y0, x1, y1] = r.box, cx = Math.floor((x0 + x1) / 2), cy = Math.floor((y0 + y1) / 2);
@@ -112,9 +116,27 @@
       h("button", { type: "button", class: "btn btn-sm" + (shown(r) ? " btn-quiet" : ""), title: shown(r) ? "Hide it from the players again" : "Let the players see it",
         onclick: () => act("POST", "/api/maps/" + MID + "/rooms/" + i + "/reveal", { reveal: !shown(r) }, (s) => apply(s)) },
         icon(shown(r) ? "eye-off" : "sun", "sm"), shown(r) ? " Hide" : " Show"));
+    // Get started: the three things to do, ticked off as they're done
+    const heroes = S.tokens.filter((t) => t.kind === "pc").length, foes = S.tokens.filter((t) => t.kind === "enemy").length;
+    const step = (done, n, text, btn) => h("li", { class: "dg-step" + (done ? " is-done" : "") },
+      h("span", { class: "dg-num" }, done ? icon("check", "sm") : String(n)), h("span", { class: "grow" }, text), btn);
+    const newLayout = h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "A brand new layout for this map (monsters on it are taken off)" }, icon("refresh-cw", "sm"), " New layout");
+    L.armed(newLayout, () => act("POST", "/api/maps/" + MID + "/reroll", {}, (s) => { apply(s); view.fit(); if (window.FX) FX.descend(S.map.name, "A new layout"); }), "Tap again for a new layout");
+    const steps = h("ol", { class: "dg-steps" },
+      step(heroes > 0, 1, heroes ? heroes + " hero" + (heroes === 1 ? "" : "es") + " on the map" : "Put the party at the start",
+        h("button", { type: "button", class: "btn btn-sm" + (heroes ? " btn-quiet" : " btn-primary"), onclick: () => act("POST", "/api/maps/" + MID + "/party-to-start", {}, (s) => apply(s)) },
+          icon("users", "sm"), heroes ? " Back to the start" : " Put them there")),
+      step(S.live, 2, S.live ? "The players can see it" : "Show it to the players",
+        h("button", { type: "button", class: "btn btn-sm" + (S.live ? " btn-quiet" : " btn-primary"), onclick: () => $("#live-btn").click() },
+          icon(S.live ? "eye-off" : "sun", "sm"), S.live ? " Stop showing" : " Show it")),
+      step(foes > 0, 3, foes ? foes + " monster" + (foes === 1 ? "" : "s") + " placed" : "Put monsters where you want them",
+        h("button", { type: "button", class: "btn btn-sm" + (foes ? " btn-quiet" : ""), onclick: () => { $("#monster-panel").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#mon-q").focus(), 400); } },
+          icon("map-pin", "sm"), " Add monsters")));
     box.replaceChildren(
-      h("h3", { class: "rule-head" }, (d.theme === "prison" ? "Prison" : d.theme === "cave" ? "Cave" : "Dungeon") + " · level " + d.level),
-      h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, "You see everything. Players see the rooms you show, and rooms light up as heroes walk in. The stairs are in the boss room; a hero who steps on them (with no fight running here) takes everyone to the next level. Put monsters anywhere with Add monsters below."),
+      h("h3", { class: "rule-head" }, (THEME_NAME[d.theme] || "Map") + " · level " + d.level),
+      steps,
+      h("div", { class: "row", style: "gap:6px;margin:4px 0 8px" }, newLayout),
+      h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, "Rooms light up for the players as heroes walk in, or tap Show. The boss room has the stairs down: a hero who steps on them (with no fight going here) takes everyone to the next level."),
       h("ul", { class: "dg-rooms" }, rooms.map(row)),
       cells.length ? h("details", { class: "dg-cells" }, h("summary", { class: "lbl" }, cells.length + " cells"), h("ul", { class: "dg-rooms" }, cells.map(row))) : null,
       h("div", { class: "row", style: "gap:6px;margin-top:8px" },

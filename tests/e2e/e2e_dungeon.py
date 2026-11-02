@@ -42,13 +42,20 @@ with sync_playwright() as p:
     dm.on("pageerror", lambda e: problems.append(f"DM JS error: {e}"))
     dm.on("response", lambda r: r.status >= 500 and problems.append(f"DM HTTP {r.status} {r.url}"))
 
-    print(f"== [{engine.NAME}/{DEVICE}] the Maps page: make a cave and a dungeon, then a prison")
+    print(f"== [{engine.NAME}/{DEVICE}] the Maps page: one tap makes each kind of map")
     made = {}
-    for theme in ("cave", "dungeon", "prison"):
+    dm.goto(f"{DM}/map"); dm.wait_for_selector("[data-dungeon]")
+    kinds = [x.get_attribute("data-dungeon") for x in dm.locator("[data-dungeon]").all()]
+    check(len(kinds) >= 9 and {"jungle", "swamp", "desert", "ice", "sewer", "volcano", "prison"} <= set(kinds), f"every kind has a card ({', '.join(kinds)})")
+    check(dm.evaluate("[...document.querySelectorAll('[data-dthumb]')].every((c) => c.getContext('2d').getImageData(75, 50, 1, 1).data[3] > 0)"),
+          "each card has a picture of what it looks like")
+    for theme in [k for k in kinds if k != "prison"] + ["prison"]:
         dm.goto(f"{DM}/map"); dm.wait_for_selector("[data-dungeon]")
-        btn = dm.locator(f"[data-dungeon={theme}]")
-        btn.click(); dm.wait_for_timeout(200); btn.click()
+        dm.locator(f"[data-dungeon={theme}]").click()
         dm.wait_for_url(re.compile(r"/map/\d+"), timeout=15000); dm.wait_for_selector("#dungeon-panel:not([hidden])")
+        if theme == "jungle":
+            dm.wait_for_selector(".fx-descend", timeout=3000)
+            check(dm.locator(".fx-descend").count() == 1, "a little animation as the new map opens")
         made[theme] = int(re.search(r"/map/(\d+)", dm.url).group(1))
         head = dm.locator("#dungeon-panel h3").inner_text()
         check(theme in head.lower() and "level 1" in head.lower(), f"{theme}: made, and its panel says {head!r}")
@@ -63,10 +70,19 @@ with sync_playwright() as p:
 
     print("== the party on the prison map, shown to the players")
     sx, sy = d["start"]
-    for i, n in enumerate(["Moni Easter", "Gnocchi"]):
-        call("POST", f"/api/maps/{mid}/tokens", {"character_id": chars[n]["id"], "x": sx, "y": sy + i})
-    dm.goto(f"{DM}/map/{mid}"); dm.wait_for_selector("#dungeon-panel:not([hidden])")
-    dm.locator("#live-btn").click(); dm.wait_for_timeout(800)
+    dm.goto(f"{DM}/map/{made['jungle']}"); dm.wait_for_selector("#dungeon-panel:not([hidden])"); dm.wait_for_timeout(2600)
+    s0 = call("GET", f"/api/maps/{made['jungle']}")["map"]["dungeon"]["seed"]
+    nl = dm.locator("#dungeon-panel").get_by_role("button", name=re.compile("New layout"))
+    nl.click(); dm.wait_for_timeout(200); dm.locator("#dungeon-panel button.is-armed").click(); dm.wait_for_timeout(1500)
+    check(call("GET", f"/api/maps/{made['jungle']}")["map"]["dungeon"]["seed"] != s0, "New layout (tap twice): the jungle is laid out again")
+    dm.goto(f"{DM}/map/{mid}"); dm.wait_for_selector("#dungeon-panel:not([hidden])"); dm.wait_for_timeout(2600)
+    check(dm.locator("#dungeon-panel .dg-step").count() == 3 and dm.locator("#dungeon-panel .dg-step.is-done").count() == 0, "Get started: three steps, none done yet")
+    dm.locator("#dungeon-panel .dg-step").nth(0).get_by_role("button").click(); dm.wait_for_timeout(1200)
+    heroes = [t for t in call("GET", f"/api/maps/{mid}")["tokens"] if t["kind"] == "pc"]
+    check({chars[n]["id"] for n in ("Lux Fedelis", "Moni Easter", "Yamato", "Gnocchi")} <= {t["character_id"] for t in heroes} and all(abs(t["x"] - sx) <= 3 and abs(t["y"] - sy) <= 3 for t in heroes),
+          f"step 1: the whole party stands at the start ({len(heroes)} heroes)")
+    dm.locator("#dungeon-panel .dg-step").nth(1).get_by_role("button").click(); dm.wait_for_timeout(1200)
+    check(dm.locator("#dungeon-panel .dg-step.is-done").count() == 2, "step 2: shown to the players, ticked off")
     w, h = SIZES[DEVICE]
     pctx = b.new_context(viewport={"width": w, "height": h}, **(engine.mobile() if DEVICE in ("phones", "tablets", "mixed") else {}),
                          has_touch=DEVICE in ("phones", "tablets", "mixed"))
@@ -120,13 +136,21 @@ with sync_playwright() as p:
     a = pg.evaluate(f"""() => {{ const v = window.__view, mm = v.map, r = v.canvas.getBoundingClientRect();
       const at = (x, y) => [r.left + v.view.tx + (mm.offset_x + (x + .5) * mm.cell_px) * v.view.s, r.top + v.view.ty + (mm.offset_y + (y + .5) * mm.cell_px) * v.view.s];
       return [at({ex - 1}, {ey}), at({ex}, {ey})]; }}""")
-    pg.mouse.move(*a[0]); pg.mouse.down(); pg.mouse.move(*a[1], steps=8); pg.mouse.up(); pg.wait_for_timeout(3500)
+    pg.mouse.move(*a[0]); pg.mouse.down(); pg.mouse.move(*a[1], steps=8); pg.mouse.up()
+    try:
+        pg.wait_for_selector(".fx-descend", timeout=6000)
+    except Exception:
+        pass
+    check(pg.locator(".fx-descend").count() == 1, "the player sees the going-down-the-stairs animation")
+    pg.wait_for_timeout(1300)
+    pg.screenshot(path=os.path.join(SHOTS, f"{engine.NAME}_{DEVICE}_player_descend.png"))
+    pg.wait_for_timeout(3000)
     nm = player_map()
     check(nm["id"] != mid and "level 2" in nm["name"].lower(), f"Moni steps on the stairs: the player is on {nm['name']!r}")
     check(pg.locator(".fx-banner, .banner").filter(has_text=re.compile("level 2", re.I)).count() >= 0, "a banner on the player's screen")
     pg.screenshot(path=os.path.join(SHOTS, f"{engine.NAME}_{DEVICE}_player_level2.png"))
     new = call("GET", f"/api/maps/{nm['id']}")
-    check({t["character_id"] for t in new["tokens"]} >= {chars["Moni Easter"]["id"], chars["Gnocchi"]["id"]}, "Moni and Gnocchi both arrive on level 2")
+    check({t["character_id"] for t in new["tokens"]} >= {h["character_id"] for h in heroes}, "the whole party arrives on level 2")
     check(new["map"]["dungeon"]["level"] == 2 and new["map"]["dungeon"]["prev"] == mid and any(r["kind"] == "boss" for r in new["map"]["dungeon"]["rooms"]),
           "level 2 is a new prison with its own boss room, linked back to level 1")
     dm.wait_for_timeout(3000)

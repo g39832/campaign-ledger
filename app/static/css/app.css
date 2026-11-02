@@ -1494,3 +1494,29 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .dg-room .linkish { background: none; border: 0; color: var(--text); cursor: pointer; text-align: left; font: inherit; padding: 4px 0; overflow-wrap: anywhere; }
 .dg-room.is-boss .linkish { color: var(--accent); font-weight: 700; }
 .dg-cells summary { cursor: pointer; margin-top: 6px; }
+
+/* going down to a new level: the screen sinks down a flight of steps, then the level's name */
+.fx-descend { position: fixed; inset: 0; z-index: 9500; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; cursor: pointer;
+  background: radial-gradient(circle at 50% 45%, rgba(40,30,20,.92), rgba(5,4,3,.98) 70%); animation: fx-descend-in .45s ease-out; text-align: center; }
+.fx-descend.is-out { animation: fx-descend-out .5s ease-in forwards; }
+.fx-steps { position: relative; width: min(240px, 60vw); height: 150px; perspective: 400px; }
+.fx-steps span { position: absolute; left: 50%; top: calc(var(--i) * 18px); height: 14px; width: calc(100% - var(--i) * 26px); transform: translateX(-50%);
+  border-radius: 2px; background: linear-gradient(#b9a67c, #6e5f45); opacity: 0; animation: fx-step 1.6s ease-in calc(var(--i) * .12s) forwards; }
+.fx-descend-title { font: 700 clamp(1.6rem, 6vw, 2.6rem)/1.1 var(--caps); color: #f3ead6; letter-spacing: .04em; opacity: 0; animation: fx-rise-in .6s ease-out .7s forwards; overflow-wrap: anywhere; }
+.fx-descend-sub { color: var(--brass); font-size: 1.05rem; opacity: 0; animation: fx-rise-in .6s ease-out 1s forwards; }
+.fx-descend.is-calm .fx-steps span, .fx-descend.is-calm .fx-descend-title, .fx-descend.is-calm .fx-descend-sub { animation-duration: .01s; animation-delay: 0s; }
+@keyframes fx-step { 0% { opacity: 0; transform: translate(-50%, -20px) scaleX(1.1); } 30% { opacity: 1; } 100% { opacity: .15; transform: translate(-50%, 40px) scaleX(.7); } }
+@keyframes fx-rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fx-descend-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fx-descend-out { to { opacity: 0; } }
+
+/* the Maps page: one tap makes one */
+.dungeon-card .dungeon-go { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-weight: 700; color: var(--accent); }
+.dungeon-card.is-busy { opacity: .6; cursor: progress; }
+/* Get started on a made-up map */
+.dg-steps { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 6px; }
+.dg-step { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); }
+.dg-step .grow { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.dg-step.is-done { border-color: transparent; background: transparent; color: var(--text-2); }
+.dg-num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--brass); font-weight: 700; color: var(--brass); flex: 0 0 auto; }
+.dg-step.is-done .dg-num { background: var(--ok); border-color: var(--ok); color: var(--on-accent); }

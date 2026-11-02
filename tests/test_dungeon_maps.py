@@ -80,3 +80,20 @@ def test_walking_into_a_room_lights_it_up(api, joined):
     t = _hero_on(api, m["id"], a["id"], d["start"])
     s = api.post(f"/api/tokens/{t['id']}/move", {"x": x0, "y": y0, "free": True})
     assert s["map"]["revealed"][y1 * m["cols"] + x1] == "1"
+
+
+def test_party_to_start_and_a_new_layout(api, joined):
+    camp, a, b = joined["camp"], joined["a"], joined["b"]
+    st = api.post(f"/api/campaigns/{camp['id']}/dungeons", {"theme": "jungle"}, 201)
+    mid, d = st["map"]["id"], st["map"]["dungeon"]
+    assert st["map"]["name"] == "Jungle — level 1" and any(r["kind"] == "boss" for r in d["rooms"])
+    st = api.post(f"/api/maps/{mid}/party-to-start")
+    near = lambda t, xy: max(abs(t["x"] - xy[0]), abs(t["y"] - xy[1])) <= 2
+    heroes = [t for t in st["tokens"] if t["kind"] == "pc"]
+    assert {t["character_id"] for t in heroes} == {a["id"], b["id"]} and all(near(t, d["start"]) for t in heroes)
+    api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 1, "x": d["exit"][0] - 2, "y": d["exit"][1]}, 201)
+    st = api.post(f"/api/maps/{mid}/reroll")
+    d2 = st["map"]["dungeon"]
+    assert d2["seed"] != d["seed"] and d2["theme"] == "jungle" and d2["level"] == 1
+    assert [t["kind"] for t in st["tokens"]] == ["pc", "pc"], "the monster on the old layout is gone, the heroes stay"
+    assert all(near(t, d2["start"]) for t in st["tokens"])

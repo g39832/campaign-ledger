@@ -744,7 +744,7 @@
       const box = document.querySelector("#turns .react-box"); if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
     if (before.map && now.map && before.map.id !== now.map.id) { // down the stairs (or the DM showed another map)
-      FX.banner(now.map.name || "A new map", "You arrive somewhere new", "crit"); FX.sound("start");
+      FX.descend(now.map.name || "A new map", "You arrive somewhere new");
     }
     const ea = before.encounter, eb = now.encounter;
     if (eb && eb.current && (!ea || ea.current !== eb.current || ea.round !== eb.round)) {

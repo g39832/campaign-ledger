@@ -17,16 +17,16 @@
   </div>
 </section>
 <section class="section">
-  <h2 class="rule-head">Make a new one <span class="count">a different layout every time · fog on · a boss room · stairs down to the next level</span></h2>
+  <h2 class="rule-head">Make a new map <span class="count">tap one · a different layout every time</span></h2>
+  <p class="faint" style="font-size:.92rem;margin:0 0 10px">Every one has a <b>boss room</b> with <b>stairs down</b>. Players only see where they've been; you see it all. When a hero reaches the stairs, the next level is made and everyone goes down.</p>
   <div class="preset-grid" id="dungeon-makers">
     {% for t in dungeon_themes %}
-    <button type="button" class="preset-card" data-dungeon="{{ t.key }}">
-      <span class="dungeon-icon" aria-hidden="true">{{ icon("castle" if t.key == "dungeon" else "key-round" if t.key == "prison" else "map", "") }}</span>
-      <b>{{ t.name }}</b><span class="faint">{{ t.about }}</span>
+    <button type="button" class="preset-card dungeon-card" data-dungeon="{{ t.key }}" title="Make a new {{ t.name|lower }}">
+      <canvas class="preset-thumb" width="150" height="100" data-dthumb="{{ t.key }}" aria-hidden="true"></canvas>
+      <b>{{ t.name }}</b><span class="faint">{{ t.about }}</span><span class="dungeon-go">{{ icon("plus", "sm") }} Make one</span>
     </button>
     {% endfor %}
   </div>
-  <p class="faint" style="font-size:.88rem;margin:6px 0 0">Players see only the start room at first; rooms light up as they walk in. You see the whole map and can show or hide any room. When a hero steps on the stairs, the next level is made and shown to everyone.</p>
 </section>
 <form id="new-map" class="panel panel-pad row" style="margin-bottom:22px">
   <label class="field" style="flex:2 1 220px"><span>New blank map</span><input type="text" name="name" maxlength="200" required placeholder="e.g. Goblin warrens, level 1"></label>
@@ -62,7 +62,7 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=133"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=134"></script>
 <script>
 // Deleting a map removes the map, its tokens, fog and terrain. Encounters, characters
 // and their HP are separate records and aren't touched.
@@ -86,9 +86,26 @@ L.$$("[data-preset]").forEach((b) => b.addEventListener("click", () => {
   if (!b.classList.contains("is-armed")) { L.$$("[data-preset]").forEach((x) => x.classList.remove("is-armed")); b.classList.add("is-armed"); L.toast("Click again to make “" + b.querySelector("b").textContent + "”.", null); return; }
   L.act("POST", "/api/campaigns/{{ campaign.id }}/maps", { preset: b.dataset.preset }, (d) => { location.href = "/map/" + d.map.id; });
 }));
+// Made-up maps: a picture of each kind; one tap makes a new one and opens it
+const DUNGEON_THUMBS = {{ dungeon_themes | tojson }};
+L.$$("[data-dthumb]").forEach((cv) => {
+  const p = DUNGEON_THUMBS.find((x) => x.key === cv.dataset.dthumb), ctx = cv.getContext("2d");
+  const cs = Math.min(cv.width / p.cols, cv.height / p.rows);
+  ctx.fillStyle = p.bg_color; ctx.fillRect(0, 0, cv.width, cv.height);
+  for (const [k, kind] of Object.entries(p.terrain)) {
+    const [x, y] = k.split(",").map(Number), T = MapView.TERRAIN[kind];
+    if (T) { ctx.fillStyle = kind === "tree" ? "#3f5f2e" : kind === "stairs" ? "#ffd36b" : T.fill; ctx.fillRect(x * cs, y * cs, Math.ceil(cs), Math.ceil(cs)); }
+  }
+});
 L.$$("[data-dungeon]").forEach((b) => b.addEventListener("click", () => {
-  if (!b.classList.contains("is-armed")) { L.$$("[data-dungeon], [data-preset]").forEach((x) => x.classList.remove("is-armed")); b.classList.add("is-armed"); L.toast("Click again to make a new " + b.querySelector("b").textContent.toLowerCase() + ".", null); return; }
-  L.act("POST", "/api/campaigns/{{ campaign.id }}/dungeons", { theme: b.dataset.dungeon }, (d) => { location.href = "/map/" + d.map.id; });
+  if (b.classList.contains("is-busy")) return;
+  L.$$("[data-dungeon]").forEach((x) => x.classList.add("is-busy"));
+  const name = b.querySelector("b").textContent;
+  L.act("POST", "/api/campaigns/{{ campaign.id }}/dungeons", { theme: b.dataset.dungeon }, (d) => {
+    if (!d) { L.$$("[data-dungeon]").forEach((x) => x.classList.remove("is-busy")); return; }
+    try { sessionStorage.setItem("map-made", d.map.id); } catch (e) { /* ignore */ }
+    location.href = "/map/" + d.map.id;
+  });
 }));
 L.$("#new-map").addEventListener("submit", async (e) => {
   e.preventDefault();

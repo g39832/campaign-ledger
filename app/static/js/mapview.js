@@ -100,6 +100,12 @@
     }
     setData(map, tokens) {
       const first = !this.map || this.map.id !== map.id;
+      // squares just revealed fade in out of the dark (a room lighting up as a hero walks in)
+      if (!first && map.fog_enabled && this.map.revealed && map.revealed && this.map.revealed !== map.revealed) {
+        const was = this.map.revealed, fresh = new Set();
+        for (let i = 0; i < map.revealed.length; i++) if (map.revealed[i] === "1" && was[i] !== "1") fresh.add(i);
+        if (fresh.size) { this.fade = { cells: fresh, t0: performance.now() }; }
+      }
       this.map = map; this.tokens = tokens;
       if (this.drag && this.drag.token) {
         const t = tokens.find((x) => x.id === this.drag.token.id);
@@ -459,6 +465,15 @@
         for (let y = 0; y < m.rows; y++) for (let x = 0; x < m.cols; x++) {
           if (!this.revealed(x, y)) ctx.fillRect(ox + x * cp - 0.5, oy + y * cp - 0.5, cp + 1, cp + 1);
         }
+        const f = this.fade, age = f ? (performance.now() - f.t0) / 900 : 1;
+        if (f && age < 1) { // the dark lifting off newly revealed squares, with a warm glow at the edge
+          ctx.save(); ctx.globalAlpha = (1 - age) * (dm ? 0.55 : 1); ctx.fillStyle = dm ? "rgba(10,8,6,1)" : "#080706";
+          for (const i of f.cells) ctx.fillRect(ox + (i % m.cols) * cp - 0.5, oy + Math.floor(i / m.cols) * cp - 0.5, cp + 1, cp + 1);
+          ctx.globalAlpha = Math.sin(age * Math.PI) * 0.35; ctx.fillStyle = "#ffd98a";
+          for (const i of f.cells) ctx.fillRect(ox + (i % m.cols) * cp, oy + Math.floor(i / m.cols) * cp, cp, cp);
+          ctx.restore();
+          if (!this.fadeRaf) this.fadeRaf = requestAnimationFrame(() => { this.fadeRaf = 0; this.draw(); });
+        } else if (f) this.fade = null;
       }
       if (this.preview.size) {
         ctx.fillStyle = this.tool === "conceal" ? "rgba(10,8,6,.5)" : this.tool === "reveal" ? "rgba(255,240,200,.35)" : "rgba(199,162,94,.45)";
