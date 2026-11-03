@@ -69,12 +69,14 @@ def create_app(config=None):
 
     @app.after_request
     def _no_cache_api(resp):
-        if request.path.startswith("/api/"):
-            resp.headers["Cache-Control"] = "no-store"
+        if request.path.startswith("/api/") and not (request.path.startswith("/api/uploads/") and resp.status_code == 200):
+            resp.headers["Cache-Control"] = "no-store"  # (pictures people upload are kept: app/speed.py)
             # anything changed: every open page hears about it at once (app/events.py)
             if request.method in ("POST", "PATCH", "PUT", "DELETE") and resp.status_code < 400:
                 from . import events
                 events.publish()
         return resp
 
+    from . import speed
+    speed.setup(app)  # compressed responses, and scripts and styles the browser keeps
     return app

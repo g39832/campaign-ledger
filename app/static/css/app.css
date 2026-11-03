@@ -1520,3 +1520,7 @@ body.no-live-map #no-map { inset: 16px 12px auto !important; }
 .dg-step.is-done { border-color: transparent; background: transparent; color: var(--text-2); }
 .dg-num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--brass); font-weight: 700; color: var(--brass); flex: 0 0 auto; }
 .dg-step.is-done .dg-num { background: var(--ok); border-color: var(--ok); color: var(--on-accent); }
+
+/* a room with monsters: the fight is about to start */
+.room-fight { margin: 0 0 10px; padding: 10px 12px; border: 2px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); overflow-wrap: anywhere; }
+.room-fight .rf-head { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; color: var(--accent-strong); }

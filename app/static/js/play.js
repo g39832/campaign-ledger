@@ -539,12 +539,16 @@
       else if (casting && !casting.result && casting.spell.summon) $("#hint").textContent = casting.spell.name + ": tap the square on the map where " + casting.spell.summon + " appears.";
       else if (casting && !casting.result) $("#hint").textContent = "Casting " + casting.spell.name + ": tap who gets it, then Cast.";
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
+      else if (view.tool === "select" && m.fight_starting) $("#hint").textContent = "Enemies! Hold still while the DM rolls initiative.";
       else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
     const ch = S.character;
+    const fs = m && m.fight_starting;
     $("#turns").replaceChildren(
+      fs ? h("div", { class: "room-fight" }, h("div", { class: "rf-head" }, icon("swords", "sm"), h("b", null, "Enemies in " + fs.room + "!")),
+        h("p", { style: "margin:4px 0 0" }, fs.by + " walked in on them. Hold still: the DM is rolling initiative.")) : null,
       ch && ch.in_fight ? L.reactionBox(ch, (kind, body) => me("react", Object.assign({ kind }, body)), { you: true, burn: !ch.my_turn }) : null,
       ch && ch.in_fight && !ch.my_turn && ch.reaction ? L.turnStrip({ reaction: ch.reaction }, { title: "Off your turn" }) : null,
       h("h3", { class: "rule-head" }, e ? "Round " + e.round : "Turn order"),
@@ -743,6 +747,8 @@
           run: () => me("react", { kind: o.kind }).then((d) => L.reactionDone(d && d.reaction, b.name, true)) } });
       const box = document.querySelector("#turns .react-box"); if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
+    const f0 = before.map && before.map.fight_starting, f1 = now.map && now.map.fight_starting;
+    if (f1 && (!f0 || f0.at !== f1.at)) { FX.banner("Enemies!", f1.by + " walks into " + f1.room, "dmg"); FX.sound("bossintro"); FX.flash($("#turns"), "hit"); }
     if (before.map && now.map && before.map.id !== now.map.id) { // down the stairs (or the DM showed another map)
       FX.descend(now.map.name || "A new map", "You arrive somewhere new");
     }

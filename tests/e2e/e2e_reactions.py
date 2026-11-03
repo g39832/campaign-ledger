@@ -52,6 +52,7 @@ HEROES = ["Lux Fedelis", "Moni Easter", "Yamato", "Gnocchi"]
 for n in HEROES:  # everyone up and well for the test (the copy only)
     ch = call("GET", f"/api/characters/{chars[n]['id']}")["character"]
     call("PATCH", f"/api/characters/{ch['id']}", {"changes": {"current_hp": {"from": ch["current_hp"], "to": ch["max_hp"]},
+                                                           "status": {"from": ch["status"], "to": "ok"},
                                                            "conditions": {"from": ch["conditions"], "to": []}}})
 eid = call("POST", f"/api/campaigns/{camp}/encounters", {"name": "Reactions"})["encounter"]["id"]
 call("POST", f"/api/encounters/{eid}/combatants", {"characters": [chars[n]["id"] for n in HEROES],

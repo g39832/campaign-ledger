@@ -1013,7 +1013,7 @@
       main.prepend(bar);
     }
     bar.replaceChildren(...items.map((b) => h("div", { class: "boss-row" + (b.phase === 2 ? " is-phase2" : "") + (b.frac <= 0 ? " is-down" : "") },
-      b.portrait ? h("img", { class: "boss-pic", src: "/api/uploads/" + b.portrait, alt: "" }) : h("span", { class: "boss-crown" }, icon("crown", "sm")),
+      b.portrait ? h("img", { class: "boss-pic", src: "/api/uploads/" + b.portrait + "?w=96", alt: "" }) : h("span", { class: "boss-crown" }, icon("crown", "sm")),
       h("div", { class: "boss-main" },
         h("div", { class: "boss-name" }, h("b", null, b.name), b.phase === 2 ? h("span", { class: "tag is-bad" }, "Phase 2") : null, b.text ? h("span", { class: "boss-num" }, b.text) : null),
         h("div", { class: "boss-track" }, h("div", { class: "boss-fill", style: "width:" + Math.max(0, Math.min(100, Math.round((b.frac || 0) * 100))) + "%" }))))));

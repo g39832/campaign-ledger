@@ -75,9 +75,11 @@ def after_move(conn, m, t, x, y):
     if not d or not _is_hero(conn, t):
         return None
     x, y = int(round(x)), int(round(y))
+    r = room_at(d["rooms"], x, y)
     if m.get("fog_enabled"):
-        r = room_at(d["rooms"], x, y)
         _reveal_box(conn, m["id"], r["box"] if r else [x - SIGHT + 1, y - SIGHT + 1, x + SIGHT - 1, y + SIGHT - 1], True)
+    if r:
+        room_fight(conn, m, r, t)  # monsters in the room: a fight is about to start
     if [x, y] != list(d["exit"]):
         return None
     if m.get("encounter_id"):
@@ -226,3 +228,88 @@ def api_reroll(map_id):
         _reveal_box(conn, map_id, start["box"], True)
         M._bump(conn, map_id)
     return jsonify(M.dm_state(map_id))
+
+
+
+# ---- a fight when the party walks into a room with monsters -----------------------------------
+
+def _fight_running(conn, m):
+    if not m.get("encounter_id"):
+        return False
+    row = conn.execute("SELECT status FROM encounters WHERE id = ?", (m["encounter_id"],)).fetchone()
+    return bool(row and row["status"] == "active")
+
+
+def room_fight(conn, m, room, t):
+    """A hero stepped into a room where monsters stand: a fight with them (and the party on this map)
+    is set up, the monsters come out of hiding, and the DM gets one button to roll initiative and
+    start. Until then the players wait. Returns the fight's note, or None."""
+    d = m.get("dungeon") or {}
+    if d.get("fight") or _fight_running(conn, m):
+        return None
+    x0, y0, x1, y1 = room["box"]
+    foes = conn.execute(
+        "SELECT t.id AS tok, t.x, t.y, cb.id AS cb, cb.name FROM map_tokens t JOIN combatants cb ON cb.id = t.combatant_id "
+        "WHERE t.map_id = ? AND cb.kind = 'enemy' AND cb.status NOT IN ('dead', 'defeated', 'fled') AND cb.current_hp > 0",
+        (m["id"],)).fetchall()
+    foes = [f for f in foes if x0 <= int(round(f["x"])) <= x1 and y0 <= int(round(f["y"])) <= y1]
+    if not foes:
+        return None
+    from .combat import _next_sort
+    from .rules import derived
+    ts = now_iso()
+    eid = F.insert(conn, "encounters", F.ENCOUNTER, {"name": f"{room['name']} ({m['name']})"[:200]},
+                   {"uid": new_uid(), "campaign_id": m["campaign_id"], "created_at": ts, "updated_at": ts})
+    ids = [f["cb"] for f in foes]
+    conn.execute(f"UPDATE combatants SET encounter_id = ?, hidden = 0, init_roll = NULL WHERE id IN ({','.join('?' * len(ids))})", (eid, *ids))
+    conn.execute(f"UPDATE map_tokens SET hidden = 0 WHERE id IN ({','.join('?' * len(foes))})", [f["tok"] for f in foes])
+    from .combat import Ctx
+    ctx = Ctx(conn, eid)
+    heroes = []
+    for tok in conn.execute("SELECT * FROM map_tokens WHERE map_id = ?", (m["id"],)).fetchall():
+        if not _is_hero(conn, tok):
+            continue
+        cid = tok["character_id"] or conn.execute("SELECT character_id FROM combatants WHERE id = ?", (tok["combatant_id"],)).fetchone()["character_id"]
+        ch = conn.execute("SELECT * FROM characters WHERE id = ?", (cid,)).fetchone()
+        if ch is None or ch["id"] in [h[0] for h in heroes]:
+            continue
+        chd = F.decode_row(ch, F.CHARACTER)
+        cur = conn.execute("INSERT INTO combatants (uid, encounter_id, character_id, kind, name, init_mod, init_roll, sort_order, max_hp, current_hp, ac, created_at) "
+                           "VALUES (?,?,?,?,?,?,NULL,?,?,?,?,?)",
+                           (new_uid(), eid, ch["id"], ch["kind"], ch["name"], derived(chd)["initiative"], _next_sort(ctx), ch["max_hp"], ch["current_hp"], ch["ac"], ts))
+        conn.execute("UPDATE map_tokens SET combatant_id = ? WHERE id = ?", (cur.lastrowid, tok["id"]))
+        heroes.append((ch["id"], ch["name"]))
+    who = conn.execute("SELECT name FROM characters WHERE id = ?", (t["character_id"] or conn.execute(
+        "SELECT character_id FROM combatants WHERE id = ?", (t["combatant_id"],)).fetchone()["character_id"],)).fetchone()["name"]
+    names = [f["name"] for f in foes]
+    ctx.log("system", f"{who} walks into {room['name']}: {', '.join(names)}! Roll initiative")
+    conn.execute("UPDATE maps SET encounter_id = ? WHERE id = ?", (eid, m["id"]))
+    d["fight"] = {"eid": eid, "room": room["name"], "by": who, "foes": names, "at": ts}
+    conn.execute("UPDATE maps SET dungeon = ? WHERE id = ?", (json.dumps(d), m["id"]))
+    m["dungeon"], m["encounter_id"] = d, eid
+    return d["fight"]
+
+
+@bp.post("/maps/<int:map_id>/room-fight")
+def api_room_fight(map_id):
+    """The DM answers a room fight: {action: "start"} rolls initiative for everyone who hasn't got one
+    and starts round 1; {action: "wait"} lets the party move on (the fight stays ready on the Combat screen)."""
+    from .combat import Ctx, roll_missing_initiative, start_fight
+    data = request.get_json(silent=True) or {}
+    M = _maps()
+    with tx() as conn:
+        m = M.map_dict(M._map_row(conn, map_id))
+        d = m.get("dungeon") or {}
+        f = d.get("fight")
+        if not f:
+            raise F.ApiError("There's no fight waiting to start here")
+        out = {"encounter_id": f["eid"]}
+        if data.get("action") == "start":
+            ctx = Ctx(conn, f["eid"])
+            out["rolled"] = roll_missing_initiative(ctx)
+            start_fight(ctx)
+            conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), f["eid"]))
+        d.pop("fight", None)
+        conn.execute("UPDATE maps SET dungeon = ? WHERE id = ?", (json.dumps(d), map_id))
+        M._bump(conn, map_id)
+    return jsonify(M.dm_state(map_id) | {"room_fight": out})

@@ -33,7 +33,7 @@
     h("span", { class: "hpbar-fill", style: "width:" + (c.max_hp ? Math.min(100, Math.floor((c.hp / c.max_hp) * 100)) : 0) + "%" }),
     c.temp_hp ? h("span", { class: "hpbar-temp" }) : null);
   const token = (c) => h("span", { class: "token" + (c.kind === "enemy" ? " enemy" : "") },
-    c.portrait ? h("img", { src: "/api/uploads/" + c.portrait, alt: "" }) : initials(c.name));
+    c.portrait ? h("img", { src: "/api/uploads/" + c.portrait + "?w=96", alt: "" }) : initials(c.name));
 
   // someone's reaction (Deflect, Sentinel...) used from this screen
   const dmReact = (c, kind, body) => L.dmReact(c, kind, body, (d) => { if (d && d.encounter) apply(d); });

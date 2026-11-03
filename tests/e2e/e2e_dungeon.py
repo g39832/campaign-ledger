@@ -131,7 +131,21 @@ with sync_playwright() as p:
     call("POST", f"/api/tokens/{moni['id']}/move", {"x": room["box"][0], "y": room["box"][1], "free": True})
     check(revealed() > n0, f"walking into {room['name']} lights it up for the player")
     ex, ey = d["exit"]
-    call("POST", f"/api/tokens/{moni['id']}/move", {"x": ex - 1, "y": ey, "free": True}); pg.wait_for_timeout(2000)
+    print("== Moni walks into the boss room, where the goblin is: a fight")
+    call("POST", f"/api/tokens/{moni['id']}/move", {"x": ex - 1, "y": ey, "free": True}); pg.wait_for_timeout(2500)
+    f = call("GET", f"/api/maps/{mid}")["map"]["dungeon"].get("fight")
+    check(f and f["by"] == "Moni Easter" and any("Goblin" in x for x in f["foes"]), f"walking into the boss room with the goblin sets up a fight ({f and f['foes']})")
+    check("Enemies in" in pg.locator("#turns").inner_text() and "rolling initiative" in pg.locator("#turns").inner_text(), "the player is told: enemies, wait for initiative")
+    pg.screenshot(path=os.path.join(SHOTS, f"{engine.NAME}_{DEVICE}_player_enemies.png"))
+    dm.wait_for_selector("#dungeon-panel .room-fight", timeout=10000)
+    check("Roll initiative" in dm.locator("#dungeon-panel .room-fight").inner_text(), "the DM gets Roll initiative & start")
+    dm.screenshot(path=os.path.join(SHOTS, f"{engine.NAME}_dm_room_fight.png"))
+    dm.locator("#dungeon-panel .room-fight").get_by_role("button", name=re.compile("Roll initiative")).click(); dm.wait_for_timeout(2500)
+    enc = call("GET", f"/api/encounters/{f['eid']}")
+    check(enc["encounter"]["status"] == "active" and all(c["init_roll"] is not None for c in enc["combatants"]),
+          f"one click: everyone's initiative is rolled and round 1 starts ({', '.join(c['name'] + ' ' + str(c['init_roll']) for c in enc['combatants'])})")
+    check(pg.locator("#turns .room-fight").count() == 0 and "Round 1" in pg.locator("#turns").inner_text(), "the player's screen shows the fight's turn order")
+    call("POST", f"/api/encounters/{f['eid']}/end"); pg.wait_for_timeout(2000)
     pg.evaluate("window.scrollTo(0, 0)")
     a = pg.evaluate(f"""() => {{ const v = window.__view, mm = v.map, r = v.canvas.getBoundingClientRect();
       const at = (x, y) => [r.left + v.view.tx + (mm.offset_x + (x + .5) * mm.cell_px) * v.view.s, r.top + v.view.ty + (mm.offset_y + (y + .5) * mm.cell_px) * v.view.s];

@@ -828,7 +828,7 @@
       }
     }
     portrait(name) {
-      if (!this.images[name]) { const img = new Image(); img.onload = () => this.draw(); img.src = "/api/uploads/" + name; this.images[name] = img; }
+      if (!this.images[name]) { const img = new Image(); img.onload = () => this.draw(); img.src = "/api/uploads/" + name + "?w=128"; this.images[name] = img; }
       return this.images[name];
     }
 

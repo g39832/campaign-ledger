@@ -90,6 +90,14 @@
 
   /* ---- a made-up map (dungeon, cave, prison): its rooms, shown or hidden to the players, and the stairs */
   let lastNext = S.map.dungeon ? S.map.dungeon.next : null;
+  let lastFight = S.map.dungeon && S.map.dungeon.fight ? S.map.dungeon.fight.at : null;
+  // a hero walked into a room with monsters: roll initiative and start, or not yet
+  const roomFight = (action) => act("POST", "/api/maps/" + MID + "/room-fight", { action }, (s) => {
+    if (!s) return;
+    enc = null; apply(s);
+    if (action === "start" && window.FX) { FX.banner("Roll for initiative!", (s.room_fight.rolled || []).length + " rolled", "crit"); FX.sound("start"); }
+    if (window.Dice && Dice.poll) Dice.poll();
+  });
   const THEME_NAME = { dungeon: "Dungeon", cave: "Cave", prison: "Prison", jungle: "Jungle", swamp: "Swamp", desert: "Desert ruins", ice: "Ice cavern", sewer: "Sewer", volcano: "Volcano" };
   try { // just made on the Maps page: a little moment as it opens
     if (sessionStorage.getItem("map-made") === String(MID)) { sessionStorage.removeItem("map-made"); setTimeout(() => window.FX && FX.descend(S.map.name, "Your new map is ready"), 300); }
@@ -116,6 +124,21 @@
       h("button", { type: "button", class: "btn btn-sm" + (shown(r) ? " btn-quiet" : ""), title: shown(r) ? "Hide it from the players again" : "Let the players see it",
         onclick: () => act("POST", "/api/maps/" + MID + "/rooms/" + i + "/reveal", { reveal: !shown(r) }, (s) => apply(s)) },
         icon(shown(r) ? "eye-off" : "sun", "sm"), shown(r) ? " Hide" : " Show"));
+    const f = d.fight;
+    if (f && f.at !== lastFight) {
+      lastFight = f.at;
+      if (window.FX) { FX.banner("Enemies!", f.by + " walks into " + f.room, "dmg"); FX.sound("bossintro"); }
+      toast(f.by + " walked into " + f.room + ": " + f.foes.join(", ") + "!", "error", { ms: 15000, action: { label: "Roll initiative & start", run: () => roomFight("start") } });
+      setTimeout(() => { const el = $("#dungeon-panel .room-fight"); if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 50);
+    }
+    if (!f) lastFight = null;
+    const fightBox = f ? h("div", { class: "room-fight" },
+      h("div", { class: "rf-head" }, icon("swords", "sm"), h("b", null, "Enemies in " + f.room + "!")),
+      h("p", { style: "margin:4px 0 8px" }, f.by + " walked in on " + f.foes.join(", ") + ". The party waits until you start."),
+      h("div", { class: "row", style: "gap:6px" },
+        h("button", { type: "button", class: "btn btn-primary", onclick: () => roomFight("start") }, icon("dice-5", "sm"), " Roll initiative & start"),
+        h("a", { class: "btn btn-sm", href: "/combat/" + f.eid, title: "Roll them one by one on the Combat screen" }, "Roll on the Combat screen"),
+        h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "No fight yet: the party can move on (the fight stays ready on the Combat screen)", onclick: () => roomFight("wait") }, "Not yet"))) : null;
     // Get started: the three things to do, ticked off as they're done
     const heroes = S.tokens.filter((t) => t.kind === "pc").length, foes = S.tokens.filter((t) => t.kind === "enemy").length;
     const step = (done, n, text, btn) => h("li", { class: "dg-step" + (done ? " is-done" : "") },
@@ -134,6 +157,7 @@
           icon("map-pin", "sm"), " Add monsters")));
     box.replaceChildren(
       h("h3", { class: "rule-head" }, (THEME_NAME[d.theme] || "Map") + " · level " + d.level),
+      fightBox,
       steps,
       h("div", { class: "row", style: "gap:6px;margin:4px 0 8px" }, newLayout),
       h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, "Rooms light up for the players as heroes walk in, or tap Show. The boss room has the stairs down: a hero who steps on them (with no fight going here) takes everyone to the next level."),

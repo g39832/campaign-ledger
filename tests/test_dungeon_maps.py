@@ -97,3 +97,39 @@ def test_party_to_start_and_a_new_layout(api, joined):
     assert d2["seed"] != d["seed"] and d2["theme"] == "jungle" and d2["level"] == 1
     assert [t["kind"] for t in st["tokens"]] == ["pc", "pc"], "the monster on the old layout is gone, the heroes stay"
     assert all(near(t, d2["start"]) for t in st["tokens"])
+
+
+def test_walking_into_a_room_with_monsters_starts_a_fight(api, joined):
+    camp, a, b = joined["camp"], joined["a"], joined["b"]
+    st = api.post(f"/api/campaigns/{camp['id']}/dungeons", {"theme": "dungeon"}, 201)
+    mid, d = st["map"]["id"], st["map"]["dungeon"]
+    api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
+    st = api.post(f"/api/maps/{mid}/party-to-start")
+    rooms = [r for r in d["rooms"] if r["kind"] == "room"]
+    r1, r2 = rooms[0], rooms[1]
+    api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 2, "x": r1["box"][0] + 1, "y": r1["box"][1] + 1, "hidden": True}, 201)
+    api.post(f"/api/maps/{mid}/monsters", {"book": "Wolf", "count": 1, "x": r2["box"][0] + 1, "y": r2["box"][1] + 1}, 201)
+    ta = next(t for t in api.get(f"/api/maps/{mid}")["tokens"] if t["character_id"] == a["id"])
+    st = api.post(f"/api/tokens/{ta['id']}/move", {"x": r1["box"][2], "y": r1["box"][3], "free": True})
+    f = st["map"]["dungeon"]["fight"]
+    assert f["room"] == r1["name"] and f["by"] == "Aria" and sorted(f["foes"]) == ["Goblin 1", "Goblin 2"]
+    enc = api.get(f"/api/encounters/{f['eid']}")
+    assert enc["encounter"]["status"] == "planning" and st["map"]["encounter_id"] == f["eid"]
+    assert sorted(c["name"] for c in enc["combatants"]) == ["Aria", "Bram", "Goblin 1", "Goblin 2"], "the wolf in the other room isn't in it"
+    assert not any(c["hidden"] for c in enc["combatants"]), "the ambushers come out of hiding"
+    view = joined["pa"].get("/api/play/state")["map"]
+    assert view["map"]["fight_starting"]["room"] == r1["name"] and {t["display"] for t in view["tokens"]} >= {"Goblin 1", "Goblin 2"}
+    tb = next(t for t in view["tokens"] if t["character_id"] == b["id"])
+    r = joined["pb"].post(f"/api/play/tokens/{tb['id']}/move", {"x": tb["x"], "y": tb["y"] + 1}, 403)
+    assert "roll initiative" in r["error"]
+    st = api.post(f"/api/maps/{mid}/room-fight", {"action": "start"})
+    enc = api.get(f"/api/encounters/{f['eid']}")
+    assert enc["encounter"]["status"] == "active" and all(c["init_roll"] is not None for c in enc["combatants"])
+    assert "fight" not in st["map"]["dungeon"] and len(st["room_fight"]["rolled"]) == 4
+    # the fight's over; walking into the wolf's room starts the next one
+    api.post(f"/api/encounters/{f['eid']}/end")
+    st = api.post(f"/api/tokens/{ta['id']}/move", {"x": r2["box"][2], "y": r2["box"][3], "free": True})
+    f2 = st["map"]["dungeon"]["fight"]
+    assert f2["foes"] == ["Wolf"] and f2["eid"] != f["eid"]
+    st = api.post(f"/api/maps/{mid}/room-fight", {"action": "wait"})
+    assert "fight" not in st["map"]["dungeon"] and api.get(f"/api/encounters/{f2['eid']}")["encounter"]["status"] == "planning"

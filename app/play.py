@@ -353,6 +353,8 @@ def api_move(token_id):
         if not m["players_can_move"] and not (owner and is_disengaged(conn, owner)):
             raise F.ApiError("The DM has locked token movement", status=403)
         md = map_dict(m)
+        if (md.get("dungeon") or {}).get("fight"):
+            raise F.ApiError("Enemies! Wait for the DM to roll initiative", status=403)
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(md, t["size"], x, y)

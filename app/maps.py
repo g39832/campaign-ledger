@@ -310,6 +310,8 @@ def player_view(conn, map_id, player):
                                 "fog_enabled", "players_can_move", "image_w", "image_h", "rev")}
     public["terrain"] = terrain
     public["revealed"] = m["revealed"] if fog else ""
+    f = (m.get("dungeon") or {}).get("fight")
+    public["fight_starting"] = {"room": f["room"], "by": f["by"], "at": f["at"]} if f else None  # a room fight about to begin
     public["image_url"] = f"/api/play/map-image/{map_id}?v={m['rev']}" if m["image"] else None
     public["shapes"] = [{k: v for k, v in s.items() if k != "hidden"} for s in m["shapes"] if not s.get("hidden")]
     visible = {t["id"] for t in tokens}

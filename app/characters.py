@@ -145,7 +145,39 @@ def uploads(name):
             ok = player_may_see_image(get_db(), ident["campaign_id"], ident["character_id"], name)
         if not ok:
             raise F.NotFound("Not found")
+    w = request.args.get("w", type=int)
+    if w:  # a small copy for tokens and lists (a 300 KB portrait drawn 40 px wide is wasted on a phone)
+        thumb = _thumbnail(name, max(32, min(512, w)))
+        if thumb:
+            return send_from_directory(current_app.config["CACHE_DIR"], thumb, max_age=86400)
     return send_from_directory(current_app.config["UPLOAD_DIR"], name, max_age=86400)
+
+
+def _thumbnail(name, w):
+    """A small copy of an uploaded picture (made once, kept in the cache folder), or None."""
+    import os
+    from PIL import Image
+    src = os.path.join(current_app.config["UPLOAD_DIR"], name)
+    if "/" in name or "\\" in name or not os.path.isfile(src):
+        return None
+    base, _ext = os.path.splitext(name)
+    for ext in (".png", ".jpg"):
+        out = f"thumb-{w}-{base}{ext}"
+        if os.path.isfile(os.path.join(current_app.config["CACHE_DIR"], out)):
+            return out
+    try:
+        with Image.open(src) as im:
+            im.thumbnail((w, w))
+            alpha = im.mode in ("RGBA", "LA", "P")
+            out = f"thumb-{w}-{base}{'.png' if alpha else '.jpg'}"
+            dest = os.path.join(current_app.config["CACHE_DIR"], out)
+            if alpha:
+                im.save(dest, "PNG", optimize=True)
+            else:
+                im.convert("RGB").save(dest, "JPEG", quality=85)
+        return out
+    except (OSError, ValueError):
+        return None
 
 
 @bp.delete("/characters/<int:char_id>")

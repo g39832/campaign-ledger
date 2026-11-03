@@ -46,6 +46,11 @@ for pl in call("GET", f"/api/campaigns/{camp}/players")["players"]:
     call("DELETE", f"/api/players/{pl['id']}")
 chars = {c["name"]: c for c in call("GET", f"/api/campaigns/{camp}/characters")["characters"]}
 HEROES = ["Lux Fedelis", "Moni Easter", "Yamato", "Gnocchi"]
+for n in HEROES:  # everyone up and well for the test (the copy only: a real game may have left someone down)
+    ch = call("GET", f"/api/characters/{chars[n]['id']}")["character"]
+    call("PATCH", f"/api/characters/{ch['id']}", {"changes": {"current_hp": {"from": ch["current_hp"], "to": ch["max_hp"]},
+                                                           "status": {"from": ch["status"], "to": "ok"},
+                                                           "conditions": {"from": ch["conditions"], "to": []}}})
 eid = call("POST", f"/api/campaigns/{camp}/encounters", {"name": "Phones only"})["encounter"]["id"]
 call("POST", f"/api/encounters/{eid}/combatants", {"characters": [chars[n]["id"] for n in HEROES],
                                                    "quick": {"name": "Goblin", "max_hp": 300, "ac": 5, "count": 3}})

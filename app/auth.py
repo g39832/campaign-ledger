@@ -27,7 +27,7 @@ PROXY_HEADERS = ("X-Forwarded-For", "X-Forwarded-Host", "Forwarded", "X-Real-IP"
 # Paths a joined player may use. Each of these endpoints does its own
 # per-player checks (own campaign, own character, visibility).
 PLAYER_PREFIXES = ("/play", "/api/play/", "/api/rolls", "/api/uploads/", "/join", "/api/join")
-PUBLIC_PREFIXES = ("/static/", "/join", "/api/join", "/dm-login")
+PUBLIC_PREFIXES = ("/static/", "/join", "/api/join", "/dm-login", "/favicon.ico")
 
 
 def token_hash(raw):

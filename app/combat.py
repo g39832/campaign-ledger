@@ -460,6 +460,42 @@ def _first_eligible(ctx, order):
     return order[0] if order else None
 
 
+def roll_missing_initiative(ctx):
+    """d20 + modifier for everyone without an initiative yet, then sorted. Returns the log lines."""
+    rolled = []
+    for c in ctx.combatants():
+        if c["init_roll"] is not None:
+            continue
+        d20 = roll_d20(rng)
+        total = d20 + c["init_mod"]
+        ctx.conn.execute("UPDATE combatants SET init_roll = ? WHERE id = ?", (total, c["id"]))
+        rolled.append(f"{c['name']} {total} (d20 {d20} {'+' if c['init_mod'] >= 0 else '−'} {abs(c['init_mod'])})")
+    if rolled:
+        ctx.log("initiative", "Rolled initiative: " + "; ".join(rolled))
+    _resort(ctx)
+    return rolled
+
+
+def start_fight(ctx):
+    """Round 1: whoever's first in the order takes their turn."""
+    if ctx.enc["status"] == "active":
+        raise F.ApiError("This encounter is already running")
+    order = ctx.combatants()
+    if not order:
+        raise F.ApiError("Add combatants before starting")
+    if ctx.settings["auto_sort"]:
+        _resort(ctx)
+        order = ctx.combatants()
+    first = _first_eligible(ctx, order)
+    from .reactions import reset_all
+    reset_all(ctx.conn, ctx.enc["id"])
+    ctx.save_enc(status="active", round=1, current_id=first["id"], started_at=now_iso(), ended_at=None)
+    ctx.log("system", "Combat begins — round 1")
+    ctx.log("turn", f"{first['name']}'s turn")
+    _tick(ctx, first["id"], "start")
+    on_turn(ctx, first["id"], "start")
+
+
 @bp.post("/encounters/<int:eid>/start")
 def api_start(eid):
     def fn(ctx):

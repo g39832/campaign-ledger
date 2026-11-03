@@ -13,7 +13,7 @@
     const shown = list.filter((c) => (!q || c.name.toLowerCase().includes(q) || (c.creature_type || "").toLowerCase().includes(q)) && (!bossOnly || c.boss))
       .sort((a, b) => a.name.localeCompare(b.name));
     const item = (c) => h("li", null, h("button", { type: "button", class: (c.id === current ? "is-on" : "") + (c.boss ? " is-boss" : "") + (c.portrait ? " has-pic" : ""), onclick: () => open(c.id) },
-      c.portrait ? h("img", { class: "lib-pic", src: "/api/uploads/" + c.portrait, alt: "" }) : null,
+      c.portrait ? h("img", { class: "lib-pic", src: "/api/uploads/" + c.portrait + "?w=96", alt: "" }) : null,
       h("span", { class: "t" }, c.boss ? icon("crown", "sm") : null, c.name),
       h("span", { class: "m" }, [c.creature_type, c.cr ? "CR " + c.cr : "", c.max_hp + " HP", "AC " + c.ac].filter(Boolean).join(" · "))));
     // the bosses get their own section at the top
