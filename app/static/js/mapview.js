@@ -74,6 +74,7 @@
     return [Math.round(cx * 2) / 2, Math.round(cy * 2) / 2];
   }
 
+  const GLIDE_FARTHEST = 24; // squares: farther than this a token just arrives (stairs, Party to start)
   class MapView {
     constructor(stage, opts) {
       this.stage = stage;
@@ -83,7 +84,7 @@
       stage.prepend(this.canvas);
       this.ctx = this.canvas.getContext("2d");
       this.view = { s: 1, tx: 0, ty: 0 };
-      this.map = null; this.tokens = []; this.tool = "select"; this.brush = 1;
+      this.map = null; this.tokens = []; this.glides = new Map(); this.tool = "select"; this.brush = 1;
       this.images = {}; this.pointers = new Map(); this.drag = null; this.preview = new Set();
       this.selectedId = null; this.selectedShape = null; this.fitted = false;
       this.fx = []; this.seenPings = new Set(); this.lastHp = null; this.lastCurrent = null; this.raf = 0;
@@ -106,6 +107,7 @@
         for (let i = 0; i < map.revealed.length; i++) if (map.revealed[i] === "1" && was[i] !== "1") fresh.add(i);
         if (fresh.size) { this.fade = { cells: fresh, t0: performance.now() }; }
       }
+      if (first) this.glides.clear(); else this.startGlides(tokens);
       this.map = map; this.tokens = tokens;
       if (this.drag && this.drag.token) {
         const t = tokens.find((x) => x.id === this.drag.token.id);
@@ -120,6 +122,30 @@
       } else if (!url) this.bg = null;
       if (first || !this.fitted) this.fit();
       this.draw();
+    }
+    /** Someone moved: their token slides to the new square instead of jumping there. A token this
+        screen already put there (its own drag) has nothing to do; a very long trip just arrives. */
+    startGlides(next) {
+      if (document.hidden || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)) { this.glides.clear(); return; }
+      const was = new Map(this.tokens.map((t) => [t.id, t])), now = performance.now();
+      for (const t of next) {
+        const old = was.get(t.id);
+        if (!old || (old.x === t.x && old.y === t.y)) continue;
+        if (this.drag && this.drag.token && this.drag.token.id === t.id) continue;
+        const [x, y] = this.shownAt(old, now), dist = Math.hypot(t.x - x, t.y - y);
+        if (dist > GLIDE_FARTHEST) { this.glides.delete(t.id); continue; }
+        this.glides.set(t.id, { x, y, t0: now, ms: Math.min(480, 170 + dist * 45) });
+      }
+      if (this.glides.size && !this.raf) this.raf = requestAnimationFrame(() => this.loop());
+    }
+    /** Where a token is drawn right now, and how lifted it is (0 to 1) while it slides. */
+    shownAt(t, now) {
+      const g = this.glides.get(t.id);
+      if (!g) return [t.x, t.y, 0];
+      const k = ((now === undefined ? performance.now() : now) - g.t0) / g.ms;
+      if (k >= 1) { this.glides.delete(t.id); return [t.x, t.y, 0]; }
+      const e = k <= 0 ? 0 : 1 - Math.pow(1 - k, 3);
+      return [g.x + (t.x - g.x) * e, g.y + (t.y - g.y) * e, Math.sin(Math.PI * Math.max(0, k))];
     }
     /** Floating numbers when HP changes, and a pulse when the turn moves on. */
     noticeChanges(first) {
@@ -289,7 +315,7 @@
       const now = performance.now();
       this.fx = this.fx.filter((f) => now - f.start < f.ms);
       this.draw();
-      this.raf = this.fx.length || (this.zones && this.zones.length) ? requestAnimationFrame(() => this.loop()) : 0;
+      this.raf = this.fx.length || this.glides.size || (this.zones && this.zones.length) ? requestAnimationFrame(() => this.loop()) : 0;
     }
     worldSize() {
       const m = this.map;
@@ -349,7 +375,7 @@
         const t = this.tokens.find((x) => x.id === z.token);
         if (!t) continue;
         const dragging = this.drag && this.drag.token && this.drag.token.id === t.id && this.drag.moved;
-        const tx = dragging ? this.drag.at[0] : t.x, ty = dragging ? this.drag.at[1] : t.y;
+        const [gx, gy] = this.shownAt(t), tx = dragging ? this.drag.at[0] : gx, ty = dragging ? this.drag.at[1] : gy;
         const x0 = ox + (tx - z.half) * cp, y0 = oy + (ty - z.half) * cp, w = (t.size + z.half * 2) * cp;
         ctx.save();
         const glow = ctx.createRadialGradient(x0 + w / 2, y0 + w / 2, w * 0.1, x0 + w / 2, y0 + w / 2, w * 0.75);
@@ -455,7 +481,7 @@
       for (const t of this.tokens) this.drawToken(t, cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawStepLabel(this.drag.token, cp, ox, oy);
       if (this.aim && this.aim.hits) for (const t of this.tokens) if (this.aim.hits.has(t.id)) {
-        const r = t.size * cp * 0.5, X = ox + (t.x + t.size / 2) * cp, Y = oy + (t.y + t.size / 2) * cp;
+        const [gx, gy] = this.shownAt(t), r = t.size * cp * 0.5, X = ox + (gx + t.size / 2) * cp, Y = oy + (gy + t.size / 2) * cp;
         ctx.save(); ctx.strokeStyle = "#ffd36b"; ctx.lineWidth = cp * 0.1; ctx.shadowColor = "#ffb347"; ctx.shadowBlur = cp * 0.4;
         ctx.beginPath(); ctx.arc(X, Y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
@@ -625,8 +651,9 @@
     drawToken(t, cp, ox, oy) {
       const ctx = this.ctx;
       const dragging = this.drag && this.drag.token && this.drag.token.id === t.id && this.drag.moved;
-      const x = dragging ? this.drag.at[0] : t.x, y = dragging ? this.drag.at[1] : t.y;
-      const cx = ox + (x + t.size / 2) * cp, cy = oy + (y + t.size / 2) * cp, r = t.size * cp * 0.42;
+      const [gx, gy, lift] = this.shownAt(t);
+      const x = dragging ? this.drag.at[0] : gx, y = dragging ? this.drag.at[1] : gy;
+      const cx = ox + (x + t.size / 2) * cp, cy = oy + (y + t.size / 2) * cp, r = t.size * cp * 0.42 * (1 + (dragging ? 0 : lift) * 0.07);
       const color = t.color || KIND_COLOR[t.kind] || "#888";
       ctx.save();
       if (t.hidden || t.combatant_hidden) ctx.globalAlpha = 0.55;
@@ -713,7 +740,7 @@
             ctx.fillStyle = "#fff"; ctx.fillText(f.by, X, Y - cp * 0.58);
           }
         } else if (f.type === "float" && tok) {
-          const X = ox + (tok.x + tok.size / 2) * cp, Y = oy + tok.y * cp - k * cp * 1.1;
+          const [gx, gy] = this.shownAt(tok), X = ox + (gx + tok.size / 2) * cp, Y = oy + gy * cp - k * cp * 1.1;
           ctx.globalAlpha = k < 0.75 ? 1 : (1 - k) * 4;
           ctx.font = `800 ${cp * (0.5 + 0.15 * Math.sin(Math.min(1, k * 4) * Math.PI))}px 'Alegreya Sans', sans-serif`;
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -728,7 +755,7 @@
           ctx.lineWidth = cp * 0.1; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.strokeText(f.text, X, Y);
           ctx.fillStyle = f.color; ctx.fillText(f.text, X, Y);
         } else if (f.type === "pulse" && tok) {
-          const X = ox + (tok.x + tok.size / 2) * cp, Y = oy + (tok.y + tok.size / 2) * cp, r = tok.size * cp * 0.42;
+          const [gx, gy] = this.shownAt(tok), X = ox + (gx + tok.size / 2) * cp, Y = oy + (gy + tok.size / 2) * cp, r = tok.size * cp * 0.42;
           const kk = (k * 2.4) % 1;
           ctx.strokeStyle = rgba("#f3d58a", 1 - kk); ctx.lineWidth = cp * 0.1;
           ctx.beginPath(); ctx.arc(X, Y, r + cp * (0.1 + kk * 0.9), 0, Math.PI * 2); ctx.stroke();
@@ -972,8 +999,10 @@
         if (!this.pointers.has(e.pointerId)) return;
         this.pointers.delete(e.pointerId);
         const d = this.drag;
-        if (d && d.pinch) { if (!this.pointers.size) this.drag = null; return; }
+        const released = () => { if (this.opts.onDragEnd) setTimeout(() => this.opts.onDragEnd(), 0); }; // anything held back meanwhile can come through now
+        if (d && d.pinch) { if (!this.pointers.size) { this.drag = null; released(); } return; }
         this.drag = null;
+        released();
         const pingAt = this.pingTap; this.pingTap = null;
         if (pingAt && !(d && d.moved)) { if (d && d.pan) this.view = d.view0; this.preview.clear(); this.ruler = null; this.ping(...pingAt); this.draw(); return; }
         if (d && d.token && d.moved && this.opts.onMove) {

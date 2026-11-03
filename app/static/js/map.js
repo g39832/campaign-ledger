@@ -9,6 +9,7 @@
   let terrainKind = "wall";
   let revs = { rev: S.map.rev, encounter_rev: S.encounter ? S.encounter.rev : null };
 
+  let dragMissed = false, refreshSeq = 0, refreshDone = 0; // keeps updates in order (see refresh)
   const view = new MapView($("#stage"), {
     role: "dm",
     imageUrl: (m) => (m.image ? "/api/uploads/" + m.image : null),
@@ -21,6 +22,7 @@
       if (t && t.combatant_id && S.map.encounter_id) try { localStorage.setItem("combat-sel-" + S.map.encounter_id, t.combatant_id); } catch (e) { /* ignore */ }
     },
     canMove: () => !aim,
+    onDragEnd: () => { if (dragMissed) { dragMissed = false; refresh(); } },
     onMove: (t, x, y) => run("POST", "/api/tokens/" + t.id + "/move", { x, y, free: freeMove }),
     onBrush: (tool, cells) => {
       if (tool === "paint") run("POST", "/api/maps/" + MID + "/terrain", { cells, value: terrainKind === "erase" ? null : terrainKind });
@@ -62,7 +64,7 @@
     toast(freeMove ? "Free move on: drag anyone anywhere." : "Free move off: in a fight, tokens move on their turn and within their speed.", "ok");
   });
   function run(method, url, body, after) {
-    return act(method, url, body, (d) => { if (d && d.map) apply(d); if (after) after(d); },
+    return act(method, url, body, (d) => { if (d && d.map) { refreshDone = ++refreshSeq; apply(d); } if (after) after(d); },
       { onError: (err) => { toast(err.message, "error"); refresh(true); } });
   }
   // a monster's death and a hero being knocked down get their own moment
@@ -928,7 +930,9 @@
 
   // ---- stay in sync with players moving tokens and the combat screen -------------------------
   async function refresh(force) {
-    if (!force && (Save.busy() || view.drag || document.hidden)) return;
+    if (!force && (Save.busy() || document.hidden)) return;
+    if (!force && view.drag) { dragMissed = true; return; } // comes through when they let go
+    const seq = ++refreshSeq;
     try {
       if (!force) {
         const r = await api("GET", "/api/maps/" + MID + "/rev");
@@ -937,15 +941,22 @@
       }
       const d = await api("GET", "/api/maps/" + MID);
       if (!force && window.Dice && Dice.settle) await Dice.settle(); // HP, results and attack animations after the dice land
-      revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null, ping: revs.ping };
-      const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== "DM");
-      apply(d);
-      if (fresh.length && window.FX) FX.sound("ping");
+      if (seq < refreshDone) return; // something newer already showed: an old reply mustn't undo it
+      if (!force && (Save.busy() || view.drag)) { dragMissed = !!view.drag; return; } // (a save brings its own fresh copy)
+      L.whenUp(() => { // not while a button is being pressed
+        if (seq < refreshDone) return;
+        refreshDone = seq;
+        revs = { rev: d.map.rev, encounter_rev: d.encounter ? d.encounter.rev : null, ping: revs.ping };
+        const fresh = (d.pings || []).filter((p) => !view.seenPings.has(p.id) && !p.fx && p.by !== "DM");
+        apply(d);
+        if (fresh.length && window.FX) FX.sound("ping");
+      });
     } catch (e) { /* offline */ }
   }
   const polled = {};
   setInterval(() => { if (L.live.due(polled)) refresh(); }, 1500); // a fallback check (instant updates do the rest)
   L.live.on(() => refresh());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); }); // back from another tab or a locked screen
 
   // Dice can tumble across the map (an overlay canvas that never touches map data).
   if (window.Dice) { Dice.overlayHost = $("#stage"); $(".dd-overmap").hidden = false; }

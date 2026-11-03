@@ -22,6 +22,7 @@
     try { localStorage.setItem("player-theme", next); } catch (e) { /* ignore */ }
   });
 
+  let movesPending = 0, dragMissed = false, loadSeq = 0, loadDone = 0; // keeps the map's updates in order (see load)
   const view = new MapView($("#stage"), {
     role: "player",
     imageUrl: (m) => m.image_url,
@@ -54,11 +55,19 @@
       catch (e) { toast(e.message, "error"); }
     },
     onMove: async (t, x, y) => {
+      movesPending++;
       try {
         const r = await api("POST", "/api/play/tokens/" + t.id + "/move", { x, y });
         if (r && r.next_level && r.next_level.blocked) toast(r.next_level.why + ".", "error");
       } catch (e) { toast(e.message, "error"); }
+      movesPending--;
+      loadDone = ++loadSeq; // anything fetched before the move landed would put the token back
+      if (dragMissed) { dragMissed = false; stamp = null; }
       load(true);
+    },
+    onDragEnd: () => {
+      if (!dragMissed || movesPending) return; // (a move in flight reloads when it lands)
+      dragMissed = false; stamp = null; load(true);
     },
   });
   // tools: move, measure, ping
@@ -524,13 +533,14 @@
   }
 
   function render() {
+    if (L.pressing()) { L.whenUp(render); return; } // not while a button is being pressed
     const a = document.activeElement, keep = a && a.dataset && a.dataset.keep;
     const m = S.map;
     $("#no-map").hidden = !!m;
     document.body.classList.toggle("no-live-map", !m); // no map shared: the map box shrinks out of the way
     if (m) {
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
-      if (ms !== mapStamp && !view.drag) { mapStamp = ms; view.setData(m, S.mapTokens); }
+      if (ms !== mapStamp) { if (view.drag) dragMissed = true; else { mapStamp = ms; view.setData(m, S.mapTokens); } }
       const mine = S.mapTokens.find((t) => t.own), k = acting(), pet = k && S.mapTokens.find((t) => t.combatant_id === k.id);
       if (k && view.tool === "select" && !using) $("#hint").textContent = (pet ? (k.move && k.move.held ? k.name + " can't move. " : pet.movable
         ? "Drag " + k.name + " to move it: " + k.move.left + " of " + k.move.budget + " ft left. " : k.name + " has no movement left. ") : "") + "Double-tap to ping.";
@@ -699,10 +709,14 @@
     if (fresh.length && !handoutOpen) showHandout(fresh[fresh.length - 1]); // the oldest unseen first; the rest after it's closed
   }
   async function load(force) {
-    if (!force && (document.hidden || view.drag)) return;
+    if (!force && document.hidden) return;
+    if (!force && view.drag) { dragMissed = true; return; } // comes through when they let go
+    const seq = ++loadSeq;
     try {
       const d = await api("GET", "/api/play/state");
       if (!force && window.Dice && Dice.settle) await Dice.settle(); // HP and results after the dice land
+      if (seq < loadDone || movesPending) return; // something newer already showed: an old reply mustn't undo it
+      loadDone = seq;
       d.mapTokens = [];
       let pings = [], zones = [];
       if (d.map) { const { map, tokens } = d.map; pings = d.map.pings || []; zones = d.map.zones || []; d.map = map; d.mapTokens = tokens; }
@@ -771,4 +785,5 @@
   const polled = {};
   setInterval(() => { if (L.live.due(polled)) load(); }, 1500); // a fallback check (instant updates do the rest)
   L.live.on(() => load());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); }); // back from a locked phone
 })();

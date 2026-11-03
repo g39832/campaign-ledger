@@ -298,13 +298,14 @@ with sync_playwright() as p:
 
     print("== Lux burns her reaction by hand; the DM gives it back")
     wait_for(lx, lambda: lx.locator("#turns .react-burn").count() > 0)
+    lx.evaluate("window.Dice && Dice.settle ? Dice.settle().then(() => null) : null")  # (screens hold updates until the dice land; the tap below waits 4 s at most)
     lx.locator("#turns .react-burn").click(); lx.wait_for_timeout(200)
     lx.evaluate("document.querySelector('#turns .react-burn').dataset.old = '1'")
     lc = call("GET", f"/api/characters/{chars['Lux Fedelis']['id']}")["character"]  # a live update redraws her screen between the two taps
     hp1 = max(1, lc["current_hp"] - 1)
     call("PATCH", f"/api/characters/{lc['id']}", {"changes": {"current_hp": {"from": lc["current_hp"], "to": hp1}}})
     wait_for(lx, lambda: lx.locator("#turns .react-burn[data-old]").count() == 0)
-    check(lx.locator("#turns .react-burn[data-old]").count() == 0 and "Tap again" in lx.locator("#turns .react-burn").inner_text(), "Lux: the first tap survives the screen redrawing")
+    check(lx.locator("#turns .react-burn[data-old]").count() == 0 and "Tap again" in lx.locator("#turns .react-burn").inner_text(), f"Lux: the first tap survives the screen redrawing ({lx.locator('#turns .react-burn').all_inner_texts()})")
     call("PATCH", f"/api/characters/{lc['id']}", {"changes": {"current_hp": {"from": hp1, "to": lc["current_hp"]}}})
     lx.locator("#turns .react-burn").click()
     wait_for(lx, lambda: "Reaction used" in strip(lx))

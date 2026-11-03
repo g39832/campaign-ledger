@@ -772,7 +772,10 @@
       }
       const d = await api("GET", "/api/encounters/" + EID);
       if (!force && window.Dice && Dice.settle) await Dice.settle(); // after the dice land
-      apply(d);
+      L.whenUp(() => { // not while a button is being pressed
+        if (d.encounter.rev < S.encounter.rev) return; // something newer already showed: an old reply mustn't undo it
+        apply(d);
+      });
     } catch (e) { /* offline: the indicator shows it when a save fails */ }
   }
   const polled = {};

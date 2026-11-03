@@ -1058,7 +1058,13 @@
   function liveStart() {
     if (live.es || !window.EventSource) return;
     try { live.es = new EventSource("/api/play/events"); } catch (e) { return; }
-    live.es.onopen = () => { live.up = true; };
+    let everOpen = false;
+    live.es.onopen = () => {
+      live.up = true;
+      // reconnected (wi-fi blip, locked phone): catch up on whatever happened during the gap
+      if (everOpen) live.fns.forEach((fn) => { try { fn(); } catch (e) { /* one page part failing mustn't stop the rest */ } });
+      everOpen = true;
+    };
     live.es.onerror = () => { live.up = false; }; // the browser reconnects by itself
     live.es.addEventListener("change", () => {
       live.up = true;
@@ -1072,6 +1078,29 @@
     // a regular check can skip itself while the connection is up, but still runs every `every` ms
     due(state, every) { const now = Date.now(); if (live.up && now - (state.last || 0) < (every || 10000)) return false; state.last = now; return true; },
   };
+
+  /* A button is being pressed: hold any redraw until the finger lifts. If the button were rebuilt
+     between press and release, the browser wouldn't count it as a tap and the tap would be lost. */
+  const press = { down: false, wait: null, safety: null };
+  function pressEnd() {
+    if (!press.down) return;
+    press.down = false;
+    clearTimeout(press.safety);
+    const fn = press.wait;
+    press.wait = null;
+    if (fn) setTimeout(() => whenUp(fn), 60); // the tap's own click comes first
+  }
+  function whenUp(fn) {
+    if (press.down) press.wait = fn; else fn();
+  }
+  document.addEventListener("pointerdown", (e) => {
+    if (!(e.target.closest && e.target.closest("button, a, summary, label, [role=button]"))) return;
+    press.down = true;
+    clearTimeout(press.safety);
+    press.safety = setTimeout(pressEnd, 1000); // a held finger doesn't freeze the screen
+  }, true);
+  window.addEventListener("pointerup", pressEnd, true);
+  window.addEventListener("pointercancel", pressEnd, true);
 
   /* After an update (the server restarted), every open page reloads itself onto the new version:
      players don't have to refresh. It waits while someone is typing, something is still saving,
@@ -1204,5 +1233,5 @@
   const dmReact = (c, kind, body, done) => act("POST", "/api/combatants/" + c.id + "/react", Object.assign({ kind }, body || {}), (d) => { if (done) done(d); return d; },
     { onError: (e) => toast(e.message, "error") });
 
-  window.L = { h, icon, twoTapBtn, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, twoTapBtn, whenUp, pressing: () => press.down, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

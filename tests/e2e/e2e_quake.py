@@ -57,6 +57,7 @@ with sync_playwright() as p:
     dctx = b.new_context(viewport={"width": 1400, "height": 950}); dctx.add_init_script(CATCH_VIEW)
     pg = dctx.new_page(); pg.on("pageerror", lambda e: problems.append(f"DM JS error: {e}"))
     pg.goto(f"{DM}/map/{mid}"); pg.wait_for_timeout(1500)
+    pg.wait_for_selector(".boss-moment", state="detached", timeout=10000)  # the boss's entrance card covers the map for a moment
     pg.evaluate(f"""() => {{ const v = window.__view, m = v.map, r = v.canvas.getBoundingClientRect();
         const t = v.tokens.find((t) => t.display === 'Harlan Voss');
         const x = r.left + v.view.tx + (m.offset_x + (t.x + 0.5) * m.cell_px) * v.view.s, y = r.top + v.view.ty + (m.offset_y + (t.y + 0.5) * m.cell_px) * v.view.s;
