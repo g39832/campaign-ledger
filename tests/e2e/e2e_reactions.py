@@ -2,7 +2,7 @@
 players on their own devices (DEVICES=phones|laptops|tablets|mixed) and the DM on the Combat
 screen, the map and the sheets. Uses the real characters' new rows:
 Moni's Deflect attacks + Absorb Elements, Yamato's Phantasmal Killers + Action surge, Gnocchi's Sentinel."""
-import json, os, re, urllib.request, uuid
+import json, os, re, time, urllib.request, uuid
 from common import APP_DIR, DM_URL, LAN_IP, LAN_URL, SHOTS_DIR, TMP_DIR  # noqa: E402,F401
 from playwright.sync_api import sync_playwright
 import engine
@@ -151,8 +151,11 @@ with sync_playwright() as p:
         pg.locator("#use-box button:has-text('Done'), #cast-box button:has-text('Done')").first.click(); pg.wait_for_timeout(300)
         return t
 
+    ended_at = [0]
+
     def end_turn(pg, who):
         pg.evaluate("window.scrollTo(0, 0)")
+        ended_at[0] = time.time()
         pg.locator("#turns .end-turn-btn").click(); pg.wait_for_timeout(250); pg.locator("#turns .end-turn-btn").click(); pg.wait_for_timeout(2500)
         check(current() != who, f"{who}'s turn ends from the device (now {current()})")
 
@@ -222,7 +225,14 @@ with sync_playwright() as p:
         wait_for(y, lambda: "you control it" in y.locator("#turns").inner_text())
         s1 = strip(y)
         check((cn + "'s turn").lower() in s1.lower() and "2 of 2 actions left" in s1, f"{cn}'s strip: 2 of 2 actions ({s1[:90]})")
-        if k < len(names) - 1:
+        if k == 0:  # the countdown from Yamato's own End my turn must not cancel this first tap
+            y.wait_for_timeout(max(0, int((3.6 - (time.time() - ended_at[0])) * 1000)))
+            y.evaluate("window.scrollTo(0, 0)")
+            y.locator("#turns .end-turn-btn").click(); y.wait_for_timeout(max(600, int((4.4 - (time.time() - ended_at[0])) * 1000)))
+            check("Tap again" in y.locator("#turns .end-turn-btn").inner_text(), f"{cn}: a first tap just after Yamato's turn stays armed ({y.locator('#turns .end-turn-btn').inner_text()})")
+            y.locator("#turns .end-turn-btn").click(); y.wait_for_timeout(2500)
+            check(current() != cn, f"{cn}'s turn ends with the second tap (now {current()})")
+        elif k < len(names) - 1:
             end_turn(y, cn)
         else:
             btn = y.locator("#turns button").filter(has_text="Dismiss").first
@@ -288,7 +298,15 @@ with sync_playwright() as p:
 
     print("== Lux burns her reaction by hand; the DM gives it back")
     wait_for(lx, lambda: lx.locator("#turns .react-burn").count() > 0)
-    lx.locator("#turns .react-burn").click(); lx.wait_for_timeout(200); lx.locator("#turns .react-burn").click()
+    lx.locator("#turns .react-burn").click(); lx.wait_for_timeout(200)
+    lx.evaluate("document.querySelector('#turns .react-burn').dataset.old = '1'")
+    lc = call("GET", f"/api/characters/{chars['Lux Fedelis']['id']}")["character"]  # a live update redraws her screen between the two taps
+    hp1 = max(1, lc["current_hp"] - 1)
+    call("PATCH", f"/api/characters/{lc['id']}", {"changes": {"current_hp": {"from": lc["current_hp"], "to": hp1}}})
+    wait_for(lx, lambda: lx.locator("#turns .react-burn[data-old]").count() == 0)
+    check(lx.locator("#turns .react-burn[data-old]").count() == 0 and "Tap again" in lx.locator("#turns .react-burn").inner_text(), "Lux: the first tap survives the screen redrawing")
+    call("PATCH", f"/api/characters/{lc['id']}", {"changes": {"current_hp": {"from": hp1, "to": lc["current_hp"]}}})
+    lx.locator("#turns .react-burn").click()
     wait_for(lx, lambda: "Reaction used" in strip(lx))
     check("Reaction used" in strip(lx), f"Lux: Use reaction (tap twice) marks it used ({strip(lx)})")
     dm_combat("Lux Fedelis")

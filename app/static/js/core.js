@@ -940,6 +940,31 @@
     });
   }
 
+  /* A button on a screen that redraws itself: first tap arms, second confirms. The first tap is kept
+     out here, not on the button, because a live update can rebuild the button between the two taps. */
+  const tapped = { key: null, timer: null, live: {} };
+  function twoTapBtn(key, attrs, idle, armedText, run) {
+    const paint = (el, on) => {
+      if (!el) return;
+      el.classList.toggle("is-armed", on);
+      if (on) el.textContent = armedText; else el.replaceChildren(...el._idle());
+    };
+    const btn = h("button", Object.assign({ type: "button" }, attrs, { onclick: () => {
+      clearTimeout(tapped.timer);
+      const was = tapped.key;
+      tapped.key = null;
+      if (was === key) { paint(tapped.live[key], false); run(); return; }
+      if (was) paint(tapped.live[was], false);
+      tapped.key = key;
+      paint(tapped.live[key], true);
+      tapped.timer = setTimeout(() => { tapped.key = null; paint(tapped.live[key], false); }, 4000);
+    } }), idle());
+    btn._idle = idle;
+    if (tapped.key === key) { btn.classList.add("is-armed"); btn.textContent = armedText; }
+    tapped.live[key] = btn;
+    return btn;
+  }
+
   // ---- page chrome --------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", () => {
     const retry = $("#save-status .save-retry");
@@ -1129,13 +1154,9 @@
         h("button", { type: "button", class: "btn btn-primary", onclick: () => go(o.kind, {}) }, label + " (reaction)"));
     });
     // any other reaction (an opportunity attack, a monster's parry): spend it by hand
-    let armedBurn = false;
-    const burn = r.ready && opts.burn !== false && (opts.active !== false) ? h("button", { type: "button", class: "btn btn-sm btn-quiet react-burn",
-      title: "Mark the reaction as used this round (for a reaction the app doesn't do by itself, like an opportunity attack)",
-      onclick: (e) => {
-        if (!armedBurn) { armedBurn = true; e.currentTarget.classList.add("is-armed"); e.currentTarget.textContent = "Tap again: use the reaction"; return; }
-        go("burn", { what: "a reaction" });
-      } }, icon("shield-off", "sm"), " Use reaction") : null;
+    const burn = r.ready && opts.burn !== false && (opts.active !== false) ? twoTapBtn("burn:" + (c.id != null ? c.id : c.name), { class: "btn btn-sm btn-quiet react-burn",
+      title: "Mark the reaction as used this round (for a reaction the app doesn't do by itself, like an opportunity attack)" },
+      () => [icon("shield-off", "sm"), " Use reaction"], "Tap again: use the reaction", () => go("burn", { what: "a reaction" })) : null;
     const back = !r.ready && opts.giveBack ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "A misclick? Give the reaction back", onclick: opts.giveBack },
       icon("undo-2", "sm"), " Give reaction back") : null;
     if (!out.length && !burn && !back) return null;
@@ -1183,5 +1204,5 @@
   const dmReact = (c, kind, body, done) => act("POST", "/api/combatants/" + c.id + "/react", Object.assign({ kind }, body || {}), (d) => { if (done) done(d); return d; },
     { onError: (e) => toast(e.message, "error") });
 
-  window.L = { h, icon, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  window.L = { h, icon, twoTapBtn, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

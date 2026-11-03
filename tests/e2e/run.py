@@ -8,6 +8,7 @@ folder, start the app on that copy (port 5077, LAN mode), switch magic-item aura
 run the script, then stop that server. Prints a one-line summary per run.
 Run it with the Python that has Playwright installed (see README.md)."""
 import argparse
+import ast
 import glob
 import os
 import shutil
@@ -63,6 +64,18 @@ def stop(proc, port):
         time.sleep(0.2)
 
 
+def quiet_problems(line):
+    """WebKit reports every request cancelled by leaving a page as an error ("... due to access control
+    checks"), even though the app catches it. Those aren't problems; everything else on the list is."""
+    if not line.startswith("PROBLEMS: ["):
+        return line
+    try:
+        items = ast.literal_eval(line[len("PROBLEMS: "):])
+    except (ValueError, SyntaxError):
+        return line
+    return "PROBLEMS: " + repr([p for p in items if "due to access control checks" not in p])
+
+
 def run(script, engine, devices, port):
     env = dict(os.environ, ENGINE=engine, DEVICES=devices, E2E_PORT=str(port), PYTHONIOENCODING="utf-8")
     proc = None
@@ -87,6 +100,7 @@ def run(script, engine, devices, port):
         if proc:
             stop(proc, port)
     keep = [l.strip() for l in out.splitlines() if l.strip().startswith(("FAIL", "PROBLEMS: [", "Traceback")) or " passed, " in l or l.startswith("ERRORS")]
+    keep = [quiet_problems(k) for k in keep]
     keep = [k for k in keep if k != "PROBLEMS: []"]
     if os.environ.get("E2E_VERBOSE"):
         print(out)

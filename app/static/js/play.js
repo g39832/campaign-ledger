@@ -441,11 +441,12 @@
       L.spellLands(v, d.spell || (v.dc ? { dc: v.dc } : null), c.roll_to_hit), v.cooldown ? v.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · "); };
 
   // End turn: tap once to arm, again to end it (so a stray tap doesn't skip a turn)
-  let endArmed = false;
+  let endArmed = false, endTimer = null;
   function endTurnBtn(k) {
     return h("button", { type: "button", class: "btn btn-primary end-turn-btn" + (endArmed ? " is-armed" : ""),
       title: "Hand the turn on to whoever's next", onclick: async () => {
-        if (!endArmed) { endArmed = true; render(); setTimeout(() => { if (endArmed) { endArmed = false; render(); } }, 4000); return; }
+        clearTimeout(endTimer); // an old countdown must not cancel the next turn's first tap (a clone's turn comes right after)
+        if (!endArmed) { endArmed = true; render(); endTimer = setTimeout(() => { endArmed = false; render(); }, 4000); return; }
         endArmed = false; using = null; casting = null;
         const d = await me("end-turn", k ? { as: k.id } : {});
         if (d) { toast((k ? k.name + "'s turn" : "Turn") + " ended.", "ok"); if (window.FX) FX.sound("ac"); }
@@ -457,12 +458,9 @@
     const out = (k.attacks || []).map((a) => h("button", { type: "button", class: "fight-act", disabled: noActs,
       onclick: () => startUse("attack", a.index, a.name, true, 0, a.reach) }, icon("swords", "sm"), h("b", null, a.name),
       h("span", { class: "faint" }, a.damage + " · reaches " + a.reach + " ft")));
-    let armedGo = false;
-    const dismiss = h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Send " + k.name + " away (no burst)",
-      onclick: (e) => {
-        if (!armedGo) { armedGo = true; e.currentTarget.textContent = "Tap again to dismiss " + k.name; return; }
-        me("dismiss", { as: k.id }).then((d) => { if (d) toast(k.name + " is gone.", "ok"); });
-      } }, icon("x", "sm"), " Dismiss " + k.name);
+    const dismiss = L.twoTapBtn("dismiss:" + k.id, { class: "btn btn-sm btn-quiet", title: "Send " + k.name + " away (no burst)" },
+      () => [icon("x", "sm"), " Dismiss " + k.name], "Tap again to dismiss " + k.name,
+      () => me("dismiss", { as: k.id }).then((d) => { if (d) toast(k.name + " is gone.", "ok"); }));
     return h("div", { class: "fight-acts your-moves", style: "margin-top:10px" },
       L.turnStrip({ actions: k.actions, move: k.move, reaction: { ready: k.reaction_ready } }, { big: true, title: k.name + "'s turn" }),
       h("div", { class: "lbl" }, noActs ? "No actions left this turn" : k.name + "'s moves — tap one, then tap who"),
