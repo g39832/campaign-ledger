@@ -1512,6 +1512,10 @@ body.no-live-map .map-stage canvas { display: none; }
 .handout-text { white-space: pre-wrap; line-height: 1.5; font-size: 1.02rem; }
 .handout-list { margin-bottom: 14px; }
 .handout-list .linkish { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 6px 0; font: inherit; display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+.handout-list .rule-head .count { color: var(--text-3, var(--text-2)); font-weight: 500; margin-left: 2px; }
+.handout-list .rule-head .handout-new { margin-left: 8px; vertical-align: middle; }
+.handout-list .handout-unread { font-weight: 700; }
+.handout-new { border-color: var(--accent); color: var(--accent); font-size: .72rem; padding: 1px 6px; margin-left: 6px; }
 
 /* the boss bar across the top of the page; the boss extras on the stat block and in a fight */
 .boss-bar { position: sticky; top: 0; z-index: 40; display: grid; gap: 6px; margin: 0 0 10px; padding: 8px 12px; border-radius: var(--radius);

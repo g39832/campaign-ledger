@@ -826,14 +826,22 @@
       })) : h("p", { class: "faint", style: "margin:6px 0" }, "Your pack is empty."));
   }
 
-  /* Handouts: a new one pops up as a big card (once per device); they all stay in the Handouts list. */
-  const seenKey = "handouts-seen";
-  const seen = new Set((() => { try { return JSON.parse(localStorage.getItem(seenKey) || "[]"); } catch (e) { return []; } })());
+  /* Notes and handouts (DM letters, papers found on the map). The server remembers which ones this
+     character has read, so it's the same on every phone and browser. Opening the game never pops
+     anything up: unread ones are marked New in the list. Only a note that arrives while this page
+     is open (a paper you just picked up, a letter the DM just sent) pops up, one at a time. */
   let handoutOpen = null;
+  let handoutsAtLoad = null;   // uids already there when the page first loaded: these never pop up
+  const handoutQueue = [];     // arrived while open and not read yet: shown one after another
+  function markRead(x) {
+    if (x.read) return;
+    x.read = true;
+    api("POST", "/api/play/handouts/" + x.id + "/read", { op_id: L.uid() }).catch(() => { x.read = false; });
+  }
   function showHandout(x) {
     if (handoutOpen) handoutOpen.remove();
-    seen.add(x.uid); try { localStorage.setItem(seenKey, JSON.stringify([...seen].slice(-200))); } catch (e) { /* ignore */ }
-    const close = () => { ov.remove(); handoutOpen = null; setTimeout(newHandouts, 300); };
+    markRead(x);
+    const close = () => { ov.remove(); handoutOpen = null; refreshHandoutsPanel(); setTimeout(newHandouts, 300); };
     const ov = h("div", { class: "handout-pop", role: "dialog", "aria-modal": "true", "aria-label": x.title || "Handout", onclick: (e) => { if (e.target === ov) close(); } },
       h("div", { class: "handout-card" },
         h("div", { class: "handout-head" }, icon("scroll-text", "sm"), h("b", null, x.title || "A handout from the DM")),
@@ -844,16 +852,42 @@
     handoutOpen = ov;
     if (window.FX) FX.sound("ac");
   }
+  let handoutsAll = false;     // the list shows the newest few until "Show all" is tapped
+  const HANDOUTS_SHOWN = 5;
   function handoutsPanel() {
-    const list = S.handouts || [];
+    const list = S.handouts || [];   // newest first
     if (!list.length) return null;
-    return h("div", { class: "handout-list" }, h("h3", { class: "rule-head" }, "Handouts"),
-      h("ul", { class: "stack-list" }, list.map((x) => h("li", null, h("button", { type: "button", class: "linkish", onclick: () => showHandout(x) },
-        x.image ? icon("image", "sm") : icon("scroll-text", "sm"), " " + (x.title || "Handout"))))));
+    const unread = list.filter((x) => !x.read).length;
+    // unread ones first (so they're never hidden behind "Show all"), then the rest, newest first
+    const ordered = list.filter((x) => !x.read).concat(list.filter((x) => x.read));
+    const shown = handoutsAll ? ordered : ordered.slice(0, Math.max(HANDOUTS_SHOWN, unread));
+    return h("div", { class: "handout-list", "data-handouts": "" },
+      h("h3", { class: "rule-head" }, "Notes & handouts ", h("span", { class: "count" }, String(list.length)),
+        unread ? h("span", { class: "tag handout-new" }, unread + " new") : null),
+      h("ul", { class: "stack-list" }, shown.map((x) => h("li", null, h("button", { type: "button", class: "linkish" + (x.read ? "" : " handout-unread"), onclick: () => showHandout(x) },
+        x.image ? icon("image", "sm") : icon("scroll-text", "sm"), " " + (x.title || "Handout"),
+        x.read ? null : h("span", { class: "tag handout-new" }, "New"))))),
+      shown.length < ordered.length ? h("button", { type: "button", class: "linkish faint", onclick: () => { handoutsAll = true; refreshHandoutsPanel(); } },
+        "Show all " + ordered.length) : null);
+  }
+  function refreshHandoutsPanel() {
+    const old = document.querySelector("[data-handouts]"), next = handoutsPanel();
+    if (old && next) old.replaceWith(next);
   }
   function newHandouts() {
-    const fresh = (S.handouts || []).filter((x) => !seen.has(x.uid));
-    if (fresh.length && !handoutOpen) showHandout(fresh[fresh.length - 1]); // the oldest unseen first; the rest after it's closed
+    const list = S.handouts || [];
+    if (handoutsAtLoad === null) { handoutsAtLoad = new Set(list.map((x) => x.uid)); return; } // first load: no pop-ups
+    for (const x of list.slice().reverse()) {          // oldest of the new ones first
+      if (handoutsAtLoad.has(x.uid)) continue;
+      handoutsAtLoad.add(x.uid);
+      if (!x.read) handoutQueue.push(x.uid);
+    }
+    if (handoutOpen) return;
+    while (handoutQueue.length) {
+      const x = list.find((y) => y.uid === handoutQueue[0]);
+      handoutQueue.shift();
+      if (x && !x.read) { showHandout(x); return; }   // (read on another device meanwhile: skip it)
+    }
   }
   /* ---- chests and sealed doors next to your hero ---------------------------------------------
      A chest opens from here (or by tapping it on the map) when your hero stands next to it; the loot

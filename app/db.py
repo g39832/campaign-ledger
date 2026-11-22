@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 MIGRATIONS = {
     1: """
@@ -437,6 +437,20 @@ MIGRATIONS = {
     19: """
     ALTER TABLE characters ADD COLUMN spell_attack_override INTEGER;
     ALTER TABLE characters ADD COLUMN wild_shape TEXT NOT NULL DEFAULT '{}';
+    """,
+    # v20: which handouts (DM letters, papers found on the map) each character has read, kept on the
+    # server instead of in each browser, so opening the game on a new phone or address doesn't pop up
+    # every note again. Everything handed out before this counts as read.
+    20: """
+    CREATE TABLE IF NOT EXISTS handout_reads (
+        handout_id INTEGER NOT NULL REFERENCES handouts(id) ON DELETE CASCADE,
+        character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+        read_at TEXT NOT NULL,
+        PRIMARY KEY (handout_id, character_id)
+    );
+    INSERT OR IGNORE INTO handout_reads (handout_id, character_id, read_at)
+        SELECT h.id, c.id, h.created_at FROM handouts h JOIN characters c ON c.campaign_id = h.campaign_id
+        WHERE h.to_characters IS NULL OR EXISTS (SELECT 1 FROM json_each(h.to_characters) j WHERE j.value = c.id);
     """,
 }
 

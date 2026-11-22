@@ -76,3 +76,65 @@ def test_the_sheet_lists_a_characters_handouts(api, joined):
     assert [(x["title"], x["just_you"]) for x in ha] == [("Just Aria", True), ("To all", False)]
     assert [x["title"] for x in hb] == ["To all"]
     assert joined["pa"].c.get(f"/api/characters/{a['id']}/handouts").status_code == 403   # the DM's sheet only
+
+
+def test_read_state_is_kept_on_the_server_per_character(api, joined):
+    """Opening a handout marks it read for that character on the server (so a new phone or a new
+    address doesn't pop every old note up again); it's per character, and only for notes they can see."""
+    cid, a, b = joined["camp"]["id"], joined["a"], joined["b"]
+    everyone = send(api, cid, title="To all", body="Hello").get_json()["handout"]
+    secret = send(api, cid, title="Just Bram", body="Psst", to=str(b["id"])).get_json()["handout"]
+    sa = {x["title"]: x for x in joined["pa"].get("/api/play/state")["handouts"]}
+    assert sa["To all"]["read"] is False
+    joined["pa"].post(f"/api/play/handouts/{everyone['id']}/read", {"op_id": "r1"})
+    joined["pa"].post(f"/api/play/handouts/{everyone['id']}/read", {"op_id": "r2"})   # twice is fine
+    assert joined["pa"].get("/api/play/state")["handouts"][0]["read"] is True           # read for Aria...
+    sb = {x["title"]: x for x in joined["pb"].get("/api/play/state")["handouts"]}
+    assert sb["To all"]["read"] is False and sb["Just Bram"]["read"] is False           # ...not for Bram
+    # Aria can't touch Bram's private note (or one that doesn't exist); the DM's own page isn't a player
+    joined["pa"].post(f"/api/play/handouts/{secret['id']}/read", {"op_id": "r3"}, 404)
+    joined["pa"].post("/api/play/handouts/999999/read", {"op_id": "r4"}, 404)
+    assert api.c.post(f"/api/play/handouts/{everyone['id']}/read", json={}).status_code == 401
+    sb = {x["title"]: x for x in joined["pb"].get("/api/play/state")["handouts"]}
+    assert sb["Just Bram"]["read"] is False
+    # deleting a handout takes its read marks with it
+    api.delete(f"/api/handouts/{everyone['id']}")
+    assert [x["title"] for x in joined["pa"].get("/api/play/state")["handouts"]] == []
+
+
+def test_a_paper_found_on_the_map_starts_unread(app, api, joined):
+    """Papers picked up on the map (lab clues) arrive unread for the reader only."""
+    from app.db import get_db
+    from app.lab_papers import give_handout
+    cid, a = joined["camp"]["id"], joined["a"]
+    with app.app_context():
+        conn = get_db()
+        assert give_handout(conn, cid, a["id"], "Incident report", "Voss pulls items back.", "Lab floor 2")
+    x = joined["pa"].get("/api/play/state")["handouts"][0]
+    assert x["title"] == "Incident report" and x["read"] is False and x["just_you"] is True
+    assert joined["pb"].get("/api/play/state")["handouts"] == []
+
+
+def test_upgrading_marks_every_existing_handout_read(data_dir):
+    """v20: notes handed out before the server kept read marks count as read for everyone who
+    got them, so nobody's screen fills with "New" (or pop-ups) after the update."""
+    import os, sqlite3
+    from app import create_app, db as appdb
+    from tests.conftest import Api
+    api = Api(create_app({"DATA_DIR": data_dir}).test_client())
+    camp = api.campaign("Old")
+    a = api.character(camp["id"], name="Aria", max_hp=20)
+    b = api.character(camp["id"], name="Bram", max_hp=20)
+    send(api, camp["id"], title="To all", body="x")
+    send(api, camp["id"], title="Just Aria", body="y", to=str(a["id"]))
+    path = os.path.join(data_dir, "dnd_tracker.sqlite3")
+    conn = sqlite3.connect(path)
+    conn.execute("DROP TABLE handout_reads")
+    conn.execute("PRAGMA user_version = 19")
+    conn.commit(); conn.close()
+    create_app({"DATA_DIR": data_dir})   # opening the app upgrades the database
+    conn = sqlite3.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == appdb.SCHEMA_VERSION
+    marks = sorted(conn.execute("SELECT h.title, c.name FROM handout_reads r JOIN handouts h ON h.id = r.handout_id "
+                                "JOIN characters c ON c.id = r.character_id"))
+    assert marks == [("Just Aria", "Aria"), ("To all", "Aria"), ("To all", "Bram")]

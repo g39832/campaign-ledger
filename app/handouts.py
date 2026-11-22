@@ -25,16 +25,34 @@ def handout_dict(r):
 
 
 def for_character(conn, campaign_id, char_id, limit=30):
-    """The handouts a player sees: those for everyone, and those sent to their character."""
+    """The handouts a player sees: those for everyone, and those sent to their character, newest
+    first. Each says whether that character has read it yet (kept on the server, see mark_read)."""
+    read = {r["handout_id"] for r in conn.execute(
+        "SELECT handout_id FROM handout_reads WHERE character_id = ?", (char_id,))} if char_id else set()
     out = []
     for r in conn.execute("SELECT * FROM handouts WHERE campaign_id = ? ORDER BY id DESC", (campaign_id,)):
         h = handout_dict(r)
         if h["to"] is None or (char_id and char_id in h["to"]):
             h["just_you"] = h.pop("to") is not None  # sent to them alone (or a few), not to everyone
+            h["read"] = h["id"] in read if char_id else True  # no character (watching only): nothing is "new"
             out.append(h)
             if len(out) >= limit:
                 break
     return out
+
+
+def mark_read(conn, campaign_id, char_id, handout_id):
+    """The character has opened this handout. Only one they can see; reading twice is fine.
+    Returns False if they can't see it."""
+    r = conn.execute("SELECT * FROM handouts WHERE id = ? AND campaign_id = ?", (handout_id, campaign_id)).fetchone()
+    if r is None:
+        return False
+    to = json.loads(r["to_characters"]) if r["to_characters"] else None
+    if to is not None and char_id not in to:
+        return False
+    conn.execute("INSERT OR IGNORE INTO handout_reads (handout_id, character_id, read_at) VALUES (?,?,?)",
+                 (handout_id, char_id, now_iso()))
+    return True
 
 
 def player_may_see_image(conn, campaign_id, char_id, name):

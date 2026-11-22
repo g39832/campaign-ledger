@@ -529,6 +529,18 @@ def api_me_hp():
     return jsonify({"character": _own_character(get_db(), char_id)})
 
 
+@bp.post("/api/play/handouts/<int:hid>/read")
+def api_handout_read(hid):
+    """The player opened a handout (a DM letter, a paper they found): remember it on the server, so
+    it isn't "new" any more on any of their devices and never pops up again by itself."""
+    from .handouts import mark_read
+    ident, char_id = _own(None)
+    with tx() as conn:
+        if not mark_read(conn, ident["campaign_id"], char_id, hid):
+            raise F.NotFound("Handout not found")
+    return jsonify({"read": hid})
+
+
 @bp.post("/api/play/me/dice")
 def api_me_dice():
     """The player picks their character's dice colors: {body, ink} as #rrggbb, or {} for the
