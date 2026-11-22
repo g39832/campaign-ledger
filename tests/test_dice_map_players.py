@@ -376,6 +376,7 @@ def test_player_view_hides_dm_information(api, battlemap):
 def test_player_token_moves_are_checked(api, battlemap):
     mid, camp, pa, pb = battlemap["mid"], battlemap["camp"], battlemap["pa"], battlemap["pb"]
     st = api.get(f"/api/maps/{mid}")
+    api.patch(f"/api/campaigns/{camp['id']}", {"changes": {"settings": {"to": {"players": {"free_roam": False}}}}})  # the old free drag (Free roam off)
     aria, bandit = tok(st, "Aria"), tok(st, "Bandit 1")
     pa.post(f"/api/play/tokens/{aria['id']}/move", {"x": 3, "y": 3}, 403)  # map not shown to players yet
     api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
@@ -593,7 +594,7 @@ def test_hit_one_or_many_targets(api):
     eid = api.encounter(camp["id"], "Rats")["encounter"]["id"]
     st = api.post(f"/api/encounters/{eid}/combatants", {"characters": [hero["id"]], "quick": {"name": "Rat", "max_hp": 10, "count": 3}})
     by = {c["name"]: c for c in st["combatants"]}
-    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True, "heal": False, "notes": "", "ac": 0, "area": None, "cooldown": 0, "condition": "", "extra_moves": 0, "dmg_mult": 1, "stance": 1, "reach": 5, "cast": None}], "sheet attacks reach combat"
+    assert by["Hero"]["attacks"] == [{"name": "Longsword", "has_hit": True, "has_dmg": True, "heal": False, "notes": "", "ac": 0, "area": None, "cooldown": 0, "condition": "", "extra_moves": 0, "dmg_mult": 1, "stance": 1, "stance_hit": 0, "reach": 5, "cast": None}], "sheet attacks reach combat"
     url = f"/api/encounters/{eid}/damage"
     st = api.post(url, {"targets": [by["Rat 1"]["id"]], "amount": 7, "attacker_id": by["Hero"]["id"], "op_id": "a1"})
     hp = {c["name"]: c["hp"] for c in st["combatants"]}

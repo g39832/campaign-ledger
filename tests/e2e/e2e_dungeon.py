@@ -58,7 +58,8 @@ with sync_playwright() as p:
             check(dm.locator(".fx-descend").count() == 1, "a little animation as the new map opens")
         made[theme] = int(re.search(r"/map/(\d+)", dm.url).group(1))
         head = dm.locator("#dungeon-panel h3").inner_text()
-        check(theme in head.lower() and "level 1" in head.lower(), f"{theme}: made, and its panel says {head!r}")
+        check((theme in head.lower() or (theme == "futureprison" and "abandoned prison" in head.lower())) and "level 1" in head.lower(),
+              f"{theme}: made, and its panel says {head!r}")
         check(dm.locator("#dungeon-panel .dg-room.is-boss").count() == 1, f"{theme}: it has a boss room")
         dm.screenshot(path=os.path.join(SHOTS, f"{engine.NAME}_dm_{theme}.png"))
     mid = made["prison"]

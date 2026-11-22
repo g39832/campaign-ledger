@@ -1,7 +1,8 @@
 """How fast it feels: page loads, how much each page downloads, how many requests a page makes
 while nobody does anything, how long the map takes to draw, and how long a change on the DM's
 screen takes to show up on a player's phone. Prints numbers (and checks a few limits).
-E2E_SLOW=1 adds a 150 ms delay to every request, like playing over the online link."""
+E2E_SLOW=1 adds a 150 ms delay to every request, like playing over the online link.
+PERF_THEME=futureprison runs it on the Abandoned prison (its chests, lights and enemies)."""
 import json, os, re, time, urllib.request, uuid
 from common import DM_URL, LAN_URL  # noqa: E402
 from playwright.sync_api import sync_playwright
@@ -28,7 +29,8 @@ for e in call("GET", f"/api/campaigns/{camp}/encounters")["encounters"]:
 for pl in call("GET", f"/api/campaigns/{camp}/players")["players"]:
     call("DELETE", f"/api/players/{pl['id']}")
 chars = {c["name"]: c for c in call("GET", f"/api/campaigns/{camp}/characters")["characters"]}
-mid = call("POST", f"/api/campaigns/{camp}/dungeons", {"theme": "prison"})["map"]["id"]
+THEME = os.environ.get("PERF_THEME", "prison")
+mid = call("POST", f"/api/campaigns/{camp}/dungeons", {"theme": THEME})["map"]["id"]
 call("POST", f"/api/maps/{mid}/party-to-start")
 d = call("GET", f"/api/maps/{mid}")["map"]["dungeon"]
 call("POST", f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 3, "x": d["exit"][0] - 3, "y": d["exit"][1]})
@@ -73,6 +75,8 @@ with sync_playwright() as p:
     print(f"== [{engine.NAME}] {'with a 150 ms delay per request' if SLOW else 'on the local network'}")
     # the player's phone
     pctx = b.new_context(viewport={"width": 390, "height": 844}, **engine.mobile(), has_touch=True)
+    pctx.add_init_script("""(() => { let real; Object.defineProperty(window, 'MapView', { configurable: true, get() { return real; },
+      set(v) { real = class extends v { constructor(...a) { super(...a); window.__view = this; } }; } }); })();""")
     pg = pctx.new_page(); pm = meter(pg, "player"); slow(pctx, pg)
     pg.goto(LAN + "/join"); pg.fill("input[name=code]", code); pg.fill("input[name=name]", "Speedy")
     pg.wait_for_selector("#char-field:not([hidden])"); pg.select_option("select[name=character_id]", value=str(chars["Moni Easter"]["id"]))
@@ -104,6 +108,9 @@ with sync_playwright() as p:
     draw = dm.evaluate("() => { const v = window.__view; const t = performance.now(); for (let i = 0; i < 20; i++) v.draw(); return (performance.now() - t) / 20; }")
     pdraw = pg.evaluate("() => { const v = window.__view; if (!v) return -1; const t = performance.now(); for (let i = 0; i < 20; i++) v.draw(); return (performance.now() - t) / 20; }")
     print(f"   one map frame: DM {draw:.1f} ms, phone {pdraw:.1f} ms")
+    state_kb = pg.evaluate("async () => (await (await fetch('/api/play/state')).text()).length / 1024")
+    print(f"   the player's whole game state: {state_kb:.0f} KB (before compression)")
+    check(0 <= pdraw < 25, f"the phone's map draws a frame in {pdraw:.1f} ms")
     check(draw < 25, f"the DM's map draws a frame in {draw:.1f} ms")
     # sitting still for 20 seconds: what does each page ask the server for?
     pm.update(n=0, bytes=0, urls=[]); dmm.update(n=0, bytes=0, urls=[])

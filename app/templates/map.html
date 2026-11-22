@@ -9,6 +9,7 @@
   <textarea class="input enc-name grow" id="map-name" rows="1" aria-label="Map name" style="font:700 1.25rem var(--caps);background:transparent;border-color:transparent;max-width:420px;min-width:8ch"></textarea>
   <span id="live-flag" class="live-flag"></span>
   <span class="grow"></span>
+  <button type="button" class="btn btn-sm" id="roam-btn" aria-pressed="true" title="Outside a fight: may the players walk around? In a fight they always move on their turn">{{ icon("footprints", "sm") }} <span>Free roam: on</span></button>
   <button type="button" class="btn btn-sm" id="live-btn">{{ icon("eye-off", "sm") }} <span>Show to players</span></button>
   <a class="btn btn-sm btn-quiet" id="preview-btn" href="#" title="See exactly what players receive">Player view</a>
   <button type="button" class="btn btn-sm btn-quiet btn-danger" id="delete-map-top" title="Delete this map">{{ icon("trash-2", "sm") }} Delete map</button>
@@ -74,6 +75,7 @@
     <div class="panel" id="selected-panel"></div>
 
     <div class="panel" id="dungeon-panel" hidden></div>
+    <div class="panel" id="chest-panel"></div>
 
     <div class="panel" id="monster-panel">
       <h3 class="rule-head">Add monsters</h3>
@@ -142,6 +144,6 @@
 {% endblock %}
 {% block scripts %}
 <script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=140"></script>
-<script src="{{ url_for('static', filename='js/map.js') }}?v=140"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=171"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}?v=171"></script>
 {% endblock %}

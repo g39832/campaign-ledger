@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ campaign_name }} · Campaign Ledger</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=140">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=171">
 </head>
 <body class="page-play" data-role="player">
 {% include "_sprite.svg" %}
@@ -35,11 +35,47 @@
           <button type="button" class="icon-btn sm map-size-btn" id="map-size" aria-label="Map size" title="Make the map bigger or smaller">{{ icon("arrow-up-down", "sm") }}</button>
         </div>
         <div class="map-hint" id="hint"></div>
-        <div class="empty" id="no-map" style="position:absolute;inset:30% 10% auto;border-color:var(--line)" hidden><h3>No map yet</h3>The DM hasn't shared a battle map.</div>
+        <div class="roam-pad" id="roam-pad" role="group" aria-label="Walk one square" hidden>
+          <button type="button" data-step="-1,-1" data-free-press aria-label="Step up and left">&#8598;</button>
+          <button type="button" data-step="0,-1" data-free-press aria-label="Step up">&#8593;</button>
+          <button type="button" data-step="1,-1" data-free-press aria-label="Step up and right">&#8599;</button>
+          <button type="button" data-step="-1,0" data-free-press aria-label="Step left">&#8592;</button>
+          <span class="roam-mid" aria-hidden="true"></span>
+          <button type="button" data-step="1,0" data-free-press aria-label="Step right">&#8594;</button>
+          <button type="button" data-step="-1,1" data-free-press aria-label="Step down and left">&#8601;</button>
+          <button type="button" data-step="0,1" data-free-press aria-label="Step down">&#8595;</button>
+          <button type="button" data-step="1,1" data-free-press aria-label="Step down and right">&#8600;</button>
+        </div>
+        <div class="no-map-logo" id="no-map" hidden>
+          <svg class="nm-emblem" viewBox="0 0 200 200" role="img" aria-label="The campaign's emblem: a hollow star in an orbit">
+            <defs>
+              <radialGradient id="nm-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="var(--accent-strong)" stop-opacity=".55"/>
+                <stop offset="60%" stop-color="var(--accent)" stop-opacity=".12"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="100" cy="100" r="92" class="nm-ring"/>
+            <circle cx="100" cy="100" r="86" class="nm-ring nm-ring-thin"/>
+            <g class="nm-ticks"><line x1="100" y1="8" x2="100" y2="18" transform="rotate(0 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(15 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(30 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(45 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(60 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(75 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(90 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(105 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(120 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(135 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(150 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(165 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(180 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(195 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(210 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(225 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(240 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(255 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(270 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(285 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(300 100 100)"/><line x1="100" y1="8" x2="100" y2="18" transform="rotate(315 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(330 100 100)"/><line x1="100" y1="8" x2="100" y2="14" transform="rotate(345 100 100)"/></g>
+            <g class="nm-orbit">
+              <ellipse cx="100" cy="100" rx="74" ry="28" class="nm-path" transform="rotate(-24 100 100)"/>
+              <circle cx="167.6" cy="70" r="5" class="nm-moon"/>
+            </g>
+            <circle cx="100" cy="100" r="58" fill="url(#nm-glow)" class="nm-core"/>
+            <polygon points="100.0,54.0 111.2,84.6 143.7,85.8 118.1,105.9 127.0,137.2 100.0,119.0 73.0,137.2 81.9,105.9 56.3,85.8 88.8,84.6" class="nm-star"/>
+            <polygon points="100.0,70.0 107.3,90.0 128.5,90.7 111.8,103.8 117.6,124.3 100.0,112.4 82.4,124.3 88.2,103.8 71.5,90.7 92.7,90.0" class="nm-star-inner"/>
+            <circle cx="100" cy="100" r="3.5" class="nm-heart"/>
+            <g class="nm-sparks"><circle cx="42" cy="46" r="1.8"/><circle cx="160" cy="150" r="1.5"/><circle cx="150" cy="38" r="1.2"/><circle cx="36" cy="140" r="1.3"/></g>
+          </svg>
+          <div class="nm-title" id="no-map-title">The Hollow Star</div>
+          <div class="nm-sub">Waiting for the DM to show a map</div>
+        </div>
       </div>
     </div>
     <aside class="map-side" style="max-height:none">
       <div class="panel" id="turns"></div>
+      <div class="panel" id="nearby" hidden></div>
       <div class="panel pc-card" id="me"></div>
       <div class="panel" id="party"></div>
       <div class="panel"><button type="button" class="btn btn-sm btn-quiet" id="leave">Leave this game</button></div>
@@ -48,10 +84,10 @@
 </main>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 {% set role = "player" %}{% include "_dice_dock.html" %}
-<script src="{{ url_for('static', filename='js/core.js') }}?v=140"></script>
-<script src="{{ url_for('static', filename='js/effects.js') }}?v=140"></script>
-<script src="{{ url_for('static', filename='js/dice.js') }}?v=140"></script>
-<script src="{{ url_for('static', filename='js/mapview.js') }}?v=140"></script>
-<script src="{{ url_for('static', filename='js/play.js') }}?v=140"></script>
+<script src="{{ url_for('static', filename='js/core.js') }}?v=171"></script>
+<script src="{{ url_for('static', filename='js/effects.js') }}?v=171"></script>
+<script src="{{ url_for('static', filename='js/dice.js') }}?v=171"></script>
+<script src="{{ url_for('static', filename='js/mapview.js') }}?v=171"></script>
+<script src="{{ url_for('static', filename='js/play.js') }}?v=171"></script>
 </body>
 </html>

@@ -17,3 +17,9 @@ for c in call("GET", "/api/campaigns/1/characters")["characters"]:
         if s.get("aura"):
             call("POST", f"/api/characters/{c['id']}/aura", {"index": i, "on": False})
             print("switched off", c["name"], s.get("name"))
+
+# Handouts already in the real game (a boss's loot) would pop up over every new test device and
+# cover the buttons: test copies start without them (e2e_handouts.py makes its own).
+for x in call("GET", "/api/campaigns/1/handouts").get("handouts", []):
+    call("DELETE", f"/api/handouts/{x['id']}")
+    print("removed handout", x.get("title"))

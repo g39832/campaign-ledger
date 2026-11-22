@@ -29,6 +29,7 @@
     canMove: (t) => t.movable && !casting && !using,
     reach: (t) => {
       const k = t.pet && acting(), mv = k && k.id === t.combatant_id ? k.move : t.own && S && S.character && S.character.move;
+      if (t.roam && !(mv && mv.my_turn)) return { budget: (S.map && S.map.scale_unit !== "m" && Number(S.map.scale_value)) || 5, from: [t.x, t.y] }; // exploring: one square
       return mv && mv.my_turn ? { budget: mv.held ? 0 : mv.budget, from: mv.from } : null;
     },
     onSelect: (t) => { // tap a token to cast on them, or to aim an attack at an enemy
@@ -36,6 +37,11 @@
       else if (using && !using.aim && t) pickFoe(t.combatant_id, t.display);
     },
     onAim: () => { if (using && using.aim) { caughtByAim(); render(); } }, // the cone was turned: who's in it now
+    onChest: (c) => { // tap a chest: open it if your hero is next to it
+      const t = myToken();
+      if (t && nextTo(t, c.x, c.y)) openChest(c);
+      else toast(c.name + (c.opened ? " (open)" : c.locked_by ? " — locked, needs a " + c.locked_by : "") + ". Walk up next to it to open it.", "ok");
+    },
     onPlace: (x, y) => { // a clone: the square it appears on
       if (!casting || !casting.spell.summon || casting.busy || casting.result) return;
       const on = (S.mapTokens || []).find((t) => !["marker", "trap"].includes(t.kind) && !["dead", "defeated"].includes(t.status) && x >= t.x && x < t.x + t.size && y >= t.y && y < t.y + t.size);
@@ -62,13 +68,59 @@
       } catch (e) { toast(e.message, "error"); }
       movesPending--;
       loadDone = ++loadSeq; // anything fetched before the move landed would put the token back
-      if (dragMissed) { dragMissed = false; stamp = null; }
+      // the token was put down where the finger let go before the server answered: always redraw
+      // from the server's copy (a refused move goes back; "nothing changed" mustn't skip that)
+      dragMissed = false; stamp = null; mapStamp = null;
       load(true);
     },
     onDragEnd: () => {
       if (!dragMissed || movesPending) return; // (a move in flight reloads when it lands)
       dragMissed = false; stamp = null; load(true);
     },
+  });
+  /* Free roam: outside a fight the hero walks one square at a time — the arrow pad (hold to keep
+     walking), the arrow keys or W A S D, or dragging one square. One step is sent at a time. */
+  let stepBusy = false, holdDir = null;
+  async function step(dx, dy) {
+    const t = myToken();
+    if (!t || !t.roam || !t.movable || stepBusy || casting || using || !S.map) return false;
+    const x = t.x + dx, y = t.y + dy;
+    if (x < 0 || y < 0 || x + t.size > S.map.cols || y + t.size > S.map.rows) return false;
+    stepBusy = true; movesPending++;
+    let ok = true;
+    try {
+      const r = await api("POST", "/api/play/tokens/" + t.id + "/move", { x, y });
+      if (r && r.next_level && r.next_level.blocked) toast(r.next_level.why + ".", "error");
+    } catch (e) { toast(e.message, "error"); ok = false; holdDir = null; }
+    movesPending--; stepBusy = false;
+    loadDone = ++loadSeq; dragMissed = false; stamp = null; mapStamp = null;
+    await load(true);
+    return ok;
+  }
+  async function walk() { // keeps stepping while the arrow is held
+    while (holdDir) {
+      const [dx, dy] = holdDir;
+      if (!(await step(dx, dy))) break;
+      await new Promise((r) => setTimeout(r, 110));
+    }
+  }
+  document.querySelectorAll("#roam-pad [data-step]").forEach((b) => {
+    const [dx, dy] = b.dataset.step.split(",").map(Number);
+    const stop = () => { holdDir = null; b.classList.remove("is-on"); };
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); b.classList.add("is-on"); if (holdDir) return; holdDir = [dx, dy]; walk(); });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((k) => b.addEventListener(k, stop));
+    b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); step(dx, dy); } });
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+  const KEY_STEP = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || $("#roam-pad").hidden) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+    const d = KEY_STEP[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (!d) return;
+    e.preventDefault();
+    step(d[0], d[1]);
   });
   // tools: move, measure, ping
   const PHINT = { select: null, measure: "Drag to measure. Diagonals count as one square.", ping: "Tap a spot to ping it. Everyone sees it for a few seconds." };
@@ -436,15 +488,56 @@
     if (mv && mv.held) return "You're " + mv.held + " — you can't move. ";
     if (mv && mine.movable) return "Drag your token to move: " + mv.left + " of " + mv.budget + " ft left" + (mv.used ? " (you can still readjust)" : "") + ". ";
     if (mv && !mv.left) return "No movement left this turn" + (mv.dash ? ". " : " (Dash for more). ");
+    if (mine.held) return "Hold still: the DM will let you know when you can explore. ";
+    if (mine.movable && mine.roam) return "Exploring: walk one square at a time with the arrows" + (matchMedia("(pointer: fine)").matches ? " (or arrow keys / W A S D)" : "") + ". ";
     return mine.movable ? "Drag your token to move. " : "The DM has locked movement. ";
   }
   // your moves, shown like the DM's move cards on the map: what each one does, then its buttons
+  /* Time Reversal (Lux's ring): right after a creature ends its turn, send it back to the start of it. */
+  function useRewind() {
+    return me("rewind", {}).then((d) => {
+      const r = d && d.rewind; if (!r) return;
+      toast(r.name + "! " + r.target + " goes back to the start of its turn and takes it again.", "ok", { ms: 7000 });
+      if (window.FX) { FX.banner(r.name + "!", r.target + " takes its turn again", "crit"); FX.sound("crit"); }
+    });
+  }
+  function rewindBtn(c) {
+    const r = c.rewind;
+    if (!r) return null;
+    if (!r.ok) return h("span", { class: "faint", style: "font-size:.85rem" }, r.why);
+    return h("button", { type: "button", class: "btn btn-sm btn-primary", title: "Undo " + r.target + "'s whole turn: it goes back to where it started and takes the turn again",
+      onclick: useRewind }, icon("history", "sm"), " Rewind " + r.target + "'s turn");
+  }
+  function rewindBox(c) { // shown off your turn the moment it can be used
+    const r = c.rewind;
+    if (!r || !r.ok || r.target_id == null) return null;
+    return h("div", { class: "parry-box" }, icon("history", "sm"),
+      h("span", { class: "grow" }, h("b", null, r.target + " just ended its turn."), " " + r.name + ": make it take that turn again from the start?"),
+      h("button", { type: "button", class: "btn btn-primary", onclick: useRewind }, "Rewind it"));
+  }
+  /* Echo Teleport (Yamato): pick a clone and he teleports to its spot (they swap places). No action; 15 ft of movement. */
+  function teleportTo(s, k) {
+    return me("teleport", { spell: s.index, clone: k.id }).then((d) => {
+      if (!d || !d.teleport) return;
+      toast(s.name + ": you swap places with " + k.name + ".", "ok");
+      if (window.FX) { FX.float($("#stage"), s.name, "ac"); FX.sound("ac"); }
+    });
+  }
+  function teleportBtns(s, c) {
+    const ks = c.clones || [];
+    if (!c.my_turn) return [h("span", { class: "faint", style: "font-size:.85rem" }, "on your turn, with a clone out")];
+    if (!ks.length) return [h("span", { class: "faint", style: "font-size:.85rem" }, "summon a clone first")];
+    const low = !!(c.move && c.move.left < 15);
+    return ks.map((k) => h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: low || !!s.recharging,
+      title: low ? "Teleporting costs 15 ft of movement" : "Teleport to " + k.name + "'s spot (you swap places)", onclick: () => teleportTo(s, k) },
+      icon("wand-sparkles", "sm"), " Teleport to " + k.name));
+  }
   function moveCard(ic, name, info, ...kids) {
     return h("div", { class: "fight-act move-card" }, icon(ic, "sm"), h("b", null, name),
       info ? h("span", { class: "faint move-info" }, info) : null, h("div", { class: "move-btns" }, kids));
   }
   const attackInfo = (a) => [a.bonus ? "attack roll " + a.bonus : "", a.damage, a.extra_moves ? "+" + a.extra_moves + " extra moves this turn" : "",
-    a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : ""].filter(Boolean).join(" · ");
+    a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : "", a.stance_hit ? (a.stance_hit ? (a.stance_hit > 0 ? "+" : "") + a.stance_hit + " to hit" : "") + " this turn" : ""].filter(Boolean).join(" · ");
   const spellInfo = (s, c, d) => { const v = L.spellView(s), ar = v.area && v.area.size && !v.zone ? v.area : null;
     return [v.aura ? "" : L.levelWord(v), ar ? ar.size + " ft " + (ar.kind || "") + (ar.range ? " · range " + ar.range + " ft" : "") : "", L.spellWhat(v),
       L.spellLands(v, d.spell || (v.dc ? { dc: v.dc } : null), c.roll_to_hit), v.cooldown ? v.cooldown + "-turn cooldown" : ""].filter(Boolean).join(" · "); };
@@ -483,7 +576,7 @@
       disabled: noActs && !(opts && opts.free), onclick: run }, icon(ic, "sm"), h("b", null, name), info ? h("span", { class: "faint" }, info) : null);
     (c.attacks || []).forEach((a) => {
       if (a.recharging) return;
-      if (a.extra_moves || a.stance > 1) out.push(card("zap", a.name || "Action Surge", [a.extra_moves ? "+" + a.extra_moves + " moves" : "", a.stance > 1 ? "damage ×" + a.stance : ""].filter(Boolean).join(" · ") + " this turn",
+      if (a.extra_moves || a.stance > 1 || a.stance_hit) out.push(card("zap", a.name || "Action Surge", [a.extra_moves ? "+" + a.extra_moves + " moves" : "", a.stance > 1 ? "damage ×" + a.stance : "", (a.stance_hit ? (a.stance_hit > 0 ? "+" : "") + a.stance_hit + " to hit" : "")].filter(Boolean).join(" · ") + " this turn",
         () => me("surge", { index: a.index }).then((d) => { if (d) toast((a.name || "Action Surge") + "!", "ok"); }), { free: true }));
       else if (a.damage && !a.heal) out.push(card("swords", a.name || "Attack", attackInfo(a) + (a.reach ? " · reaches " + a.reach + " ft" : ""),
         () => startUse("attack", a.index, a.name || "Attack", !a.area, 0, a.reach)));
@@ -501,6 +594,11 @@
     });
     (c.spells || []).forEach((s) => {
       if (s.recharging) return;
+      if (s.clone_swap) { // one card per clone: tap it and you're there
+        (c.clones || []).forEach((k) => out.push(card("wand-sparkles", s.name + ": " + k.name, "teleport to its spot · you swap places · 15 ft of movement, no action",
+          () => teleportTo(s, k), { free: true })));
+        return;
+      }
       const info = spellInfo(s, c, c.derived || {});
       if (s.aura) return; // switched on and off from the spells below
       if (s.zone) out.push(card("sun", s.name, info, () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets))));
@@ -537,6 +635,7 @@
     const a = document.activeElement, keep = a && a.dataset && a.dataset.keep;
     const m = S.map;
     $("#no-map").hidden = !!m;
+    if (!m && S.campaign) $("#no-map-title").textContent = S.campaign.replace(/\b\w/g, (x) => x.toUpperCase()); // "The hollow star" -> "The Hollow Star"
     document.body.classList.toggle("no-live-map", !m); // no map shared: the map box shrinks out of the way
     if (m) {
       const ms = JSON.stringify(m) + JSON.stringify(S.mapTokens);
@@ -549,14 +648,18 @@
       else if (view.tool === "select" && S.character && S.character.disengaged && mine) $("#hint").textContent = "Disengaged: drag your token away. No opportunity attacks this turn.";
       else if (view.tool === "select" && m.fight_starting) $("#hint").textContent = "Enemies! Hold still while the DM rolls initiative.";
       else if (view.tool === "select") $("#hint").textContent = (mine ? moveHint(mine, S.character && S.character.move) : "Drag to look around. ") + "Double-tap to ping.";
+      const roaming = !!(mine && mine.roam && mine.movable && !mine.status);
+      $("#roam-pad").hidden = !roaming;
+      document.body.classList.toggle("roaming", roaming);
     } else { view.map = null; view.draw(); $("#hint").textContent = ""; }
 
     const e = S.encounter;
     const ch = S.character;
     const fs = m && m.fight_starting;
     $("#turns").replaceChildren(
+      m && m.silo ? siloBox(m.silo) : null,
       fs ? h("div", { class: "room-fight" }, h("div", { class: "rf-head" }, icon("swords", "sm"), h("b", null, "Enemies in " + fs.room + "!")),
-        h("p", { style: "margin:4px 0 0" }, fs.by + " walked in on them. Hold still: the DM is rolling initiative.")) : null,
+        h("p", { style: "margin:4px 0 0" }, (fs.what || fs.by + " walked in on them") + ". Hold still: the DM is rolling initiative.")) : null,
       ch && ch.in_fight ? L.reactionBox(ch, (kind, body) => me("react", Object.assign({ kind }, body)), { you: true, burn: !ch.my_turn }) : null,
       ch && ch.in_fight && !ch.my_turn && ch.reaction ? L.turnStrip({ reaction: ch.reaction }, { title: "Off your turn" }) : null,
       h("h3", { class: "rule-head" }, e ? "Round " + e.round : "Turn order"),
@@ -570,6 +673,7 @@
       S.character && S.character.my_turn ? L.turnStrip({ actions: S.character.actions, move: S.character.move, reaction: S.character.reaction }, { big: true, title: "You have" }) : null,
       S.character && S.character.my_turn ? h("div", { style: "margin-top:8px" }, endTurnBtn()) : null,
       S.character && S.character.my_turn ? yourMoves(S.character) : null,
+      S.character && S.character.in_fight && S.character.techniques ? L.techniques(S.character.techniques, { key: "phone", run: (body) => me("technique", body) }) : null,
 
       acting() ? h("div", { style: "margin-top:8px" }, endTurnBtn(acting())) : null,
       acting() ? cloneMoves(acting()) : null,
@@ -589,6 +693,7 @@
           h("span", { class: "grow" }), h("span", { title: c.ac_bonus ? "Includes " + signed(c.ac_bonus) + " from effects" : null }, h("b", null, c.ac), " AC", c.ac_bonus ? h("small", { class: "ac-bonus" }, " " + signed(c.ac_bonus)) : null)),
         c.conditions.length ? h("div", { class: "c-conds", style: "margin-bottom:8px" }, c.conditions.map((x) => h("span", { class: "tag" }, x))) : null,
         handoutsPanel(),
+        rewindBox(c),
         c.parry && c.parry.pending ? h("div", { class: "parry-box" }, icon("shield", "sm"),
           h("span", { class: "grow" }, h("b", null, "You were hit for " + c.parry.pending.amount + "!"), " " + c.parry.name + ": roll off against the DM. Win and you take " + Math.floor(c.parry.pending.amount / 2) + " instead."),
           h("button", { type: "button", class: "btn btn-primary", onclick: () => me("parry", {}).then((r) => {
@@ -621,7 +726,7 @@
           : c.my_turn === false ? moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a), h("span", { class: "faint", style: "font-size:.85rem" }, "wait for your turn" + (a.cooldown ? " · " + a.cooldown + "-turn cooldown" : "")))
           : moveCard(a.heal ? "heart" : "swords", a.name || "Attack", attackInfo(a),
           a.cooldown ? h("span", { class: "faint", style: "font-size:.8rem" }, a.cooldown + "-turn cooldown") : null,
-          a.extra_moves || a.stance > 1 ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On yourself, for the rest of your turn",
+          a.extra_moves || a.stance > 1 || a.stance_hit ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On yourself, for the rest of your turn",
             onclick: () => me("surge", { index: a.index }).then((d) => {
               if (!d) return;
               const what = [a.extra_moves ? a.extra_moves + " extra moves" : "", a.stance > 1 ? "damage ×" + a.stance : ""].filter(Boolean).join(" and ");
@@ -635,7 +740,8 @@
             a.heal ? "Heal" : a.dmg_mult > 1 ? "Dmg ×" + a.dmg_mult : "Dmg") : null))] : null,
         (c.spells || []).length ? [h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Spells"),
 
-          ...c.spells.map((s) => moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
+          ...c.spells.map((s) => s.rewind ? moveCard("history", s.name, [L.spellWhat(s)].filter(Boolean).join(" · "), rewindBtn(c))
+          : s.clone_swap ? moveCard("wand-sparkles", s.name, "Teleport to one of your clones (you swap places) · 15 ft of movement, no action" + (s.cooldown ? " · " + s.cooldown + "-turn cooldown" : ""), ...teleportBtns(s, c)) : moveCard(L.KIND_ICON[s.kind] || "zap", s.name, spellInfo(s, c, d),
           c.my_turn && s.zone && !s.recharging ? h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !!(c.actions && !c.actions.left),
             title: "It rises around you: enemies in it are hit, and it stays up",
             onclick: () => (S.map ? useZone(s) : startUse("spell", s.index, s.name, false, s.targets)) }, icon("sun", "sm"), " Use") : // no map: tap who's in it
@@ -645,14 +751,16 @@
           s.kind === "damage" && (s.hit === "attack" || c.roll_to_hit) && d.spell ? h("button", { type: "button", class: "btn btn-sm",
             onclick: attackThen({ type: "spell_attack" }, s.dice ? { type: "spell", key: s.index } : null) }, "Attack " + signed(d.spell.attack)) : null,
           s.kind === "damage" && s.dice && !(c.my_turn && aimsAtFoes(s)) ? h("button", { type: "button", class: "btn btn-sm", onclick: (ev) => roll({ type: "spell", key: s.index }, ev) }, "Dmg") : null,
-          s.hit && s.hit !== "attack" && !c.roll_to_hit ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (d.spell ? " DC " + d.spell.dc : "")) : null,
+          s.hit && s.hit !== "attack" && (!c.roll_to_hit || s.force_save) ? h("span", { class: "tag" }, s.hit.toUpperCase() + " save" + (s.dc ? " DC " + s.dc : d.spell ? " DC " + d.spell.dc : "")) : null,
           s.aura ? L.auraButton(s, "/api/play/me/aura", () => load(true))
           : s.terrain ? h("span", { class: "tag", title: "Ask the DM: it's aimed on the battle map" }, icon("map", "sm"), " the DM aims it on the map")
-          : s.recharging ? h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, s.recharging - (c.my_turn ? 1 : 0)); if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })())
+          : s.recharging ? h("span", { class: "tag" }, icon("hourglass", "sm"), (() => { const w = Math.max(0, s.recharging - (c.my_turn ? 1 : 0)); if (w > 50000) return " used · back after a long rest"; if (w > 500) return " used this fight · back next fight"; return w ? " recharging · ready in " + w + " turn" + (w === 1 ? "" : "s") : " recharging · ready next turn"; })())
           : castable(s) && c.can.cast_spells !== false
             ? h("button", { type: "button", class: "btn btn-sm btn-heal" + (casting && casting.index === s.index ? " is-armed" : ""), title: "Then tap who gets it",
               onclick: () => startCast(s) }, icon(s.kind === "heal" ? "heart" : "shield-plus", "sm"), " Cast · " + (L.spellWhat(s) || s.name))
             : s.kind === "debuff" && !c.my_turn ? h("span", { class: "tag", title: "On your turn" }, L.spellWhat(s) || "debuff") : null))] : null,
+        !c.in_fight && c.techniques ? L.techniques(c.techniques, { key: "phone-sheet", run: (body) => me("technique", body) }) : null,
+        inventoryBox(c.inventory),
         h("details", { class: "roll-fold", open: rollsOpen, ontoggle: (e) => { rollsOpen = e.target.open; } },
           h("summary", { class: "lbl" }, "Saving throws & skills"),
           h("h4", { class: "lbl", style: "margin:12px 0 4px" }, "Saving throws"),
@@ -677,6 +785,45 @@
       h("ul", { class: "stack-list" }, S.party.map((p) => h("li", null, h("div", { class: "row", style: "justify-content:space-between" },
         h("b", null, p.name), h("span", { class: "num" }, p.current_hp + "/" + p.max_hp + (p.temp_hp ? " +" + p.temp_hp : ""))),
         p.conditions.length || p.status !== "ok" ? h("div", { class: "faint", style: "font-size:.85rem" }, [p.status !== "ok" ? p.status : "", ...p.conditions].filter(Boolean).join(", ")) : null))));
+  }
+
+  /* Inventory: what the character carries (from their sheet), coins and weight. Read only here;
+     the DM edits it on the sheet, and things taken from chests land in it. */
+  let invOpen = (() => { try { return localStorage.getItem("inv-open") !== "0"; } catch (e) { return true; } })();
+  async function useItem(it) { // a healing item (Stim injector, Med-gel patch): rolled by the server, on yourself
+    const d = await me("item", { index: it.index });
+    if (d && d.roll) { toast(it.name + ": " + (d.roll.outcome || "used") + ".", "ok"); if (window.FX) { FX.float($("#me"), "+" + Math.max(0, d.roll.total), "heal"); FX.sound("heal"); } }
+  }
+  function inventoryBox(inv) {
+    if (!inv) return null;
+    const items = inv.items || [], coins = Object.entries(inv.coins || {});
+    const ORDER = ["pp", "gp", "ep", "sp", "cp"];
+    coins.sort((a, b) => ORDER.indexOf(a[0]) - ORDER.indexOf(b[0]));
+    const heavy = inv.capacity && inv.carried > inv.capacity * 0.8;
+    return h("details", { class: "inv-fold", id: "inventory", open: invOpen,
+      ontoggle: (e) => { invOpen = e.target.open; try { localStorage.setItem("inv-open", invOpen ? "1" : "0"); } catch (x) {} } },
+      h("summary", { class: "lbl" }, "Inventory ", h("span", { class: "count" }, items.length + " item" + (items.length === 1 ? "" : "s"))),
+      h("div", { class: "inv-meta" },
+        h("span", { class: "inv-coins" }, icon("coins", "sm"), " ",
+          coins.length ? coins.map(([k, n]) => h("span", { class: "coin-amt" }, h("b", null, n), " " + k)) : h("span", { class: "faint" }, "no coins")),
+        inv.capacity ? h("span", { class: "inv-weight" + (heavy ? " is-heavy" : ""), title: "What you carry, of what you can carry (Strength × 15)" },
+          inv.carried + " / " + inv.capacity + " lb") : null),
+      items.length ? h("ul", { class: "inv-list" }, items.map((it) => {
+        const r = it.rarity && L.RARITY[it.rarity];
+        return h("li", { class: "inv-item" + (r ? " rarity-" + it.rarity : ""), style: r ? "--rarity:" + r[1] : null },
+          h("div", { class: "inv-top" },
+            h("b", { class: "inv-name" }, it.name + (it.qty > 1 ? " ×" + it.qty : "")),
+            r ? h("span", { class: "tag inv-rarity" }, r[0]) : null,
+            it.weight ? h("span", { class: "faint inv-lb" }, Math.round(it.weight * it.qty * 10) / 10 + " lb") : null),
+          it.notes ? h("div", { class: "faint inv-notes" }, it.notes) : null,
+          it.heal ? h("div", { class: "row inv-use", style: "gap:6px;align-items:center;margin-top:4px" },
+            h("button", { type: "button", class: "btn btn-sm btn-heal", disabled: !!(it.heal.charges && !it.heal.charges.left),
+              title: "Use it on yourself: heals " + it.heal.dice, onclick: () => useItem(it) }, icon("heart", "sm"), " Use · heals " + it.heal.dice),
+            h("span", { class: "faint", style: "font-size:.8rem" }, [
+              { action: "an action on your turn in a fight", bonus: "a bonus action on your turn in a fight", any: "" }[it.heal.when],
+              it.heal.uses ? it.heal.uses.left + " of " + it.heal.uses.total + " uses left" : "",
+              it.heal.charges ? it.heal.charges.left + " of " + it.heal.charges.total + " charges (back after a long rest)" : ""].filter(Boolean).join(" · "))) : null);
+      })) : h("p", { class: "faint", style: "margin:6px 0" }, "Your pack is empty."));
   }
 
   /* Handouts: a new one pops up as a big card (once per device); they all stay in the Handouts list. */
@@ -708,6 +855,106 @@
     const fresh = (S.handouts || []).filter((x) => !seen.has(x.uid));
     if (fresh.length && !handoutOpen) showHandout(fresh[fresh.length - 1]); // the oldest unseen first; the rest after it's closed
   }
+  /* ---- chests and sealed doors next to your hero ---------------------------------------------
+     A chest opens from here (or by tapping it on the map) when your hero stands next to it; the loot
+     pops up and each thing goes onto your sheet with Take. Sealed doors open with the right card. */
+  let lootOpen = null; // the chest whose loot is showing
+  const myToken = () => ((S && S.mapTokens) || []).find((t) => t.own && !t.pet);
+  function nextTo(t, x, y) {
+    const tx = Math.round(t.x), ty = Math.round(t.y);
+    return Math.max(Math.max(0, x - (tx + t.size - 1), tx - x), Math.max(0, y - (ty + t.size - 1), ty - y)) <= 1;
+  }
+  const DOOR_WORD = { sealed: "Sealed door", panel: "A wall panel that looks loose" };
+  function nearby() {
+    const box = $("#nearby"), t = myToken(), m = S && S.map;
+    if (!box) return;
+    if (!t || !m) { box.hidden = true; return; }
+    const chests = (m.chests || []).filter((c) => nextTo(t, c.x, c.y));
+    const doors = Object.entries(m.terrain || {}).filter(([, v]) => DOOR_WORD[v]).map(([k, v]) => [k.split(",").map(Number), v])
+      .filter(([[x, y]]) => nextTo(t, x, y));
+    box.hidden = !chests.length && !doors.length;
+    if (box.hidden) return;
+    box.replaceChildren(h("h3", { class: "rule-head" }, "Next to you"),
+      ...chests.map((c) => SILO_WORD[c.kind] ? siloRow(c) : h("div", { class: "nearby-row" }, icon(L.CHEST_ICON[c.kind] || "backpack", "sm"),
+        h("span", { class: "grow" }, c.name, c.opened ? h("span", { class: "faint" }, c.loot && c.loot.length ? " · open" : " · empty")
+          : c.locked_by ? h("span", { class: "chest-lock" }, " · needs a " + c.locked_by) : null),
+        h("button", { type: "button", class: "btn btn-sm btn-primary", "data-chest": c.id, onclick: () => openChest(c) }, c.kind === "papers" ? "Read" : c.opened ? "Look inside" : "Open"))),
+      ...doors.map(([[x, y], v]) => h("div", { class: "nearby-row" }, icon("key-round", "sm"), h("span", { class: "grow" }, DOOR_WORD[v]),
+        h("button", { type: "button", class: "btn btn-sm", "data-door": x + "," + y, onclick: () => openDoor(x, y) }, v === "panel" ? "Push it" : "Use a card"))));
+  }
+  // the missile silo's launch bay: turn an abort key, or stop Steven at his lift (app/silo.py)
+  const SILO_WORD = { abort: ["Turn the key", "Turned"], escape: ["Stop him!", "Reached"] };
+  function siloRow(c) {
+    const s = S.map && S.map.silo, over = !!(s && s.outcome), [go, done] = SILO_WORD[c.kind];
+    return h("div", { class: "nearby-row" }, icon(L.CHEST_ICON[c.kind], "sm"),
+      h("span", { class: "grow" }, c.kind === "escape" ? "Steven Voss's escape lift" : c.name,
+        h("span", { class: "faint" }, c.opened ? " · " + done.toLowerCase() : c.kind === "escape" ? " · the missiles will launch" : "")),
+      h("button", { type: "button", class: "btn btn-sm " + (c.kind === "escape" ? "btn-danger" : "btn-primary"), "data-chest": c.id, disabled: c.opened || over,
+        onclick: async (ev) => {
+          ev.currentTarget.disabled = true;
+          try { await api("POST", "/api/play/chests/" + c.id + "/open", {}); if (window.FX) FX.sound(c.kind === "escape" ? "start" : "ac"); }
+          catch (e) { toast(e.message, "error"); if (window.FX) FX.sound("denied"); }
+          load(true);
+        } }, c.opened ? done : go));
+  }
+  function siloBox(s) {
+    if (!s) return null;
+    const end = { aborted: "The missiles are down. Steven got away.", caught: "The missiles launched. You have Steven Voss.",
+      timeout: "The missiles launched, and Steven got away." }[s.outcome];
+    if (end) return h("div", { class: "room-fight silo-box is-over" }, h("div", { class: "rf-head" }, icon("flag", "sm"), h("b", null, end)));
+    return h("div", { class: "room-fight silo-box" },
+      h("div", { class: "rf-head" }, icon("flame", "sm"), h("b", null, s.rounds_left == null ? "Three missiles, ready to launch" : "LAUNCH IN " + s.rounds_left + " ROUND" + (s.rounds_left === 1 ? "" : "S"))),
+      h("p", { style: "margin:4px 0 0" }, "Abort keys turned: " + s.keys + " of " + s.keys_total + ". Turn all of them to stop the launch, or reach Steven's escape lift to catch him."));
+  }
+  async function openChest(c) {
+    if (!c.opened) {
+      try { c = (await api("POST", "/api/play/chests/" + c.id + "/open", {})).chest; }
+      catch (e) { toast(e.message, "error"); if (window.FX) FX.sound("denied"); return; }
+    }
+    if (c.kind === "papers") { // loose papers: you read them (a handout pops up); only anything clipped to them shows here
+      if (!(c.loot || []).some((i) => i.type !== "note")) { load(true); return; }
+    }
+    lootOpen = c.id; showLoot(c); load(true);
+  }
+  function showLoot(c) {
+    let pop = $("#loot-pop");
+    if (!pop) {
+      pop = h("div", { class: "loot-pop", id: "loot-pop", role: "dialog", "aria-modal": "true", "aria-label": "What's inside" });
+      pop.addEventListener("click", (e) => { if (e.target === pop) closeLoot(); });
+      document.body.append(pop);
+    }
+    const items = (c.loot || []).filter((i) => c.kind !== "papers" || i.type !== "note"); // the paper itself is a handout
+    pop.dataset.stamp = JSON.stringify(items);
+    const take = async (body, btn) => {
+      if (btn) btn.disabled = true;
+      try {
+        const r = await api("POST", "/api/play/chests/" + c.id + "/take", body);
+        if (r.took.length) { toast("On your sheet now: " + r.took.map((i) => i.name).join(", "), "ok"); if (window.FX) FX.sound("heal"); }
+        if (r.why && r.why.length) toast(r.why[0], "error");
+        showLoot(Object.assign({}, c, { loot: r.left })); load(true);
+      } catch (e) { toast(e.message, "error"); if (btn) btn.disabled = false; load(true); }
+    };
+    pop.replaceChildren(h("div", { class: "loot-box" },
+      h("h3", null, icon(L.CHEST_ICON[c.kind] || "backpack", "sm"), c.name),
+      c.opened_by ? h("p", { class: "faint", style: "margin:0" }, "Opened by " + c.opened_by + ".") : null,
+      L.lootList(items, { take: (it, btn) => take({ item: it.id }, btn), empty: "Nothing left inside." }),
+      h("div", { class: "row", style: "gap:6px;margin-top:10px;justify-content:flex-end" },
+        items.length > 1 ? h("button", { type: "button", class: "btn btn-primary", id: "take-all", onclick: (e) => take({ item: "all" }, e.currentTarget) }, "Take all") : null,
+        h("button", { type: "button", class: "btn", id: "loot-close", onclick: closeLoot }, "Close"))));
+  }
+  function closeLoot() { lootOpen = null; const p = $("#loot-pop"); if (p) p.remove(); }
+  function refreshLoot() { // someone else took something: keep the pop-up honest
+    if (!lootOpen) return;
+    const c = ((S.map && S.map.chests) || []).find((x) => x.id === lootOpen), pop = $("#loot-pop");
+    if (!c || !pop) { closeLoot(); return; }
+    if (pop.dataset.stamp !== JSON.stringify(c.loot || [])) showLoot(c);
+  }
+  async function openDoor(x, y) {
+    try { const r = await api("POST", "/api/play/doors", { x, y }); toast("Open: " + r.opened, "ok"); if (window.FX) FX.sound("door"); load(true); }
+    catch (e) { toast(e.message, "error"); if (window.FX) FX.sound("denied"); }
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lootOpen) closeLoot(); });
+
   async function load(force) {
     if (!force && document.hidden) return;
     if (!force && view.drag) { dragMissed = true; return; } // comes through when they let go
@@ -729,7 +976,7 @@
       setStatus(true);
       if (s === stamp) return;
       const before = S;
-      stamp = s; S = d; render();
+      stamp = s; S = d; render(); nearby(); refreshLoot();
       celebrate(before, d);
     } catch (e) {
       setStatus(false, e);
@@ -760,7 +1007,7 @@
       const box = document.querySelector("#turns .react-box"); if (box) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
     const f0 = before.map && before.map.fight_starting, f1 = now.map && now.map.fight_starting;
-    if (f1 && (!f0 || f0.at !== f1.at)) { FX.banner("Enemies!", f1.by + " walks into " + f1.room, "dmg"); FX.sound("bossintro"); FX.flash($("#turns"), "hit"); }
+    if (f1 && (!f0 || f0.at !== f1.at)) { FX.banner("Enemies!", f1.what || f1.by + " walks into " + f1.room, "dmg"); FX.sound("bossintro"); FX.flash($("#turns"), "hit"); }
     if (before.map && now.map && before.map.id !== now.map.id) { // down the stairs (or the DM showed another map)
       FX.descend(now.map.name || "A new map", "You arrive somewhere new");
     }

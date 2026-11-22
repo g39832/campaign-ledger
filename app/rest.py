@@ -227,6 +227,8 @@ def spend_hit_die(conn, viewer, char_id, sides=None, op_id=None):
 
 
 def long_rest(conn, char_id):
+    from .wildshape import rest as ws_rest
+    ws_rest(conn, char_id)  # Wild Shape: back to her own form, uses back
     ch = F.decode_row(conn.execute("SELECT * FROM characters WHERE id = ?", (char_id,)).fetchone(), F.CHARACTER)
     changes = long_rest_changes(ch)
     sets = ", ".join(f"{k} = ?" for k in changes)

@@ -13,17 +13,7 @@ ATTRIBUTION = ("Monster stat blocks based on the System Reference Document 5.1 b
                "licensed under CC BY 4.0.")
 
 
-def _m(name, creature_type, cr, hp, ac, speed, abilities, attacks, traits="", senses="", languages="",
-       resistances="", immunities="", vulnerabilities="", condition_immunities=""):
-    keys = ("str", "dex", "con", "int", "wis", "cha")
-    ab = dict(zip(keys, abilities))
-    return {
-        "name": name, "creature_type": creature_type, "cr": cr, "max_hp": hp, "ac": ac, "speed": speed,
-        "initiative_mod": (ab["dex"] - 10) // 2, "abilities": ab, "attacks": "\n".join(attacks),
-        "traits": "\n".join(traits) if isinstance(traits, (list, tuple)) else traits,
-        "senses": senses, "languages": languages, "resistances": resistances, "immunities": immunities,
-        "vulnerabilities": vulnerabilities, "condition_immunities": condition_immunities,
-    }
+from .statblock import _m  # noqa: E402,F401  (the stat block helper; app/prison_monsters.py uses it too)
 
 
 MONSTERS = [
@@ -218,6 +208,16 @@ MONSTERS = [
         "Fire Breath (Recharge 5–6). 30-ft. cone, DC 17 Dexterity save: 56 (16d6) fire damage on a failure, half on a success.",
     ], immunities="fire", senses="blindsight 30 ft., darkvision 120 ft., passive Perception 18", languages="Common, Draconic"),
 ]
+
+# the abandoned prison's ten homebrew enemies (app/prison_monsters.py)
+from .prison_monsters import PRISON_MONSTERS  # noqa: E402
+MONSTERS += PRISON_MONSTERS
+# and the laboratory's six (app/lab.py)
+from .prison_monsters import LAB_MONSTERS  # noqa: E402
+MONSTERS += LAB_MONSTERS
+
+from .prison_monsters import SILO_MONSTERS  # noqa: E402
+MONSTERS += SILO_MONSTERS
 
 BY_NAME = {m["name"]: m for m in MONSTERS}
 

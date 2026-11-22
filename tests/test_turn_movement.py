@@ -75,6 +75,7 @@ def test_no_fight_no_limit(api, battlemap):
     pa = battlemap["pa"]
     camp, mid = battlemap["camp"], battlemap["mid"]
     api.patch(f"/api/maps/{mid}", {"changes": {"cols": {"to": 30}}})
+    api.patch(f"/api/campaigns/{camp['id']}", {"changes": {"settings": {"to": {"players": {"free_roam": False}}}}})  # the old free drag (Free roam off)
     api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
     me = tok(api.get(f"/api/maps/{mid}"), "Aria")
     assert pa.get("/api/play/state")["character"]["move"] is None

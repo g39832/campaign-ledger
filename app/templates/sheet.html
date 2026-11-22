@@ -132,6 +132,7 @@
             <select data-f="spellcasting_ability"><option value="">None</option>{% for a in ABILITIES %}<option value="{{ a }}">{{ ABILITY_NAMES[a] }}</option>{% endfor %}</select></label>
           <div class="sc-stat"><b id="spell-dc">—</b><span class="lbl">Save DC</span></div>
           <div class="sc-stat"><button type="button" class="roll-link" id="spell-atk" data-roll="spell_attack" title="Roll a spell attack">—</button><span class="lbl">Spell attack</span></div>
+          <label class="field" style="max-width:150px"><span>Spell attack (its own)</span><input data-f="spell_attack_override" type="number" placeholder="Worked out"></label>
         </div>
         <p class="faint sc-help">Set what each spell does to roll it here and use it in combat. Write <b>mod</b> in dice for the spellcasting modifier, like 1d8+mod.</p>
         <div id="spells"></div>
@@ -214,4 +215,4 @@
 <script type="application/json" id="boot-skills">{{ SKILLS | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script>window.SPELL_BOOK = {{ SPELL_BOOK | tojson }};</script>
-<script src="{{ url_for('static', filename='js/sheet.js') }}?v=140"></script>{% endblock %}
+<script src="{{ url_for('static', filename='js/sheet.js') }}?v=171"></script>{% endblock %}

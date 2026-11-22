@@ -36,6 +36,7 @@
         pendingSummon = null; summonAt = { map_id: MID, x, y }; castNow(p.c, p.a, []); return;
       }
       if (pendingMonster) { dropMonsters(x, y); return; }
+      if (pendingChest) { dropChest(x, y); return; }
       run("POST", "/api/maps/" + MID + "/tokens", { kind: "marker", label: "Marker", x, y, hidden: true },
         () => toast("Marker placed (hidden from players). Rename it or change it to a trap on the right.", "ok"));
     },
@@ -46,6 +47,7 @@
     onShapeMove: (sh, x, y) => run("PATCH", "/api/maps/" + MID + "/shapes/" + sh.id, { x, y }),
     onSelectShape: () => renderAreas(),
     onAim: () => renderSelected(),
+    onChest: (c) => { if (view.tool === "select" && !aim) showChest(c.id); },
   });
   let selectedToken = null;
   let aim = null;        // { by, act, amount, done: Set, half } while the DM taps who an attack or spell hits
@@ -54,7 +56,8 @@
   let hpAmt = "";
   let pendingMonster = null; // the monster waiting to be clicked onto the map
   let pendingSummon = null, summonAt = null; // a clone waiting for the square it appears on
-  window.appBusy = () => !!(aim || pendingSummon || pendingMonster); // an update waits until this is done
+  let pendingChest = null; // the kind of chest waiting to be clicked onto the map
+  window.appBusy = () => !!(aim || pendingSummon || pendingMonster || pendingChest); // an update waits until this is done
 
   // Free move: the DM repositions anyone, ignoring turns and speed (off: fights follow the rules)
   let freeMove = false;
@@ -84,7 +87,7 @@
     S = state;
     revs = { rev: S.map.rev, encounter_rev: S.encounter ? S.encounter.rev : null };
     view.setData(S.map, S.tokens);
-    renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings(); renderDungeon();
+    renderTop(); renderOrder(); renderTokens(); renderSelected(); renderAreas(); syncSettings(); renderDungeon(); renderChests();
     if (state.pings) view.setPings(state.pings);
     view.setZones(state.zones);
     ensureEnc(); if (!S.map.encounter_id) L.bossBar([]);
@@ -100,19 +103,39 @@
     if (action === "start" && window.FX) { FX.banner("Roll for initiative!", (s.room_fight.rolled || []).length + " rolled", "crit"); FX.sound("start"); }
     if (window.Dice && Dice.poll) Dice.poll();
   });
-  const THEME_NAME = { dungeon: "Dungeon", cave: "Cave", prison: "Prison", jungle: "Jungle", swamp: "Swamp", desert: "Desert ruins", ice: "Ice cavern", sewer: "Sewer", volcano: "Volcano" };
+  const THEME_NAME = { dungeon: "Dungeon", cave: "Cave", prison: "Prison", jungle: "Jungle", swamp: "Swamp", desert: "Desert ruins", ice: "Ice cavern", sewer: "Sewer", volcano: "Volcano", futureprison: "Abandoned prison", lab: "Laboratory", silo: "Missile silo" };
   try { // just made on the Maps page: a little moment as it opens
     if (sessionStorage.getItem("map-made") === String(MID)) { sessionStorage.removeItem("map-made"); setTimeout(() => window.FX && FX.descend(S.map.name, "Your new map is ready"), 300); }
   } catch (e) { /* ignore */ }
+  /* The silo's launch bay: the countdown and the ending, which the DM can also decide by hand. */
+  function siloPanel() {
+    const s = S.map.silo;
+    if (!s) return null;
+    const go = (action) => act("POST", "/api/maps/" + MID + "/silo", { action }, (st) => { if (st) apply(st); });
+    const btn = (label, action, cls, confirm) => { const b = h("button", { type: "button", class: "btn btn-sm " + (cls || "") }, label);
+      if (confirm) L.armed(b, () => go(action), confirm); else b.onclick = () => go(action); return b; };
+    const ends = { aborted: "The missiles are down. Steven got away.", caught: "The missiles launched. The party has Steven.", timeout: "Too late: the missiles launched and Steven got away." };
+    if (s.outcome) return h("div", { class: "room-fight silo-box is-over" }, h("div", { class: "rf-head" }, icon("flag", "sm"), h("b", null, ends[s.outcome])),
+      h("p", { style: "margin:4px 0 8px" }, "Everyone got a handout saying what happened."), btn("Undo: missiles and Steven back", "reset", "btn-quiet", "Tap again to put it all back"));
+    return h("div", { class: "room-fight silo-box" },
+      h("div", { class: "rf-head" }, icon("flame", "sm"), h("b", null, s.rounds_left == null ? "Launch countdown: " + s.rounds + " rounds (starts with the robot fight)" : "LAUNCH IN " + s.rounds_left + " ROUND" + (s.rounds_left === 1 ? "" : "S"))),
+      h("p", { style: "margin:4px 0 8px" }, "Abort keys turned: " + s.keys + " of " + s.keys_total + ". All of them: missiles down, Steven escapes. A hero at Steven's lift: Steven caught, missiles launch."),
+      h("div", { class: "row", style: "gap:6px;flex-wrap:wrap" },
+        btn("+2 rounds", "more"), btn("−2 rounds", "less", "btn-quiet"),
+        btn("Missiles down", "aborted", "", "Tap again: missiles down, Steven escapes"),
+        btn("Catch Steven", "caught", "", "Tap again: Steven caught, missiles launch"),
+        btn("Launch now", "timeout", "btn-quiet", "Tap again: missiles launch, Steven escapes")));
+  }
   function renderDungeon() {
     const box = $("#dungeon-panel"), d = S.map.dungeon;
     box.hidden = !d;
     if (!d) return;
     if (d.next && d.next !== lastNext) { // the party just went down the stairs
       lastNext = d.next;
-      if (window.FX) FX.descend("Down the stairs!", "Level " + (d.level + 1) + " is ready");
-      toast("The party took the stairs: level " + (d.level + 1) + " is ready.", "ok",
-        { ms: 15000, action: { label: "Go to level " + (d.level + 1), run: () => { location.href = "/map/" + d.next; } } });
+      const lab = d.theme === "lab", silo = d.theme === "silo", lvl = (lab ? "floor " : "level ") + (d.level + 1);
+      if (window.FX) FX.descend(lab ? "Up the lift!" : silo ? "Down the freight lift!" : "Down the stairs!", lvl.charAt(0).toUpperCase() + lvl.slice(1) + " is ready");
+      toast("The party took " + (lab ? "the lift" : silo ? "the freight lift" : "the stairs") + ": " + lvl + " is ready.", "ok",
+        { ms: 15000, action: { label: "Go to " + lvl, run: () => { location.href = "/map/" + d.next; } } });
     }
     const shown = (r) => { const [x0, y0, x1, y1] = r.box, cx = Math.floor((x0 + x1) / 2), cy = Math.floor((y0 + y1) / 2);
       return S.map.revealed[cy * S.map.cols + cx] === "1"; };
@@ -129,18 +152,30 @@
     const f = d.fight;
     if (f && f.at !== lastFight) {
       lastFight = f.at;
-      if (window.FX) { FX.banner("Enemies!", f.by + " walks into " + f.room, "dmg"); FX.sound("bossintro"); }
-      toast(f.by + " walked into " + f.room + ": " + f.foes.join(", ") + "!", "error", { ms: 15000, action: { label: "Roll initiative & start", run: () => roomFight("start") } });
+      if (window.FX) { FX.banner("Enemies!", f.what || f.by + " walks into " + f.room, "dmg"); FX.sound("bossintro"); }
+      toast((f.what || f.by + " walks into " + f.room) + ": " + f.foes.join(", ") + "!", "error", { ms: 15000, action: { label: "Roll initiative & start", run: () => roomFight("start") } });
       setTimeout(() => { const el = $("#dungeon-panel .room-fight"); if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 50);
     }
     if (!f) lastFight = null;
     const fightBox = f ? h("div", { class: "room-fight" },
       h("div", { class: "rf-head" }, icon("swords", "sm"), h("b", null, "Enemies in " + f.room + "!")),
-      h("p", { style: "margin:4px 0 8px" }, f.by + " walked in on " + f.foes.join(", ") + ". The party waits until you start."),
+      h("p", { style: "margin:4px 0 8px" }, (f.what || f.by + " walked in on " + f.foes.join(", ")) + ". " + (f.heroes && d.picked === f.eid ? "In the fight: " + f.heroes.join(", ") + " and " + f.foes.join(", ") + ". " : "")
+        + "The party waits until you start."),
       h("div", { class: "row", style: "gap:6px" },
         h("button", { type: "button", class: "btn btn-primary", onclick: () => roomFight("start") }, icon("dice-5", "sm"), " Roll initiative & start"),
         h("a", { class: "btn btn-sm", href: "/combat/" + f.eid, title: "Roll them one by one on the Combat screen" }, "Roll on the Combat screen"),
         h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "No fight yet: the party can move on (the fight stays ready on the Combat screen)", onclick: () => roomFight("wait") }, "Not yet"))) : null;
+    // a fight started by who saw whom: the rest of the party joins when the DM says so
+    const e = S.encounter, inFight = new Set(((e && e.order) || []).map((o) => o.character_id).filter(Boolean));
+    const leftOut = e && e.status !== "ended" && d.picked === S.map.encounter_id
+      ? S.tokens.filter((t) => (t.kind === "pc" || t.kind === "npc") && t.character_id && !inFight.has(t.character_id)) : [];
+    const joinBox = leftOut.length ? h("div", { class: "join-fight" },
+      h("div", { class: "lbl" }, "Not in this fight yet"),
+      h("div", { class: "row", style: "gap:6px;flex-wrap:wrap" }, ...leftOut.map((t) => h("button", { type: "button", class: "btn btn-sm", "data-join": t.character_id,
+        title: e.status === "active" ? "They roll initiative and take their place in the order" : "They'll roll initiative with everyone",
+        onclick: () => act("POST", "/api/maps/" + MID + "/fight-join", { character_id: t.character_id }, (s) => {
+          if (!s) return; enc = null; apply(s); toast(s.joined + " joins the fight" + (s.rolled && s.rolled.length ? " (initiative rolled)" : "") + ".", "ok");
+          if (window.Dice && Dice.poll) Dice.poll(); }) }, icon("plus", "sm"), " " + t.display)))) : null;
     // Get started: the three things to do, ticked off as they're done
     const heroes = S.tokens.filter((t) => t.kind === "pc").length, foes = S.tokens.filter((t) => t.kind === "enemy").length;
     const step = (done, n, text, btn) => h("li", { class: "dg-step" + (done ? " is-done" : "") },
@@ -158,19 +193,112 @@
         h("button", { type: "button", class: "btn btn-sm" + (foes ? " btn-quiet" : ""), onclick: () => { $("#monster-panel").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#mon-q").focus(), 400); } },
           icon("map-pin", "sm"), " Add monsters")));
     box.replaceChildren(
-      h("h3", { class: "rule-head" }, (THEME_NAME[d.theme] || "Map") + " · level " + d.level),
+      h("h3", { class: "rule-head" }, (THEME_NAME[d.theme] || "Map") + (d.theme === "lab" ? " · floor " + d.level + " of 5" : d.theme === "silo" ? " · level " + d.level + " of 4" : " · level " + d.level)),
+      siloPanel(),
       fightBox,
+      joinBox,
       steps,
       h("div", { class: "row", style: "gap:6px;margin:4px 0 8px" }, newLayout),
-      h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, "Rooms light up for the players as heroes walk in, or tap Show. The boss room has the stairs down: a hero who steps on them (with no fight going here) takes everyone to the next level."),
+      h("p", { class: "faint", style: "font-size:.86rem;margin:0 0 6px" }, d.theme === "silo"
+        ? (d.exit ? "Rooms light up for the players as heroes walk in, or tap Show. The freight lift is in the room on the far right: a hero who steps on it (with no fight going here) takes everyone down to level " + (d.level + 1) + "."
+          : "The bottom: the launch bay. Ironclad Harlan (the robot) guards three missiles. Steven Voss stands on his gantry by his escape lift and doesn't fight.")
+        : d.theme === "lab"
+        ? (d.exit ? "Rooms light up for the players as heroes walk in, or tap Show. The last room has the lift: a hero who steps on it (with no fight going here) takes everyone up to floor " + (d.level + 1) + "."
+          : "The top floor: the Head Researcher and the safe with the lab's one rare magic item. There's no lift any higher.")
+        : "Rooms light up for the players as heroes walk in, or tap Show. The boss room has the stairs down: a hero who steps on them (with no fight going here) takes everyone to the next level."),
       h("ul", { class: "dg-rooms" }, rooms.map(row)),
       cells.length ? h("details", { class: "dg-cells" }, h("summary", { class: "lbl" }, cells.length + " cells"), h("ul", { class: "dg-rooms" }, cells.map(row))) : null,
       h("div", { class: "row", style: "gap:6px;margin-top:8px" },
-        d.prev ? h("a", { class: "btn btn-sm btn-quiet", href: "/map/" + d.prev }, icon("chevron-left", "sm"), " Level " + (d.level - 1)) : null,
-        d.next ? h("a", { class: "btn btn-sm", href: "/map/" + d.next }, "Level " + (d.level + 1) + " ", icon("chevron-right", "sm")) : null,
+        d.prev ? h("a", { class: "btn btn-sm btn-quiet", href: "/map/" + d.prev }, icon("chevron-left", "sm"), (d.theme === "lab" ? " Floor " : " Level ") + (d.level - 1)) : null,
+        d.next ? h("a", { class: "btn btn-sm", href: "/map/" + d.next }, (d.theme === "lab" ? "Floor " : "Level ") + (d.level + 1) + " ", icon("chevron-right", "sm")) : null,
+        !d.exit ? null : d.theme === "lab" ? (() => { const b = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("skip-forward", "sm"), d.next ? " Take the party up now" : " Make floor " + (d.level + 1) + " & take the party up");
+          L.armed(b, () => act("POST", "/api/maps/" + MID + "/next-level", {}, () => refresh(true)), "Click again: everyone goes up"); return b; })() :
         (() => { const b = h("button", { type: "button", class: "btn btn-sm btn-primary" }, icon("skip-forward", "sm"), d.next ? " Take the party down now" : " Make the next level & take the party down");
           L.armed(b, () => act("POST", "/api/maps/" + MID + "/next-level", {}, () => refresh(true)), "Click again: everyone goes down"); return b; })()));
   }
+
+  /* ---- an enemy takes its own turn: moves, attacks, then the turn moves on ---------------------- */
+  async function letItAct(btn) {
+    if (!S.encounter) return;
+    if (btn) btn.disabled = true;
+    try {
+      const d = await api("POST", "/api/encounters/" + S.encounter.id + "/auto-turn", { next: true, op_id: L.uid() });
+      (d.did || []).slice(-4).forEach((line) => toast(line, "ok", { ms: 5000 }));
+      if (window.Dice && Dice.poll) Dice.poll();
+    } catch (err) { toast(err.message, "error"); }
+    enc = null; refresh(true);
+  }
+
+  /* ---- chests and loot, and the prison's sealed doors ------------------------------------------ */
+  let chestKinds = null;
+  api("GET", "/api/chest-kinds").then((d) => { chestKinds = d; renderChests(); }).catch(() => {});
+  let showChestId = null;
+  function showChest(id) {
+    showChestId = id; renderChests();
+    setTimeout(() => { const el = document.querySelector('[data-chest-card="' + id + '"]'); if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth", block: "nearest" }); } }, 30);
+  }
+  function dropChest(x, y) {
+    const kind = pendingChest;
+    run("POST", "/api/maps/" + MID + "/chests", { kind, x, y, hidden: $("#chest-hidden") ? $("#chest-hidden").checked : false }, (d) => {
+      toast("Put a " + ((chestKinds && chestKinds.kinds.find((k) => k.key === kind)) || { name: "chest" }).name + " there.", "ok");
+      if (window.FX) FX.sound("drop");
+      if (d && d.chest_id) showChest(d.chest_id);
+    });
+  }
+  function renderChests() {
+    const box = $("#chest-panel");
+    if (!box || !S) return;
+    const list = S.map.chests || [], kinds = (chestKinds && chestKinds.kinds) || [];
+    const d = S.map.dungeon, doors = ((d && d.rooms) || []).filter((r) => r.door && ["sealed", "panel"].includes(S.map.terrain[r.door[0] + "," + r.door[1]]));
+    const look = (c) => { view.mark = [c.x, c.y]; view.draw(); setTimeout(() => { view.mark = null; view.draw(); }, 2500); };
+    const kindSel = h("select", { id: "chest-kind", "aria-label": "Kind of chest", style: "flex:1;min-width:0" },
+      ...kinds.map((k) => h("option", { value: k.key, title: k.about }, k.name)));
+    if (pendingChest) kindSel.value = pendingChest;
+    const card = (c) => {
+      const lock = h("select", { "aria-label": "Lock", title: "The card a hero needs to open it", onchange: (e) => run("PATCH", "/api/chests/" + c.id, { locked_by: e.target.value }) },
+        h("option", { value: "" }, "Not locked"), ...((chestKinds && chestKinds.cards) || []).map((k) => h("option", { value: k }, "Locked: " + k)));
+      lock.value = c.locked_by || "";
+      const rar = h("select", { "aria-label": "Rarity of the magic item" }, h("option", { value: "" }, "Any rarity"),
+        ...((chestKinds && chestKinds.rarities) || []).map((r) => h("option", { value: r.key }, r.name)));
+      const del = h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger", title: "Take this chest off the map" }, icon("trash-2", "sm"));
+      armed(del, () => run("DELETE", "/api/chests/" + c.id, {}), "Delete it?");
+      const items = c.loot || [];
+      return h("details", { class: "chest-card", "data-chest-card": c.id, "data-key": "chest-" + c.id, open: showChestId === c.id },
+        h("summary", { class: "chest-head" }, icon(L.CHEST_ICON[c.kind] || "backpack", "sm"), h("span", { class: "grow" }, h("b", null, c.name),
+          c.hidden ? h("span", { class: "faint" }, " · hidden") : null,
+          c.opened ? h("span", { class: "chest-lock is-open" }, " · opened" + (c.opened_by ? " by " + c.opened_by : "")) : c.locked_by ? h("span", { class: "chest-lock" }, " · " + c.locked_by) : null)),
+        h("p", { class: "faint", style: "margin:4px 0;font-size:.84rem" }, c.about),
+        h("div", { class: "row", style: "gap:6px;flex-wrap:wrap" },
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => look(c) }, icon("map-pin", "sm"), " Where"),
+          c.opened ? null : lock,
+          h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => run("PATCH", "/api/chests/" + c.id, { hidden: !c.hidden }) },
+            icon(c.hidden ? "sun" : "eye-off", "sm"), c.hidden ? " Show" : " Hide"), del),
+        h("div", { class: "lbl", style: "margin-top:8px" }, c.rolled ? "Inside" : items.length ? "You put in (the rest is rolled when it's first opened)" : "Inside: rolled the first time someone opens it"),
+        L.lootList(items, { remove: (it) => run("DELETE", "/api/chests/" + c.id + "/items/" + it.id, {}), empty: c.rolled ? "Empty." : "" }),
+        h("div", { class: "row", style: "gap:6px;margin-top:6px;flex-wrap:wrap" },
+          c.rolled ? null : h("button", { type: "button", class: "btn btn-sm", title: "Roll what's inside now so you can see it (it won't change after)",
+            onclick: () => run("POST", "/api/chests/" + c.id + "/roll", {}) }, icon("dice-5", "sm"), " Roll it now"),
+          rar,
+          h("button", { type: "button", class: "btn btn-sm btn-primary", title: "A random magic item from your list of 500",
+            onclick: () => run("POST", "/api/chests/" + c.id + "/magic", { rarity: rar.value }, (r) => { if (r && r.added) toast("Put in: " + r.added.name + " (" + (L.RARITY[r.added.rarity] || ["?"])[0] + ")", "ok"); }) },
+            icon("wand-sparkles", "sm"), " Add a magic item")),
+        (c.taken || []).length ? h("p", { class: "faint", style: "font-size:.82rem;margin:6px 0 0" }, "Taken: " + c.taken.slice(-6).map((t) => t.name + " (" + t.by + ")").join(", ")) : null);
+    };
+    const placeBtn = h("button", { type: "button", class: "btn btn-sm" + (pendingChest ? " is-armed" : " btn-primary"), id: "chest-place",
+      onclick: () => { if (pendingChest) { pendingChest = null; setTool("select"); } else { setTool("place"); pendingChest = kindSel.value; $("#hint").textContent = "Click a square for the chest. Keep clicking to add more; pick Move when you're done."; } renderChests(); } },
+      icon("map-pin", "sm"), pendingChest ? " Click the map… (Esc)" : " Place");
+    box.replaceChildren(
+      h("h3", { class: "rule-head" }, "Chests & loot ", h("span", { class: "count" }, String(list.length))),
+      h("div", { class: "row", style: "gap:6px" }, kindSel, placeBtn),
+      h("label", { class: "check", style: "margin-top:6px" }, h("input", { type: "checkbox", id: "chest-hidden" }), " Start hidden"),
+      doors.length ? h("div", { style: "margin-top:8px" }, h("div", { class: "lbl" }, "Sealed doors"),
+        ...doors.map((r) => h("div", { class: "nearby-row" }, icon("key-round", "sm"), h("span", { class: "grow" }, r.name + " · " + (r.needs || "hidden wall panel")),
+          h("button", { type: "button", class: "btn btn-sm", onclick: () => run("POST", "/api/maps/" + MID + "/doors", { x: r.door[0], y: r.door[1] }, () => { if (window.FX) FX.sound("door"); }) }, "Open it")))) : null,
+      list.length ? null : h("p", { class: "faint", style: "font-size:.86rem;margin:6px 0 0" }, "No chests on this map yet. Pick a kind and Place; heroes next to one can open it from their screen."),
+      ...list.map(card));
+    L.restoreOpen(box);
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pendingChest) { pendingChest = null; setTool("select"); renderChests(); } });
 
   // ---- top bar -------------------------------------------------------------------
   const nameBinder = new Binder({ url: "/api/maps/" + MID, model: { name: S.map.name }, extract: (d) => { setTimeout(() => apply(d), 0); return d.map; } });
@@ -179,9 +307,19 @@
   setTimeout(() => L.grow($("#map-name")), 0);
   function renderTop() {
     $("#live-flag").textContent = S.live ? "Players can see this map" : "";
+    renderRoam();
     $("span", $("#live-btn")).textContent = S.live ? "Stop showing to players" : "Show to players";
     document.title = S.map.name + " · Campaign Ledger";
   }
+  function renderRoam() {
+    const on = S.roam_open !== false, b = $("#roam-btn");
+    b.setAttribute("aria-pressed", String(on));
+    b.classList.toggle("btn-primary", !on);
+    b.classList.toggle("is-armed", on);
+    $("span", b).textContent = on ? "Free roam: on" : "Free roam: off (players held)";
+  }
+  $("#roam-btn").addEventListener("click", () => act("POST", "/api/campaigns/" + S.map.campaign_id + "/roam", { open: S.roam_open === false },
+    (d) => { S.roam_open = d.roam_open; renderRoam(); toast(d.roam_open ? "Free roam is on: players can walk around." : "Free roam is off: players stay put until you turn it on.", "ok"); refresh(true); }));
   $("#live-btn").addEventListener("click", () => act("POST", "/api/campaigns/" + S.map.campaign_id + "/live-map",
     { map_id: S.live ? null : MID }, () => refresh(true)));
   $("#preview-btn").addEventListener("click", async (e) => {
@@ -207,6 +345,7 @@
   function setTool(t) {
     if (t !== "place" && pendingMonster) { pendingMonster = null; renderMonsters(); }
     if (t !== "place" && pendingSummon) pendingSummon = null;
+    if (t !== "place" && pendingChest) { pendingChest = null; if (typeof renderChests === "function") renderChests(); }
     if (t !== "select" && t !== "aim" && aim) { aim = null; view.aim = null; renderSelected(); }
     view.tool = t;
     $$("[data-tool]").forEach((b) => { b.classList.toggle("is-on", b.dataset.tool === t); b.setAttribute("aria-pressed", b.dataset.tool === t); });
@@ -337,6 +476,8 @@
       h("span", { class: "tb-now" }, h("span", { class: "faint" }, "Round " + e.round + " · "), h("b", null, cur ? cur.name : "—"), cur ? "'s turn" : ""),
       h("button", { type: "button", class: "btn btn-sm", id: "tb-prev", title: "Previous turn (P)", onclick: () => encAct("prev") }, icon("skip-back", "sm"), " Prev", h("span", { class: "kbd" }, "P")),
       h("button", { type: "button", class: "btn btn-sm btn-primary", id: "tb-next", title: "Next turn (N)", onclick: () => encAct("next") }, "Next turn ", icon("skip-forward", "sm"), h("span", { class: "kbd" }, "N")),
+      cur && cur.kind === "enemy" ? h("button", { type: "button", class: "btn btn-sm", id: "tb-act", title: "It moves and attacks by itself, then the turn moves on (A)",
+        onclick: (e) => letItAct(e.currentTarget) }, icon("zap", "sm"), " Let it act", h("span", { class: "kbd" }, "A")) : null,
       h("button", { type: "button", class: "btn btn-sm", id: "tb-undo", disabled: !e.undo_last, title: e.undo_last ? "Undo: " + e.undo_last : "Nothing to undo",
         onclick: () => act("POST", "/api/encounters/" + e.id + "/undo-last", {}, (d) => { if (d && d.undone) toast("Undone: " + d.undone, "ok"); lastResult = null; enc = null; refresh(true); },
           { onError: (err) => toast(err.message, "error") }) }, icon("undo-2", "sm"), " Undo last action"),
@@ -456,9 +597,9 @@
   function actionsFor(c) {
     const out = [], rule = toHitRule();
     if (c.linked) {
-      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit && (a.extra_moves || a.stance > 1) ? out.push({ name: a.name, instant: true, noUse: true, icon: "zap",
+      (c.attacks || []).forEach((a, i) => !a.has_dmg && !a.has_hit && (a.extra_moves || a.stance > 1 || a.stance_hit) ? out.push({ name: a.name, instant: true, noUse: true, icon: "zap",
         cooldown: a.cooldown || 0, cdName: a.name,
-        info: [a.extra_moves ? "+" + a.extra_moves + " extra moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") : ""].filter(Boolean).join(", ") + " this turn",
+        info: [a.extra_moves ? "+" + a.extra_moves + " extra moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") : "", (a.stance_hit ? (a.stance_hit > 0 ? "+" : "") + a.stance_hit + " to hit" : "")].filter(Boolean).join(", ") + " this turn",
         run: () => act("POST", "/api/combatants/" + c.id + "/surge", { index: i }, () => { enc = null; say(c.id, c.name + " uses " + a.name + ".", "hit"); refresh(true); },
           { onError: (e) => toast(e.message, "error") }) })
         : !a.has_dmg && !a.has_hit ? (a.ac
@@ -474,6 +615,14 @@
       ((c.reaction && c.reaction.prime) || []).forEach((r) => out.push({ name: r.name, instant: true, noUse: true, icon: "flame",
         info: "cast it now · a hit sets it off: +" + (r.bonus || "1d12") + " on the next hit",
         run: () => dmReact(c, "prime", { name: r.name }).then((d) => { L.reactionDone(d && d.reaction, c.name); if (d) say(c.id, c.name + " casts " + r.name + ".", "heal"); }) }));
+      const ws = c.wild_shape, wsAct = (body, msg) => act("POST", "/api/characters/" + c.character_id + "/wild-shape", body,
+        () => { enc = null; say(c.id, msg, "heal"); refresh(true); }, { onError: (e) => toast(e.message, "error") });
+      if (ws && ws.active) out.push({ name: "Change back", instant: true, noUse: true, icon: "undo-2", heal: true,
+        info: "Wild Shape: " + ws.active.name + " · bonus action", run: () => wsAct({ back: true }, c.name + " changes back.") });
+      else if (ws) ws.forms.filter((f) => !f.trump || ws.trump_ready).forEach((f) => out.push({ name: (f.trump ? "★ Trump card: " : "Wild Shape: ") + f.name, instant: true, noUse: true,
+        icon: f.trump ? "crown" : "paw-print", heal: true,
+        info: f.hp + " HP · AC " + f.ac + " · " + f.attacks.join(", ") + (f.trump ? " · once per long rest" : (f.cost > 1 ? " · 2 uses" : "") + " · " + ws.left + "/" + ws.uses + " left"),
+        run: () => wsAct({ form: f.index }, c.name + " becomes a " + f.name + ".") }));
       (c.surges || []).forEach((g) => out.push({ name: g.name, instant: true, noUse: true, icon: "zap", cooldown: g.cooldown || 0, cdName: g.name,
         info: "+" + g.extra_moves + " action" + (g.extra_moves === 1 ? "" : "s") + " this turn",
         run: () => act("POST", "/api/combatants/" + c.id + "/surge", { spell: g.index }, () => { enc = null; say(c.id, c.name + " uses " + g.name + ".", "hit"); refresh(true); },
@@ -490,7 +639,7 @@
       L.attackLines(sb.attacks).forEach((a) => out.push(monsterAction(c, a, false, rule)));
       if (c.boss && c.boss.phase === 2) L.attackLines(c.boss.phase2).forEach((a) => { // from half HP
         const x = monsterAction(c, a, false, rule); x.info = "Phase 2 · " + (x.info || ""); out.push(x); });
-      L.monsterSpells(sb.spells).forEach((s) => out.push(spellAction(c, s, null)));
+      L.monsterSpells(sb.spells).concat(L.copiedSpells(sb)).forEach((s) => out.push(spellAction(c, s, null)));
     }
     return out;
   }
@@ -499,7 +648,7 @@
     const helps = L.spellHelps(s);
     return { name: s.name, icon: L.KIND_ICON[s.kind] || "zap", heal: helps, cast: { spell: s, body: body || { spell: s } },
       aimArea: s.area || null, single: s.targets === 1, cooldown: s.cooldown || (s.per_fight ? 999 : 0), cdName: s.name,
-      info: [L.levelWord(s), s.area && !s.zone ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, c.spellcasting || (s.dc ? { dc: s.dc } : null), toHitRule())].filter(Boolean).join(" · ") };
+      info: [L.levelWord(s), s.area && !s.zone ? areaText(s.area) : "", L.spellWhat(s), L.spellLands(s, s.dc ? { dc: s.dc } : c.spellcasting, toHitRule()), s.per_rest && s.used ? "USED — back after a long rest" : ""].filter(Boolean).join(" · ") };
   }
   /* Cast it: the server spends the slot, rolls to hit or the saves, the damage or healing,
      and leaves the effect. Then the panel says what happened (with Undo for the HP). */
@@ -544,7 +693,7 @@
     const kind = a.heal ? "heal" : "damage";
     const dmg = a.dmg ? (crit) => roll({ expression: a.dmg, label: a.name + (a.heal ? " healing" : " damage"), kind, subject: c.name, crit }) : null;
     const toHit = a.heal ? null : a.hit || rule ? () => roll({ expression: "1d20" + (a.hit || ""), label: a.name + " attack", kind: "attack", subject: c.name }) : null;
-    const effect = a.condition ? { name: a.name, condition: a.condition, rounds: a.rounds, ac: 0 } : null;
+    const effect = a.condition || a.push ? { name: a.name, condition: a.condition || (a.push ? "Knocked back" : ""), rounds: a.rounds, ac: 0, push: a.push || 0 } : null;
     const info = [toHit ? (a.hit || "+0") + " to hit" : "", a.dmg ? (a.heal ? "heals " : "") + a.dmg + (a.heal || toHit ? "" : " damage") : "",
       a.condition ? a.condition + (a.rounds ? " " + a.rounds + " rds" : "") : ""].filter(Boolean).join(" · ");
     const icon = a.heal ? "heart" : spell ? (a.dmg ? "wand-sparkles" : "zap") : "swords";
@@ -570,7 +719,7 @@
       refresh(true); if (after) after();
     }, { onError: (e) => toast(e.message, "error") });
   const putEffect = (c, target, s, after) => act("POST", "/api/encounters/" + EID() + "/conditions",
-    { targets: [target.id], name: s.condition || s.name, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition && s.condition !== s.name ? s.name : "" },
+    { targets: [target.id], name: s.condition || s.name, rounds: s.rounds, ac: s.ac || null, caster_id: c.id, note: s.condition && s.condition !== s.name ? s.name : "", push: s.push || 0 },
     () => { refresh(true); if (after) after(); }, { onError: (e) => toast(e.message, "error") });
   // Roll to hit against the target's AC: { hit, crit, text } or null if the roll failed to happen.
   async function rollToHit(a, target) {
@@ -803,10 +952,13 @@
       onCast: () => castNow(c, a, [...aim.done]), onCancel: stopAim }) : null;
     const aiming = castBox ? null : a && aim.area ? h("div", { class: "fight-aim" },
       h("div", { class: "fa-head" }, icon(a.icon, "sm"), h("b", null, a.name), h("span", { class: "tag" }, areaText(a.aimArea))),
-      h("p", { class: "fa-ask" }, a.aimArea.kind === "cone" || a.aimArea.kind === "line" ? "Click or drag where it should point. It comes out of " + c.name + "."
+      h("p", { class: "fa-ask" }, a.aimArea.kind === "line" && a.aimArea.range ? "Press where it starts (inside the dotted ring), then drag the way it should run."
+        : a.aimArea.kind === "cone" || a.aimArea.kind === "line" ? "Click or drag where it should point. It comes out of " + c.name + "."
         : "Drag on the map to aim it" + (a.aimArea.range ? ", anywhere inside the dotted ring." : " from " + c.name + ".")),
       a.cast && a.cast.spell.terrain ? h("p", { class: "faint", style: "margin:0 0 6px;font-size:.88rem" },
-        a.cast.spell.terrain === "rock" ? "Rock rises in the highlighted squares, but not under anyone standing there." : "Rock, rubble and pits in the highlighted squares go back to plain ground.")
+        a.cast.spell.terrain === "rock" ? "Rock rises in the highlighted squares, but not under anyone standing there."
+          : a.cast.spell.terrain === "steel" ? "A steel wall rises in the highlighted squares (not under anyone). Two stand at once: a third folds the oldest back down."
+          : "Rock, rubble and pits in the highlighted squares go back to plain ground.")
       : inTheArea(c).length ? h("div", { class: "aim-in", style: "margin:0 0 6px;font-size:.88rem" }, h("span", { class: "faint" }, "In it (tap someone to spare them): "),
         inTheArea(c).map((x) => { const spared = aim.spared && aim.spared.has(x.id), ally = isAlly(c, x);
           return h("button", { type: "button", class: "tag" + (spared ? " is-off" : ally ? " is-bad" : ""), style: "margin:2px;cursor:pointer" + (spared ? ";text-decoration:line-through;opacity:.6" : ""),
@@ -867,7 +1019,12 @@
       (c.conditions || []).length ? h("div", { class: "c-conds" }, c.conditions.map((x) => h("span", { class: "tag" }, x.name + (x.ac ? " " + signed(x.ac) + " AC" : "")
         + (x.extra_moves != null ? " · " + x.extra_moves + " extra move" + (x.extra_moves === 1 ? "" : "s") + " left" : "") + (x.dmg_mult > 1 ? " · damage ×" + x.dmg_mult : "")))) : null,
       castBox, aiming, res,
-      a || !(c.boss && c.boss.legendary && c.boss.legendary.trim()) ? null : h("div", { class: "fight-acts legendary-acts" },
+      c.techniques ? L.techniques(c.techniques, { dm: true, key: "m" + c.id,
+        run: (body) => api("POST", "/api/encounters/" + EID() + "/technique", Object.assign({ op_id: L.uid(), caster_id: c.id }, body))
+          .then((d) => { enc = null; refresh(true); return d; }).catch((e) => { toast(e.message, "error"); return null; }),
+        spot: (fid) => api("POST", "/api/encounters/" + EID() + "/mirage-spot", { op_id: L.uid(), caster_id: c.id, enemy_id: fid })
+          .then((d) => { toast(d.spot, "ok", { ms: 9000 }); enc = null; refresh(true); }).catch((e) => toast(e.message, "error")) }) : null,
+      a || !(c.boss && ((c.boss.legendary && c.boss.legendary.trim()) || (c.boss.per_round && L.copiedSpells(c.statblock).length))) ? null : h("div", { class: "fight-acts legendary-acts" },
         h("div", { class: "lbl" }, "Legendary actions — " + c.boss.left + " of " + c.boss.per_round + " left" + (isTurn ? " (not on its own turn)" : " · at the end of another's turn")),
         L.attackLines(c.boss.legendary).map((x0) => {
           const x = monsterAction(c, x0, false, toHitRule());
@@ -875,6 +1032,12 @@
             onclick: () => act("POST", "/api/combatants/" + c.id + "/legendary", { name: x.name }, (d) => { enc = d; renderSelected(); arm(c, x); },
               { onError: (e) => toast(e.message, "error") }) },
             icon("crown", "sm"), h("b", null, x.name), h("span", { class: "faint" }, x.info || ""));
+        }),
+        // spells his drones copied (Steven Voss): the cast itself spends the legendary action
+        L.copiedSpells(c.statblock).map((s) => {
+          const x = spellAction(c, s, { spell: s, legendary: true });
+          return h("button", { type: "button", class: "fight-act is-legendary is-copied", disabled: isTurn || !c.boss.left || enc.encounter.status !== "active",
+            onclick: () => arm(c, x) }, icon("crown", "sm"), h("b", null, x.name), h("span", { class: "faint" }, x.info || ""));
         })),
       c.boss && c.boss.lr ? h("div", { class: "fight-note" }, icon("shield", "sm"), " Legendary Resistance: " + c.boss.lr_left + " of " + c.boss.lr + " left — a failed save turns into a success.") : null,
       a ? null : acts.length ? h("div", { class: "fight-acts" },
@@ -974,6 +1137,7 @@
     if ((e.key === "c" || e.key === "C") && $("#to-combat")) { e.preventDefault(); location.href = $("#to-combat").href; }
     if ((e.key === "n" || e.key === "N") && $("#tb-next")) { e.preventDefault(); $("#tb-next").click(); }
     if ((e.key === "p" || e.key === "P") && $("#tb-prev")) { e.preventDefault(); $("#tb-prev").click(); }
+    if ((e.key === "a" || e.key === "A") && $("#tb-act") && !$("#tb-act").disabled) { e.preventDefault(); $("#tb-act").click(); }
   });
   if (new URLSearchParams(location.search).has("new")) {
     toast("Made a battle map for “" + (S.encounter ? S.encounter.name : S.map.name) + "”. The party is on the left edge and enemies on the right; drag them into place.", "ok", { ms: 9000 });

@@ -49,6 +49,18 @@ def stance_mult(row):
     return dmg_mult(row) if not dice.damage_expression(str(row.get("damage") or "")) else 1
 
 
+def stance_hit(row):
+    """A row with To hit + and no damage dice is a stance too (Gnocchi's Reckless attack: +2): using
+    it adds that to every attack roll for the rest of the turn. Returns the bonus, or 0."""
+    from . import dice
+    if dice.damage_expression(str(row.get("damage") or "")):
+        return 0
+    try:
+        return max(-10, min(10, int(row.get("hit_bonus") or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def attack_cast(a, d):
     """A sheet attack that leaves a condition on a hit (Grapple: damage and Grappled) is
     used like a spell, so the hit, the damage and the condition all happen at once.
@@ -110,7 +122,7 @@ def _combatant_dict(r):
                            "has_dmg": bool(str(a.get("damage") or "").strip()), "heal": is_healing(a),
                            "notes": str(a.get("notes") or "").strip()[:300], "ac": _ac_in(a),
                            "area": parse_area(a.get("area")) or parse_area(a.get("notes")), "cooldown": parse_cooldown(a),
-                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
+                           "condition": str(a.get("condition") or "").strip()[:60], "extra_moves": extra_moves(a), "dmg_mult": dmg_mult(a), "stance": stance_mult(a), "stance_hit": stance_hit(a),
                            "reach": melee_reach(a),
                            "cast": attack_cast(a, derived({"abilities": json.loads(r["ch_abilities"] or "{}"), "level": r["ch_lvl"], "prof_override": r["ch_prof"]}))}
                           for a in json.loads(r["ch_attacks"] or "[]") if isinstance(a, dict)])
@@ -187,13 +199,18 @@ def _add_spells(conn, c):
     spell = derived(ch)["spell"]
     c["spellcasting"] = {"dc": spell["dc"], "attack": spell["attack"]} if spell else None
     from .aura import is_on
-    c["spells"] = [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
-                   if spell_does_something(spell_info(s))]
+    from .wildshape import info as ws_info
+    c["wild_shape"] = ws_info(conn, c["character_id"])
+    shifted = bool(c["wild_shape"] and c["wild_shape"]["active"])
+    c["spells"] = [] if shifted else [dict(spell_info(s), index=i) for i, s in enumerate(ch.get("spells") or [])
+                                      if spell_does_something(spell_info(s))]  # no spells in beast form
     for s in c["spells"]:
         s["aura_on"] = s["aura"] and is_on(ch, s["name"])
     c["spell_slots"] = {k: v for k, v in (ch.get("spell_slots") or {}).items() if isinstance(v, dict) and (v.get("max") or 0) > 0} \
         if slots_used(ch["campaign_id"]) else {}
     c["parry"] = parry_state(conn, c, ch)
+    from .yamato import state as technique_state
+    c["techniques"] = technique_state(conn, c.get("encounter_id") or _enc_of_combatant(c["id"]), c["id"], ch)
 
 
 def _add_turn_info(conn, enc_id, combatants):
@@ -227,6 +244,12 @@ def encounter_state(enc_id, conn=None, log_limit=400):
         if c["linked"]:
             _add_spells(conn, c)
     _add_turn_info(conn, enc_id, combatants)
+    if enc["status"] == "active" and any(c["linked"] for c in combatants):
+        from .rewind import offer
+        rctx = Ctx(conn, enc_id)
+        for c in combatants:
+            if c["linked"]:
+                c["rewind"] = offer(rctx, c, dm=True)  # Time Reversal (Lux's ring)
     log = [dict(r) for r in conn.execute(
         "SELECT * FROM (SELECT * FROM combat_log WHERE encounter_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id",
         (enc_id, log_limit),
@@ -494,6 +517,9 @@ def start_fight(ctx):
     ctx.log("turn", f"{first['name']}'s turn")
     _tick(ctx, first["id"], "start")
     on_turn(ctx, first["id"], "start")
+    from .rewind import forget, turn_started
+    forget(ctx.enc["id"])
+    turn_started(ctx, first["id"])
 
 
 @bp.post("/encounters/<int:eid>/start")
@@ -527,7 +553,7 @@ def api_end(eid):
         # Conditions don't drag on into the next fight: Prone, Poisoned, Grappled..., recharging
         # moves, extra moves and the fight's spell effects all clear (concentration ends too).
         # What stays: switched-on auras (Moni's magic item) and spells lasting an hour or more (Aid).
-        stays = lambda x: x.get("aura") or ((x.get("rounds_left") or 0) >= 600 and not x.get("expired") and not x.get("concentration") and not x.get("cooldown"))
+        stays = lambda x: x.get("aura") or x.get("wild_shape") or ((x.get("rounds_left") or 0) >= 600 and not x.get("expired") and not x.get("concentration") and not x.get("cooldown"))
         cleared = []
         for c in ctx.combatants():
             fresh = ctx.combatant(c["id"])  # ending one caster's concentration can change someone else's list
@@ -586,8 +612,9 @@ def _step(ctx, direction):
     return chosen, wrapped
 
 
-def next_turn(ctx):
-    """End the current turn and start the next one (the DM's Next, or a player's End turn)."""
+def next_turn(ctx, _auto_depth=0):
+    """End the current turn and start the next one (the DM's Next, or a player's End turn).
+    With "Enemies act on their own" on, an enemy whose turn comes acts and passes it on (app/ai.py)."""
     prev_id = ctx.enc["current_id"]
     chosen, wrapped = _step(ctx, 1)
     if prev_id:
@@ -596,10 +623,16 @@ def next_turn(ctx):
     if wrapped:
         ctx.save_enc(round=ctx.enc["round"] + 1, current_id=None)
         ctx.log("round", f"Round {ctx.enc['round']} begins")
+        from .silo import round_begins
+        round_begins(ctx)  # the missile silo's launch countdown
     ctx.save_enc(current_id=chosen["id"])
     ctx.log("turn", f"{chosen['name']}'s turn")
     _tick(ctx, chosen["id"], "start")
     on_turn(ctx, chosen["id"], "start")
+    from .rewind import turn_started
+    turn_started(ctx, chosen["id"])  # Time Reversal can take back the turn that just ended
+    from .ai import auto_enemies
+    auto_enemies(ctx, _auto_depth)
 
 
 @bp.post("/encounters/<int:eid>/next")
@@ -617,6 +650,9 @@ def api_prev(eid):
             ctx.save_enc(round=ctx.enc["round"] - 1)
         ctx.save_enc(current_id=chosen["id"])
         ctx.log("turn", f"Turn moved back to {chosen['name']} (round {ctx.enc['round']}); effect durations were not rewound")
+        from .rewind import forget, turn_started
+        forget(ctx.enc["id"])
+        turn_started(ctx, chosen["id"])
     return mutate(eid, fn, _body().get("op_id"))
 
 
@@ -630,6 +666,9 @@ def api_set_turn(eid):
         c = ctx.combatant(_int(data, "combatant_id"))
         ctx.save_enc(current_id=c["id"])
         ctx.log("turn", f"DM set the turn to {c['name']}")
+        from .rewind import forget, turn_started
+        forget(ctx.enc["id"])
+        turn_started(ctx, c["id"])
     return mutate(eid, fn, data.get("op_id"))
 
 
@@ -875,8 +914,9 @@ def surge(ctx, cid, index, by_player=False, where="attacks"):
     except (TypeError, ValueError, IndexError):
         raise F.ApiError("That move isn't on the sheet any more")
     n, mult = extra_moves(row), stance_mult(row) if col == "attacks" else 1
+    hit = stance_hit(row) if col == "attacks" else 0
     name = (row.get("name") or SURGE).strip() or SURGE
-    if not n and mult == 1:
+    if not n and mult == 1 and not hit:
         raise F.ApiError(f"{name} isn't used on yourself — set Extra moves (or Damage × with no dice) on the sheet")
     if ctx.enc["status"] != "active":
         raise F.ApiError(f"{name} is for a running fight")
@@ -889,7 +929,8 @@ def surge(ctx, cid, index, by_player=False, where="attacks"):
         raise F.ApiError(f"{c['name']} already has extra moves this turn")
     if any(x.get("name") == name and not x.get("expired") and not x.get("cooldown") for x in c["conditions"]):
         raise F.ApiError(f"{c['name']} is already {name}")
-    what = [f"{n} extra move{'s' if n != 1 else ''}" if n else "", f"damage {'doubled' if mult == 2 else '×' + str(mult)}" if mult > 1 else ""]
+    what = [f"{n} extra move{'s' if n != 1 else ''}" if n else "", f"damage {'doubled' if mult == 2 else '×' + str(mult)}" if mult > 1 else "",
+            f"{hit:+d} to hit" if hit else ""]
     what = " and ".join(w for w in what if w) + " this turn"
     cond = {"id": uuid.uuid4().hex[:12], "name": name, "note": what[0].upper() + what[1:],
             "rounds_left": 1, "tick": "end", "tick_on": cid, "encounter_id": ctx.enc["id"], "auto_expire": True,
@@ -898,6 +939,8 @@ def surge(ctx, cid, index, by_player=False, where="attacks"):
         cond.update(extra_moves=n, extra_total=n)
     if mult > 1:
         cond["dmg_mult"] = mult
+    if hit:
+        cond["hit_mod"] = f"{hit:+d}"  # added to attack rolls only (not saves), rules.attack_mods
     ctx.set_vitals(c, conditions=c["conditions"] + [cond])
     ctx.log("condition", f"{c['name']} uses {name}: {what}")
     turns = parse_cooldown(row)
@@ -1327,10 +1370,46 @@ def compute_hp(v, op, data, *, name, linked, max_hp, temp_stacking):
     return v, label, note
 
 
+def last_stand_row(ctx, c):
+    """The name of a ready last_stand row on this hero's sheet (Goblin's Rage), or None."""
+    row = ctx.conn.execute("SELECT spells FROM characters WHERE id = ?", (c["character_id"],)).fetchone()
+    for s in json.loads(row["spells"] or "[]") if row else []:
+        if isinstance(s, dict) and s.get("last_stand"):
+            name = str(s.get("name") or "").strip() or "Last stand"
+            if not cooldown_left(c["conditions"], name, ctx.enc["id"]):
+                return name
+    return None
+
+
 def apply_hp(ctx, cid, data, by=None):
     """HP change on a combatant inside an encounter: logged, and recorded so
     the DM's Undo HP can reverse it. `by` names who did it (e.g. a player)."""
     c = ctx.combatant(cid)
+    if data.get("op") == "damage":
+        # damage reduction while an effect gives it (Yamato's Storm Wave guard: 3 less per hit)
+        dr = sum(int(x.get("dr") or 0) for x in c["conditions"] if isinstance(x, dict) and not x.get("expired"))
+        amount = _int(data, "amount", 0, 99999)
+        if dr and amount:
+            data = dict(data, amount=max(0, amount - dr))
+            by = (by + ", " if by else "") + f"{dr} less from {next(x['name'] for x in c['conditions'] if x.get('dr'))}"
+        # resistance to everything but psychic (Totem Spirit: Bear): half, rounded down
+        bear = next((x for x in c["conditions"] if isinstance(x, dict) and x.get("resist_all") and not x.get("expired")), None)
+        kind = str(data.get("type") or ((getattr(ctx, "attack", None) or {}).get("type")) or "").lower()
+        if bear and kind != "psychic":
+            amount = _int(data, "amount", 0, 99999)
+            if amount:
+                data = dict(data, amount=amount // 2)
+                by = (by + ", " if by else "") + f"halved by {bear['name']}"
+    if data.get("op") == "damage" and c["linked"]:
+        # Wild Shape: the beast's HP takes it first; past 0 she changes back and the rest carries over
+        from .wildshape import take_damage
+        amount = _int(data, "amount", 0, 99999)
+        left = take_damage(ctx, c, amount)
+        if left != amount:
+            if left <= 0:
+                return _vitals(ctx.combatant(cid))
+            data = dict(data, amount=left)
+            c = ctx.combatant(cid)
     before = _vitals(c)
     v, label, note = compute_hp(before, data.get("op"), data, name=c["name"], linked=c["linked"],
                                 max_hp=c["max_hp"], temp_stacking=ctx.settings["temp_hp_stacking"])
@@ -1343,10 +1422,21 @@ def apply_hp(ctx, cid, data, by=None):
         if ward:
             v = dict(v, hp=1, status=before["status"])
             note = f" — {ward['name']}: drops to 1 HP instead of 0, and the ward ends"
+    stand = None
+    if data.get("op") == "damage" and c["linked"] and before["hp"] > 0 and v["hp"] == 0 and not ward:
+        # Goblin's Rage (a sheet row with last_stand): once a fight, they drop to 1 HP instead of 0
+        stand = last_stand_row(ctx, c)
+        if stand:
+            v = dict(v, hp=1, status=before["status"])
+            note = f" — {stand}: refuses to fall and drops to 1 HP instead of 0 (once this fight)"
     if v == before:
         ctx.log("hp", label + note + " (no change)")
         return v
     ctx.set_vitals(c, **v)
+    if stand:
+        start_cooldown(ctx, cid, stand, ONCE_PER_FIGHT)
+        from .maps import attack_fx
+        attack_fx(ctx.conn, ctx.enc["id"], None, [(cid, "saved")], stand, "buff", "", None, "flames")
     if ward:
         drop_conditions(ctx, ctx.combatant(cid), {ward["id"]}, quiet=True)
         from .maps import attack_fx
@@ -1369,6 +1459,12 @@ def apply_hp(ctx, cid, data, by=None):
         concentration_check(ctx, ctx.combatant(cid), int(data.get("amount") or 0))
         if not c["linked"] and before["hp"] > 0 and v["hp"] == 0 and (c["statblock"] or {}).get("on_death"):
             death_burst(ctx, ctx.combatant(cid))  # Yamato's Phantasmal Killers clone bursts
+        if not c["linked"] and before["hp"] > 0 and v["hp"] == 0 and c.get("follows"):
+            from .yamato import clone_gone
+            clone_gone(ctx, c)  # his last clone down: Mirage ends
+    if not c["linked"] and before["hp"] > 0 and v["hp"] == 0 and c["kind"] == "enemy":
+        from .chests import enemy_down
+        enemy_down(ctx, ctx.combatant(cid))  # a prison enemy drops its gear on its square
     return v
 
 
@@ -1414,22 +1510,31 @@ def api_legendary(cid):
         b = c.get("boss")
         if not b or not b["legendary"].strip():
             raise F.ApiError(f"{c['name']} has no legendary actions")
-        if ctx.enc["status"] != "active":
-            raise F.ApiError("Start the fight first")
-        if ctx.enc["current_id"] == cid:
-            raise F.ApiError("Legendary actions are for the end of other creatures' turns, not its own")
-        if b["left"] <= 0:
-            raise F.ApiError(f"{c['name']} has used all {b['per_round']} legendary actions — they come back at the start of its turn")
-        row = ctx.conn.execute("SELECT moved FROM combatants WHERE id = ?", (cid,)).fetchone()
-        try:
-            moved = json.loads(row["moved"] or "{}") if row["moved"] else {}
-        except ValueError:
-            moved = {}
-        moved["legendary"] = int(moved.get("legendary") or 0) + 1
-        ctx.conn.execute("UPDATE combatants SET moved = ? WHERE id = ?", (json.dumps(moved), cid))
-        what = str(data.get("name") or "").strip()[:60]
-        ctx.log("action", f"{c['name']} uses a legendary action{(': ' + what) if what else ''} ({b['left'] - 1} left this round)")
+        spend_legendary(ctx, c, data.get("name"))
     return mutate(eid, fn, data.get("op_id"))
+
+
+def spend_legendary(ctx, c, what=""):
+    """Use one of a boss's legendary actions (not on its own turn; they come back at the start of it)."""
+    cid = c["id"]
+    b = c.get("boss")
+    if not b or not b["per_round"]:
+        raise F.ApiError(f"{c['name']} has no legendary actions")
+    if ctx.enc["status"] != "active":
+        raise F.ApiError("Start the fight first")
+    if ctx.enc["current_id"] == cid:
+        raise F.ApiError("Legendary actions are for the end of other creatures' turns, not its own")
+    if b["left"] <= 0:
+        raise F.ApiError(f"{c['name']} has used all {b['per_round']} legendary actions — they come back at the start of its turn")
+    row = ctx.conn.execute("SELECT moved FROM combatants WHERE id = ?", (cid,)).fetchone()
+    try:
+        moved = json.loads(row["moved"] or "{}") if row["moved"] else {}
+    except ValueError:
+        moved = {}
+    moved["legendary"] = int(moved.get("legendary") or 0) + 1
+    ctx.conn.execute("UPDATE combatants SET moved = ? WHERE id = ?", (json.dumps(moved), cid))
+    what = str(what or "").strip()[:60]
+    ctx.log("action", f"{c['name']} uses a legendary action{(': ' + what) if what else ''} ({b['left'] - 1} left this round)")
 
 
 @bp.post("/combatants/<int:cid>/hp")
@@ -1519,7 +1624,14 @@ def api_condition_targets(eid):
         rounds = _int(data, "rounds", 1, 1000) if data.get("rounds") not in (None, "") else None
         ac = _int(data, "ac", -10, 30) if data.get("ac") not in (None, "", 0) else 0
         caster = ctx.combatant(int(data["caster_id"])) if data.get("caster_id") is not None else None
-        add_conditions(ctx, targets, name, rounds, ac, caster, str(data.get("note", ""))[:500])
+        if name.lower() != "knocked back":  # a shove with no condition of its own only moves them
+            add_conditions(ctx, targets, name, rounds, ac, caster, str(data.get("note", ""))[:500])
+        if caster and data.get("push"):  # Steven Voss's phase 2: shoved away (or pulled in, negative) on a hit
+            from .movement import shove
+            feet = _int(data, "push", -999, 120)  # -999: pulled all the way to the attacker
+            lines = [x for x in (shove(ctx, caster, t, feet) for t in targets) if x]
+            if lines:
+                ctx.log("action", "; ".join(lines))
     return mutate(eid, fn, data.get("op_id"))
 
 
@@ -1538,6 +1650,11 @@ def add_conditions(ctx, targets, name, rounds=None, ac=0, caster=None, note="", 
                 "encounter_id": ctx.enc["id"], "auto_expire": auto_expire, "expired": False, "applied_round": ctx.enc["round"]}
         if ac:
             cond["ac"] = ac
+        if name.lower() == "shocked":  # Steven Voss: the shock costs them one action on their next turn
+            now = ctx.enc["current_id"] == cid
+            cond.update(lose_actions=1, skip_turn=f"{ctx.enc['round']}:{cid}" if now else "",
+                        rounds_left=2 if now else 1, tick="end", tick_on=cid, auto_expire=True,
+                        note=(note + " — " if note else "") + "loses one action on its next turn")
         ctx.set_vitals(c, conditions=c["conditions"] + [cond])
         added.append(c["name"])
     if added:

@@ -7,6 +7,41 @@
    token whose turn it is. Spell areas (circle, cone, line, square) are drawn
    with the squares they cover highlighted. */
 (function () {
+  /* Steven Voss in phase 2 (half health or less, still up): his Hollow Star Heart gives him steel
+     wings behind his token and the star glowing in his chest (effects.js FX.starHeart is the scene). */
+  function starWinged(t) {
+    if (!/^\s*steven\s+voss\b/i.test(String(t.display || t.name || ""))) return false;
+    if (t.status === "dead" || t.status === "defeated" || t.health === "down") return false;
+    if (t.hp != null && t.max_hp) return t.hp > 0 && t.hp * 2 <= t.max_hp;
+    return t.health === "bloodied";
+  }
+  function drawSteelWings(ctx, cx, cy, r) {
+    ctx.save();
+    ctx.shadowColor = "rgba(120,210,255,.55)"; ctx.shadowBlur = r * 0.35;
+    for (const side of [-1, 1]) {
+      const px = cx + side * r * 0.35, py = cy - r * 0.15;
+      [[9, 1.9, -80, 38, ["#f4f8fb", "#6d7884"]], [6, 1.25, -60, 28, ["#d8c08a", "#6b4e1e"]]].forEach(([n, len, a0, a1, cols]) => {
+        for (let k = 0; k < n; k++) {
+          const f = k / (n - 1), a = (a0 + (a1 - a0) * f) * Math.PI / 180, L = r * len * (1 - 0.32 * f), w = r * 0.15;
+          ctx.save(); ctx.translate(px, py); ctx.scale(side, 1); ctx.rotate(a);
+          const g = ctx.createLinearGradient(0, -w, 0, w); g.addColorStop(0, cols[0]); g.addColorStop(0.5, cols[1]); g.addColorStop(1, cols[0]);
+          ctx.fillStyle = g; ctx.strokeStyle = "rgba(10,14,20,.7)"; ctx.lineWidth = Math.max(1, r * 0.025);
+          ctx.beginPath(); ctx.moveTo(0, -w * 0.3); ctx.lineTo(L * 0.8, -w); ctx.lineTo(L, 0); ctx.lineTo(L * 0.8, w); ctx.lineTo(0, w * 0.3); ctx.closePath();
+          ctx.fill(); ctx.stroke(); ctx.restore();
+        }
+      });
+    }
+    ctx.restore();
+  }
+  function drawChestStar(ctx, x, y, s) {
+    ctx.save();
+    ctx.shadowColor = "#bfeaff"; ctx.shadowBlur = s * 1.6;
+    const star = (R, ri) => { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? ri : R; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); };
+    star(s, s * 0.42); ctx.fillStyle = "#fff6d8"; ctx.fill(); ctx.lineWidth = Math.max(1, s * 0.12); ctx.strokeStyle = "#f3d58a"; ctx.stroke();
+    ctx.shadowBlur = 0; star(s * 0.55, s * 0.24); ctx.fillStyle = "#0e1a28"; ctx.fill();
+    ctx.restore();
+  }
+
   "use strict";
   const TERRAIN = {
     floor: { fill: "#e9dfc8", label: "Floor" }, wall: { fill: "#3a332b", label: "Wall" }, water: { fill: "#5a87a6", label: "Water", ripple: true },
@@ -19,7 +54,40 @@
     table: { fill: "#7a5a3a", label: "Table / furniture", table: true },
     rock: { fill: "#5d5449", label: "Raised rock (blocks)", rock: true },
     stairs: { fill: "#b9a67c", label: "Stairs down", stairs: true },
+    // the abandoned (sci-fi) prison
+    metal: { fill: "#5b6470", label: "Metal floor", plates: true }, grate: { fill: "#3e454e", label: "Floor grate", grate: true },
+    bulkhead: { fill: "#22262d", label: "Steel wall", steel: true }, blastdoor: { fill: "#6b737e", label: "Blast door", blast: true },
+    forcefield: { fill: "#24414f", label: "Force-field door", field: true },
+    sealed: { fill: "#3a2626", label: "Sealed door (needs a card)", sealed: true }, panel: { fill: "#22262d", label: "Hidden wall panel", steel: true, seam: true },
+    redlight: { fill: "#22262d", label: "Emergency light", steel: true, alarm: true }, camera: { fill: "#22262d", label: "Security camera", steel: true, camera: true },
+    turret: { fill: "#2c3036", label: "Auto turret", turret: true }, terminal: { fill: "#2f3a44", label: "Security terminal", terminal: true },
+    machinery: { fill: "#4a4f55", label: "Machinery", machine: true }, cryo: { fill: "#2c3e48", label: "Containment pod", cryo: true },
+    // the missile silo: every block its own look (drawSilo)
+    concrete: { fill: "#7b7973", label: "Concrete floor", silo: true, concrete: true },
+    hazard: { fill: "#d8a422", label: "Hazard paint", silo: true, hazardpaint: true },
+    catwalk: { fill: "#1d2024", label: "Mesh catwalk", silo: true, catwalk: true },
+    cable: { fill: "#7b7973", label: "Cable run", silo: true, concrete: true, cables: true },
+    coolant: { fill: "#7b7973", label: "Coolant spill", silo: true, concrete: true, coolant: true },
+    silodoor: { fill: "#5d5b55", label: "Silo blast door", silo: true, silodoor: true },
+    lift: { fill: "#45484c", label: "Freight lift (down)", silo: true, lift: true },
+    pad: { fill: "#57595c", label: "Drone pad", silo: true, pad: true },
+    escape: { fill: "#45484c", label: "Escape lift", silo: true, lift: true, escape: true },
+    concretewall: { fill: "#3c3a36", label: "Concrete wall", silo: true, cwall: true },
+    beacon: { fill: "#3c3a36", label: "Warning beacon", silo: true, cwall: true, beacon: true },
+    shaft: { fill: "#060708", label: "Launch shaft (a long drop)", silo: true, shaft: true },
+    missile: { fill: "#060708", label: "Missile", silo: true, missile: true },
+    fueltank: { fill: "#7b7973", label: "Fuel tank", silo: true, concrete: true, tank: true },
+    pipes: { fill: "#3c3a36", label: "Pipes", silo: true, pipes: true },
+    reactor: { fill: "#1d2024", label: "Reactor core", silo: true, reactor: true },
+    console: { fill: "#7b7973", label: "Launch console", silo: true, concrete: true, console: true },
+    bunk: { fill: "#7b7973", label: "Bunk bed", silo: true, concrete: true, bunk: true },
+    rack: { fill: "#7b7973", label: "Weapon rack", silo: true, concrete: true, rack: true },
+    crate: { fill: "#7b7973", label: "Supply crates", silo: true, concrete: true, crate: true },
   };
+  // How each kind of chest looks: body, stripe, light. (Rarity colours live in core.js L.RARITY.)
+  const CHEST_LOOK = { supply: ["#6d6f62", "#e0b43a", "#9fdc7a"], military: ["#4e5a3c", "#d07a2a", "#e0b43a"], medical: ["#d8dde0", "#d23b3b", "#7fe0ff"],
+    vault: ["#2d3442", "#3a7bd5", "#5fa8ff"], experimental: ["#3a2d4e", "#a34ff0", "#c78bff"], legendary: ["#2a2418", "#f0a43a", "#ffd36b"],
+    drop: ["#555b63", "#8a9099", "#c9ced4"] };
   const KIND_COLOR = { pc: "#c7a25e", npc: "#6f8fae", enemy: "#b2402e", trap: "#7d4f8f", marker: "#8b8273", object: "#7a5a3a" };
   const COND_COLOR = { Blinded: "#555", Charmed: "#d36fb0", Deafened: "#777", Frightened: "#9b6fd3", Grappled: "#b08a3e", Incapacitated: "#8a8a8a",
     Invisible: "#9fd3e6", Paralyzed: "#e0c040", Petrified: "#9a9184", Poisoned: "#6fae4e", Prone: "#c78a4e", Restrained: "#b0603e",
@@ -107,8 +175,12 @@
         for (let i = 0; i < map.revealed.length; i++) if (map.revealed[i] === "1" && was[i] !== "1") fresh.add(i);
         if (fresh.size) { this.fade = { cells: fresh, t0: performance.now() }; }
       }
-      if (first) this.glides.clear(); else this.startGlides(tokens);
+      if (first) this.glides.clear(); else { this.startGlides(tokens); this.noticeChests(this.map, map); }
       this.map = map; this.tokens = tokens;
+      // the ground (terrain, grid, lights, chests) and the fog are drawn once into pictures and reused
+      // every frame; they're drawn again only when they change (this is what keeps tablets smooth)
+      const ground = JSON.stringify([map.id, map.cols, map.rows, map.cell_px, map.bg_color, map.show_grid, map.grid_color, map.grid_opacity, map.terrain, map.chests]);
+      if (ground !== this.groundKey) { this.groundKey = ground; this.layerDirty = true; }
       if (this.drag && this.drag.token) {
         const t = tokens.find((x) => x.id === this.drag.token.id);
         if (t) this.drag.token = t;
@@ -197,10 +269,10 @@
     attackFx(fx, age) {
       // a look picked on the attack form wins over the guess from its name
       const LOOK = { slash: "slash", punch: "punch", bite: "bite", arrow: "arrow", flames: "fire", frost: "ice", sparks: "lightning",
-        holy: "radiant", venom: "poison", arcane: "arcane", rock: "earth", quake: "earth" };
+        holy: "radiant", venom: "poison", arcane: "arcane", rock: "earth", quake: "earth", laser: "laser" };
       const style = LOOK[fx.style] || MapView.fxStyle(fx.name, fx.kind, fx.type), start = performance.now() - (age || 0) * 1000;
       const COLORS = { fire: "#ff7a2f", ice: "#8fdcff", lightning: "#fff27a", radiant: "#ffe9a3", poison: "#8fe36b", arcane: "#c08bff",
-        arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a" };
+        arrow: "#e8d9b5", slash: "#ffffff", punch: "#ffd28a", bite: "#ffffff", earth: "#b98a55", heal: "#9fdc7a", shimmer: "#f3d58a", laser: "#ff3b30" };
       const color = COLORS[style] || "#ffffff", hows = fx.how || [];
       // Earth Shatter: an earth move with a radius shakes the map and splits the ground across all of it
       // (or any move given the Earthquake look: without a radius it shakes 10 ft around who it hits)
@@ -451,12 +523,17 @@
       ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty);
       const gw = m.cols * cp, gh = m.rows * cp;
       if (this.bg) ctx.drawImage(this.bg, 0, 0);
-      else { ctx.fillStyle = m.bg_color || "#d9ccae"; ctx.fillRect(ox, oy, gw, gh); }
-      for (const [key, kind] of Object.entries(m.terrain || {})) {
-        const [x, y] = key.split(",").map(Number);
-        this.drawTerrain(kind, x, y, cp, ox, oy);
+      const lk = this.layerScale(gw, gh, dpr * s);
+      if (lk) { // the saved picture of the ground
+        if (this.layerDirty || !this.layer || this.layerK !== lk || this.layerBg !== !!this.bg) this.buildLayer(lk);
+        ctx.drawImage(this.layer, ox, oy, gw, gh);
+      } else { // zoomed right in: draw just the squares on screen, sharp
+        if (!this.bg) { ctx.fillStyle = m.bg_color || "#d9ccae"; ctx.fillRect(ox, oy, gw, gh); }
+        const vx0 = Math.floor((-tx / s - ox) / cp) - 3, vx1 = Math.ceil(((this.w - tx) / s - ox) / cp) + 3;
+        const vy0 = Math.floor((-ty / s - oy) / cp) - 3, vy1 = Math.ceil(((this.h - ty) / s - oy) / cp) + 3;
+        this.drawGround(cp, ox, oy, [vx0, vy0, vx1, vy1]);
       }
-      if (m.show_grid) {
+      if (m.show_grid && !lk) {
         ctx.strokeStyle = m.grid_color || "#000"; ctx.globalAlpha = (m.grid_opacity ?? 35) / 100;
         ctx.lineWidth = Math.max(1 / s, cp * 0.02);
         ctx.beginPath();
@@ -475,6 +552,7 @@
         ctx.fillRect(ox + mx * cp, oy + my * cp, cp, cp); ctx.strokeRect(ox + mx * cp + cp * 0.04, oy + my * cp + cp * 0.04, cp * 0.92, cp * 0.92);
         ctx.restore();
       }
+      this.drawChests(cp, ox, oy, lk ? "moving" : "all");
       this.drawZones(cp, ox, oy);
       this.drawQuakes(cp, ox, oy);
       if (this.drag && this.drag.token && this.drag.moved) this.drawReach(this.drag.token, cp, ox, oy);
@@ -487,10 +565,11 @@
       }
       if (m.fog_enabled) {
         const dm = this.opts.role === "dm";
-        ctx.fillStyle = dm ? "rgba(10,8,6,.55)" : "#080706";
-        for (let y = 0; y < m.rows; y++) for (let x = 0; x < m.cols; x++) {
-          if (!this.revealed(x, y)) ctx.fillRect(ox + x * cp - 0.5, oy + y * cp - 0.5, cp + 1, cp + 1);
-        }
+        // the dark (and, on a made-up map, the dimmed squares seen before but out of sight now):
+        // one pixel per square, scaled up with hard edges
+        ctx.save(); ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.fogPicture(dm), ox - 0.25, oy - 0.25, gw + 0.5, gh + 0.5);
+        ctx.restore();
         const f = this.fade, age = f ? (performance.now() - f.t0) / 900 : 1;
         if (f && age < 1) { // the dark lifting off newly revealed squares, with a warm glow at the edge
           ctx.save(); ctx.globalAlpha = (1 - age) * (dm ? 0.55 : 1); ctx.fillStyle = dm ? "rgba(10,8,6,1)" : "#080706";
@@ -581,6 +660,8 @@
       if (T.stairs) { // steps going down, darker as they go
         for (let i = 0; i < 4; i++) { ctx.fillStyle = "rgba(30,20,10," + (0.12 + i * 0.16) + ")"; ctx.fillRect(X + cp * 0.1, Y + cp * (0.1 + i * 0.2), cp * 0.8, cp * 0.16); }
       }
+      if (T.plates || T.grate || T.steel || T.blast || T.field || T.sealed || T.turret || T.terminal || T.machine || T.cryo) this.drawSciFi(T, x, y, X, Y, cp);
+      if (T.silo) this.drawSilo(kind, T, x, y, X, Y, cp);
       ctx.restore();
       if (T.tree) {
         ctx.fillStyle = "#3f5f2e"; ctx.beginPath(); ctx.arc(X + cp / 2, Y + cp / 2, cp * 0.62, 0, Math.PI * 2); ctx.fill();
@@ -591,6 +672,476 @@
         ctx.strokeRect(X + cp * 0.08, Y + cp * 0.08, cp * 0.84, cp * 0.84);
       }
       ctx.globalAlpha = 1;
+    }
+    /* How sharp the saved ground picture is: a power of two at or above the screen's own (for zoom
+       and sharp displays), but never a picture too big for a phone (8 million pixels). 0: zoomed in
+       too far for that, so the ground is drawn straight onto the screen (just the squares in view). */
+    layerScale(gw, gh, want) {
+      const cap = Math.min(4096 / Math.max(gw, gh), Math.sqrt(8e6 / (gw * gh)));
+      let k = Math.pow(2, Math.ceil(Math.log2(Math.max(0.25, want))));
+      if (k > cap) k = want <= cap ? cap : 0;
+      return k;
+    }
+    /** Terrain, emergency light, grid and still chests, in squares x0..x1, y0..y1 (all of them if none). */
+    drawGround(cp, ox, oy, box, grid) {
+      const m = this.map;
+      let alarms = false;
+      for (const [key, kind] of Object.entries(m.terrain || {})) {
+        const c = key.indexOf(","), x = +key.slice(0, c), y = +key.slice(c + 1);
+        if (kind === "redlight" || kind === "beacon") alarms = true;
+        if (box && (x < box[0] || x > box[2] || y < box[1] || y > box[3])) continue;
+        this.drawTerrain(kind, x, y, cp, ox, oy);
+      }
+      if (alarms) this.drawAlarmGlow(cp, ox, oy, box);
+      if (grid && m.show_grid) {
+        const ctx = this.ctx, gw = m.cols * cp, gh = m.rows * cp;
+        ctx.strokeStyle = m.grid_color || "#000"; ctx.globalAlpha = (m.grid_opacity ?? 35) / 100;
+        ctx.lineWidth = Math.max(1 / this.layerK, cp * 0.02);
+        ctx.beginPath();
+        for (let x = 0; x <= m.cols; x++) { ctx.moveTo(ox + x * cp, oy); ctx.lineTo(ox + x * cp, oy + gh); }
+        for (let y = 0; y <= m.rows; y++) { ctx.moveTo(ox, oy + y * cp); ctx.lineTo(ox + gw, oy + y * cp); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      if (grid) this.drawChests(cp, ox, oy, "still");
+    }
+    buildLayer(k) {
+      const m = this.map, cp = m.cell_px, W = Math.max(1, Math.ceil(m.cols * cp * k)), H = Math.max(1, Math.ceil(m.rows * cp * k));
+      if (!this.layer) this.layer = document.createElement("canvas");
+      const L = this.layer;
+      if (L.width !== W) L.width = W;
+      if (L.height !== H) L.height = H;
+      const lc = L.getContext("2d"), main = this.ctx;
+      lc.setTransform(1, 0, 0, 1, 0, 0); lc.clearRect(0, 0, W, H); lc.setTransform(k, 0, 0, k, 0, 0);
+      this.layerK = k;
+      this.ctx = lc;
+      try {
+        if (!this.bg) { lc.fillStyle = m.bg_color || "#d9ccae"; lc.fillRect(0, 0, m.cols * cp, m.rows * cp); }
+        this.drawGround(cp, 0, 0, null, true);
+      } finally { this.ctx = main; }
+      this.layerDirty = false; this.layerBg = !!this.bg;
+    }
+    /** The fog as a tiny picture, one pixel per square, remade only when what's revealed or seen changes. */
+    fogPicture(dm) {
+      const m = this.map, key = [m.cols, m.rows, dm, m.revealed, dm ? "" : m.visible].join("|");
+      if (this.fogKey === key && this.fogCanvas) return this.fogCanvas;
+      const c = this.fogCanvas || (this.fogCanvas = document.createElement("canvas"));
+      c.width = m.cols; c.height = m.rows;
+      const g = c.getContext("2d"), img = g.createImageData(m.cols, m.rows), d = img.data, rev = m.revealed || "", vis = !dm && m.visible;
+      for (let i = 0; i < m.cols * m.rows; i++) {
+        let a = 0, r = 8, gg = 7, b = 6;
+        if (rev[i] !== "1") { a = dm ? 140 : 255; if (dm) { r = 10; gg = 8; b = 6; } }
+        else if (vis && vis[i] !== "1") a = 158; // seen before, out of sight now
+        d[i * 4] = r; d[i * 4 + 1] = gg; d[i * 4 + 2] = b; d[i * 4 + 3] = a;
+      }
+      g.putImageData(img, 0, 0);
+      this.fogKey = key;
+      return c;
+    }
+    /* The abandoned prison: steel plates and rivets, grates, bulkheads, doors, lights and machines. */
+    drawSciFi(T, x, y, X, Y, cp) {
+      const ctx = this.ctx, lw = cp * 0.03;
+      const dot = (a, b, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X + a * cp, Y + b * cp, r * cp, 0, Math.PI * 2); ctx.fill(); };
+      if (T.plates) {
+        ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = lw; ctx.strokeRect(X + lw, Y + lw, cp - 2 * lw, cp - 2 * lw);
+        ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.beginPath(); ctx.moveTo(X + cp * 0.06, Y + cp * 0.5); ctx.lineTo(X + cp * 0.94, Y + cp * 0.5); ctx.stroke();
+        if (hash(x, y) > 0.82) dot(hash(y, x), hash(x + 3, y), 0.18, "rgba(20,10,5,.25)"); // grime
+        for (const [a, b] of [[0.12, 0.12], [0.88, 0.12], [0.12, 0.88], [0.88, 0.88]]) dot(a, b, 0.035, "rgba(0,0,0,.4)");
+        const v = hash(x * 3 + 1, y * 5 + 2); // a few kinds of plate, so the floor isn't all one tile
+        ctx.fillStyle = v < 0.5 ? "rgba(255,255,255," + (0.02 + v * 0.06).toFixed(3) + ")" : "rgba(0,0,0," + ((v - 0.5) * 0.12).toFixed(3) + ")";
+        ctx.fillRect(X, Y, cp, cp);
+        if (v < 0.22) { // diamond tread
+          ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = cp * 0.025; ctx.beginPath();
+          for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const a = X + cp * (0.18 + i * 0.21), b = Y + cp * (0.18 + j * 0.21), o = (i + j) % 2 ? 1 : -1;
+            ctx.moveTo(a - cp * 0.05, b - o * cp * 0.04); ctx.lineTo(a + cp * 0.05, b + o * cp * 0.04); }
+          ctx.stroke();
+        } else if (v < 0.32) { // a vent
+          ctx.fillStyle = "rgba(0,0,0,.45)"; for (let i = 0; i < 4; i++) ctx.fillRect(X + cp * 0.25, Y + cp * (0.28 + i * 0.13), cp * 0.5, cp * 0.06);
+        } else if (v > 0.95) { // a painted floor number
+          ctx.fillStyle = "rgba(230,200,90,.35)"; ctx.font = "bold " + Math.round(cp * 0.32) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(String(1 + Math.floor(hash(x, y + 9) * 9)), X + cp / 2, Y + cp / 2);
+        }
+      }
+      if (T.grate) {
+        ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = cp * 0.05;
+        ctx.beginPath(); for (let i = 1; i < 6; i++) { ctx.moveTo(X + cp * 0.12, Y + i * cp / 6); ctx.lineTo(X + cp * 0.88, Y + i * cp / 6); } ctx.stroke();
+        ctx.strokeStyle = "rgba(160,170,180,.35)"; ctx.lineWidth = lw; ctx.strokeRect(X + cp * 0.1, Y + cp * 0.1, cp * 0.8, cp * 0.8);
+      }
+      if (T.steel) {
+        const g = ctx.createLinearGradient(X, Y, X + cp, Y + cp); g.addColorStop(0, "rgba(255,255,255,.06)"); g.addColorStop(1, "rgba(0,0,0,.25)");
+        ctx.fillStyle = g; ctx.fillRect(X, Y, cp, cp);
+        ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = lw; ctx.strokeRect(X + lw / 2, Y + lw / 2, cp - lw, cp - lw);
+        const w = hash(x * 7 + 3, y * 2 + 1); // ribbed, panelled or plain wall sections
+        if (!T.alarm && !T.camera && !T.seam) {
+          if (w < 0.3) { ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.lineWidth = cp * 0.05; ctx.beginPath(); for (let i = 1; i < 4; i++) { ctx.moveTo(X + i * cp / 4, Y + cp * 0.1); ctx.lineTo(X + i * cp / 4, Y + cp * 0.9); } ctx.stroke(); }
+          else if (w < 0.5) { ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = lw; ctx.strokeRect(X + cp * 0.18, Y + cp * 0.18, cp * 0.64, cp * 0.64); dot(0.25, 0.25, 0.03, "rgba(255,255,255,.12)"); dot(0.75, 0.75, 0.03, "rgba(255,255,255,.12)"); }
+          else if (w > 0.93) { ctx.fillStyle = "rgba(224,180,58,.5)"; ctx.fillRect(X + cp * 0.1, Y + cp * 0.42, cp * 0.8, cp * 0.08); }
+        }
+        if (T.seam) { ctx.strokeStyle = "rgba(160,190,210,.18)"; ctx.setLineDash([cp * 0.08, cp * 0.06]); ctx.strokeRect(X + cp * 0.2, Y + cp * 0.15, cp * 0.6, cp * 0.7); ctx.setLineDash([]); }
+        if (T.alarm) { ctx.shadowColor = "#ff3b30"; ctx.shadowBlur = cp * 0.5; dot(0.5, 0.5, 0.16, "#ff3b30"); ctx.shadowBlur = 0; }
+        if (T.camera) {
+          ctx.fillStyle = "#9aa3ad"; ctx.fillRect(X + cp * 0.25, Y + cp * 0.38, cp * 0.42, cp * 0.24);
+          dot(0.7, 0.5, 0.1, "#14171b"); dot(0.32, 0.44, 0.04, "#ff3b30");
+        }
+      }
+      if (T.blast) {
+        ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(X + cp * 0.47, Y, cp * 0.06, cp);
+        ctx.fillStyle = "#e0b43a";
+        for (let i = 0; i < 4; i++) { const yy = Y + i * cp / 4; ctx.beginPath(); ctx.moveTo(X, yy); ctx.lineTo(X + cp * 0.12, yy); ctx.lineTo(X, yy + cp * 0.12); ctx.fill(); }
+        dot(0.82, 0.2, 0.05, "#5fdc7a");
+      }
+      if (T.field) {
+        ctx.strokeStyle = "rgba(110,220,255,.85)"; ctx.lineWidth = cp * 0.05; ctx.shadowColor = "#6edcff"; ctx.shadowBlur = cp * 0.3;
+        ctx.beginPath(); for (let i = 1; i < 4; i++) { ctx.moveTo(X + i * cp / 4, Y + cp * 0.05); ctx.lineTo(X + i * cp / 4, Y + cp * 0.95); } ctx.stroke(); ctx.shadowBlur = 0;
+      }
+      if (T.sealed) {
+        ctx.fillStyle = "#555c66"; ctx.fillRect(X + cp * 0.08, Y + cp * 0.08, cp * 0.84, cp * 0.84);
+        ctx.fillStyle = "#d23b3b"; ctx.fillRect(X + cp * 0.08, Y + cp * 0.42, cp * 0.84, cp * 0.16);
+        ctx.fillStyle = "#ff5a4f"; ctx.shadowColor = "#ff3b30"; ctx.shadowBlur = cp * 0.4; ctx.fillRect(X + cp * 0.38, Y + cp * 0.2, cp * 0.24, cp * 0.14); ctx.shadowBlur = 0;
+      }
+      if (T.turret) {
+        dot(0.5, 0.5, 0.34, "#555c66");
+        ctx.strokeStyle = "#1a1d21"; ctx.lineWidth = cp * 0.12; ctx.beginPath(); ctx.moveTo(X + cp / 2, Y + cp / 2); ctx.lineTo(X + cp * 0.95, Y + cp * 0.5); ctx.stroke();
+        dot(0.5, 0.5, 0.08, "#ff3b30");
+      }
+      if (T.terminal) {
+        ctx.fillStyle = "#1a2229"; ctx.fillRect(X + cp * 0.12, Y + cp * 0.15, cp * 0.76, cp * 0.5);
+        ctx.fillStyle = "rgba(90,220,255,.85)"; for (let i = 0; i < 3; i++) ctx.fillRect(X + cp * 0.18, Y + cp * (0.22 + i * 0.13), cp * (0.3 + hash(x + i, y) * 0.32), cp * 0.05);
+        ctx.fillStyle = "#3a444e"; ctx.fillRect(X + cp * 0.2, Y + cp * 0.7, cp * 0.6, cp * 0.14);
+      }
+      if (T.machine) {
+        ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = lw * 2; ctx.strokeRect(X + cp * 0.1, Y + cp * 0.1, cp * 0.8, cp * 0.8);
+        ctx.strokeStyle = "#8a9099"; ctx.lineWidth = cp * 0.06; ctx.beginPath(); ctx.arc(X + cp * 0.5, Y + cp * 0.5, cp * 0.22, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#e0b43a"; ctx.fillRect(X + cp * 0.1, Y + cp * 0.82, cp * 0.8, cp * 0.08);
+      }
+      if (T.cryo) {
+        ctx.fillStyle = "rgba(120,220,255,.35)"; ctx.strokeStyle = "#9fe6ff"; ctx.lineWidth = cp * 0.05;
+        ctx.beginPath(); ctx.ellipse(X + cp / 2, Y + cp / 2, cp * 0.3, cp * 0.42, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        dot(0.5, 0.4, 0.1, "rgba(30,50,60,.6)"); // someone inside
+      }
+    }
+    /* The missile silo. Concrete that varies square to square (pour joints, cracks, stains, painted
+       numbers), hazard paint, mesh catwalks, the open shaft, the missiles (one picture across their
+       3x3 block), and the furniture: tanks, pipes, reactor, consoles, bunks, racks, crates, cables. */
+    drawSilo(kind, T, x, y, X, Y, cp) {
+      const ctx = this.ctx, ter = (this.map && this.map.terrain) || {}, at = (a, b) => ter[a + "," + b];
+      const dot = (a, b, r, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(X + a * cp, Y + b * cp, r * cp, 0, Math.PI * 2); ctx.fill(); };
+      const rr = (a, b, w, h, r, fill, stroke) => { ctx.beginPath(); ctx.roundRect(X + a * cp, Y + b * cp, w * cp, h * cp, r * cp); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = cp * 0.03; ctx.stroke(); } };
+      const hv = hash(x * 13 + 5, y * 7 + 3);
+      if (T.concrete) {
+        ctx.fillStyle = hv < 0.5 ? "rgba(255,255,255," + (hv * 0.08).toFixed(3) + ")" : "rgba(0,0,0," + ((hv - 0.5) * 0.14).toFixed(3) + ")";
+        ctx.fillRect(X, Y, cp, cp);
+        ctx.strokeStyle = "rgba(0,0,0,.22)"; ctx.lineWidth = cp * 0.025; ctx.beginPath();
+        if (x % 3 === 0) { ctx.moveTo(X, Y); ctx.lineTo(X, Y + cp); }   // pour joints every three squares
+        if (y % 3 === 0) { ctx.moveTo(X, Y); ctx.lineTo(X + cp, Y); }
+        ctx.stroke();
+        const k = hash(y * 11 + 2, x * 17 + 9);
+        if (k < 0.16) { // a crack
+          ctx.strokeStyle = "rgba(30,28,24,.5)"; ctx.lineWidth = cp * 0.022; ctx.beginPath();
+          let px = X + cp * (0.1 + hash(x, y + 1) * 0.3), py = Y + cp * (0.1 + hash(x + 1, y) * 0.8);
+          ctx.moveTo(px, py);
+          for (let i = 0; i < 4; i++) { px += cp * (0.12 + hash(x + i, y) * 0.1); py += cp * (hash(y, x + i) - 0.5) * 0.3; ctx.lineTo(px, py); }
+          ctx.stroke();
+        } else if (k < 0.26) { // an oil stain
+          ctx.fillStyle = "rgba(25,22,18,.22)"; ctx.beginPath();
+          ctx.ellipse(X + cp * (0.3 + hv * 0.4), Y + cp * (0.3 + k * 1.5), cp * 0.22, cp * 0.14, hv * 3, 0, Math.PI * 2); ctx.fill();
+        } else if (k > 0.97 && !T.crate && !T.tank && !T.console && !T.bunk && !T.rack) { // a stencilled level marking
+          ctx.fillStyle = "rgba(225,170,40,.45)"; ctx.font = "bold " + Math.round(cp * 0.3) + "px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("S" + (1 + Math.floor(hv * 9)), X + cp / 2, Y + cp / 2);
+        }
+      }
+      if (T.hazardpaint) {
+        ctx.fillStyle = "#1a1a1a";
+        for (let i = -1; i < 4; i++) { ctx.beginPath(); const o = ((x + y) % 2) * 0.25; ctx.moveTo(X + (i * 0.5 + o) * cp, Y + cp); ctx.lineTo(X + (i * 0.5 + 0.25 + o) * cp, Y + cp);
+          ctx.lineTo(X + (i * 0.5 + 0.75 + o) * cp, Y); ctx.lineTo(X + (i * 0.5 + 0.5 + o) * cp, Y); ctx.fill(); }
+        ctx.fillStyle = "rgba(120,110,95," + (0.15 + hv * 0.35).toFixed(3) + ")"; // scuffed by boots
+        ctx.beginPath(); ctx.ellipse(X + cp * (0.3 + hv * 0.4), Y + cp * 0.5, cp * 0.3, cp * 0.2, hv * 2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (T.catwalk) {
+        ctx.strokeStyle = "#5d636b"; ctx.lineWidth = cp * 0.035; ctx.beginPath();
+        for (let i = 0; i <= 5; i++) { ctx.moveTo(X + i * cp / 5, Y); ctx.lineTo(X + i * cp / 5, Y + cp); ctx.moveTo(X, Y + i * cp / 5); ctx.lineTo(X + cp, Y + i * cp / 5); }
+        ctx.stroke();
+        ctx.strokeStyle = "#8b9199"; ctx.lineWidth = cp * 0.07; ctx.beginPath(); // a rail along any side that drops into the shaft
+        if (at(x - 1, y) === "shaft") { ctx.moveTo(X + cp * 0.04, Y); ctx.lineTo(X + cp * 0.04, Y + cp); }
+        if (at(x + 1, y) === "shaft") { ctx.moveTo(X + cp * 0.96, Y); ctx.lineTo(X + cp * 0.96, Y + cp); }
+        if (at(x, y - 1) === "shaft") { ctx.moveTo(X, Y + cp * 0.04); ctx.lineTo(X + cp, Y + cp * 0.04); }
+        if (at(x, y + 1) === "shaft") { ctx.moveTo(X, Y + cp * 0.96); ctx.lineTo(X + cp, Y + cp * 0.96); }
+        ctx.stroke();
+      }
+      if (T.shaft || T.missile) { // the drop: black, with a lit lip where the floor ends
+        const g = ctx.createRadialGradient(X + cp / 2, Y + cp / 2, 0, X + cp / 2, Y + cp / 2, cp * 0.8);
+        g.addColorStop(0, "rgba(40,60,80," + (0.08 + hv * 0.1).toFixed(3) + ")"); g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g; ctx.fillRect(X, Y, cp, cp);
+        if (T.shaft) {
+          ctx.fillStyle = "rgba(255,255,255,.05)"; if (hv > 0.6) ctx.fillRect(X + cp * 0.45, Y, cp * 0.06, cp); // ladder rail far below
+          ctx.fillStyle = "rgba(170,160,140,.55)";
+          const lip = (o) => o !== "shaft" && o !== "missile" && o !== undefined;
+          if (lip(at(x - 1, y))) ctx.fillRect(X, Y, cp * 0.07, cp);
+          if (lip(at(x + 1, y))) ctx.fillRect(X + cp * 0.93, Y, cp * 0.07, cp);
+          if (lip(at(x, y - 1))) ctx.fillRect(X, Y, cp, cp * 0.07);
+          if (lip(at(x, y + 1))) ctx.fillRect(X, Y + cp * 0.93, cp, cp * 0.07);
+        }
+      }
+      if (T.missile) { // one missile seen from above, drawn across its whole block (each square shows its part)
+        let x0 = x, y0 = y, x1 = x, y1 = y;
+        while (at(x0 - 1, y) === "missile") x0--;
+        while (at(x, y0 - 1) === "missile") y0--;
+        while (at(x1 + 1, y) === "missile") x1++;
+        while (at(x, y1 + 1) === "missile") y1++;
+        const cx = (x0 + x1 + 1) / 2, cy = (y0 + y1 + 1) / 2, R = Math.min(x1 - x0 + 1, y1 - y0 + 1) / 2;
+        const PX = X + (cx - x) * cp, PY = Y + (cy - y) * cp, r = (k) => R * k * cp;
+        ctx.fillStyle = "#2b2f35"; // four fins
+        for (let i = 0; i < 4; i++) { ctx.save(); ctx.translate(PX, PY); ctx.rotate(Math.PI / 4 + i * Math.PI / 2);
+          ctx.beginPath(); ctx.moveTo(-r(0.12), 0); ctx.lineTo(r(0.12), 0); ctx.lineTo(r(0.05), r(0.98)); ctx.lineTo(-r(0.05), r(0.98)); ctx.fill(); ctx.restore(); }
+        const body = ctx.createRadialGradient(PX - r(0.25), PY - r(0.25), r(0.05), PX, PY, r(0.72));
+        body.addColorStop(0, "#f4f4f0"); body.addColorStop(1, "#9ea3a8");
+        ctx.fillStyle = body; ctx.beginPath(); ctx.arc(PX, PY, r(0.7), 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = cp * 0.04;
+        for (const k of [0.7, 0.5]) { ctx.beginPath(); ctx.arc(PX, PY, r(k), 0, Math.PI * 2); ctx.stroke(); }
+        ctx.fillStyle = "#c0392b"; ctx.beginPath(); ctx.arc(PX, PY, r(0.28), 0, Math.PI * 2); ctx.fill(); // the red nose cone
+        ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.arc(PX - r(0.09), PY - r(0.09), r(0.08), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#1d1d1d"; ctx.font = "bold " + Math.round(r(0.16)) + "px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("VOSS", PX, PY + r(0.6));
+      }
+      if (T.cables) {
+        const cols = ["#151515", "#b33a2a", "#2a5fa8"];
+        for (let i = 0; i < 3; i++) {
+          ctx.strokeStyle = cols[i]; ctx.lineWidth = cp * 0.06; ctx.beginPath();
+          const off = (i - 1) * 0.18 + (hv - 0.5) * 0.1;
+          ctx.moveTo(X, Y + cp * (0.5 + off)); ctx.bezierCurveTo(X + cp * 0.35, Y + cp * (0.5 + off + 0.15), X + cp * 0.65, Y + cp * (0.5 + off - 0.15), X + cp, Y + cp * (0.5 + off));
+          ctx.stroke();
+        }
+      }
+      if (T.coolant) {
+        ctx.shadowColor = "#5ff2e0"; ctx.shadowBlur = cp * 0.3;
+        ctx.fillStyle = "rgba(80,230,210,.55)"; ctx.beginPath();
+        ctx.ellipse(X + cp * 0.5, Y + cp * 0.5, cp * (0.32 + hv * 0.12), cp * (0.24 + hv * 0.1), hv * 3, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0; dot(0.3 + hv * 0.2, 0.25, 0.07, "rgba(80,230,210,.5)"); dot(0.78, 0.72, 0.05, "rgba(80,230,210,.45)");
+      }
+      if (T.silodoor) {
+        const horiz = at(x - 1, y) === "concretewall" || at(x + 1, y) === "concretewall" || at(x - 1, y) === "beacon" || at(x + 1, y) === "pipes"; // set in a wall running left-right
+        ctx.save(); ctx.translate(X + cp / 2, Y + cp / 2); if (!horiz) ctx.rotate(Math.PI / 2); ctx.translate(-cp / 2, -cp / 2);
+        ctx.fillStyle = "#6e6c66"; ctx.fillRect(0, cp * 0.2, cp, cp * 0.6);
+        ctx.fillStyle = "#e0a822"; ctx.fillRect(0, cp * 0.2, cp, cp * 0.1); ctx.fillRect(0, cp * 0.7, cp, cp * 0.1);
+        ctx.fillStyle = "#1a1a1a"; for (let i = 0; i < 5; i++) { ctx.fillRect(i * cp / 5, cp * 0.2, cp / 10, cp * 0.1); ctx.fillRect(i * cp / 5 + cp / 10, cp * 0.7, cp / 10, cp * 0.1); }
+        ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(cp * 0.48, cp * 0.3, cp * 0.04, cp * 0.4);
+        ctx.restore();
+        dot(0.5, 0.5, 0.11, "#3a3936"); dot(0.5, 0.5, 0.05, "#9a978f");
+      }
+      if (T.lift) {
+        ctx.fillStyle = "#5a5e63"; ctx.fillRect(X + cp * 0.06, Y + cp * 0.06, cp * 0.88, cp * 0.88);
+        ctx.strokeStyle = "#e0a822"; ctx.lineWidth = cp * 0.06; ctx.strokeRect(X + cp * 0.09, Y + cp * 0.09, cp * 0.82, cp * 0.82);
+        ctx.fillStyle = T.escape ? "#ff9f1a" : "#d9dde2"; ctx.beginPath(); // an arrow: down for the freight lift, up for Steven's
+        const up = T.escape ? -1 : 1;
+        ctx.moveTo(X + cp * 0.3, Y + cp * (0.5 - 0.15 * up)); ctx.lineTo(X + cp * 0.7, Y + cp * (0.5 - 0.15 * up)); ctx.lineTo(X + cp * 0.5, Y + cp * (0.5 + 0.2 * up)); ctx.fill();
+        if (T.escape) { ctx.shadowColor = "#ff3b30"; ctx.shadowBlur = cp * 0.4; dot(0.85, 0.15, 0.06, "#ff3b30"); ctx.shadowBlur = 0; }
+      }
+      if (T.pad) {
+        ctx.strokeStyle = "#e0e3e7"; ctx.lineWidth = cp * 0.05; ctx.beginPath(); ctx.arc(X + cp / 2, Y + cp / 2, cp * 0.36, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#e0e3e7"; ctx.fillRect(X + cp * 0.36, Y + cp * 0.3, cp * 0.07, cp * 0.4); ctx.fillRect(X + cp * 0.57, Y + cp * 0.3, cp * 0.07, cp * 0.4); ctx.fillRect(X + cp * 0.36, Y + cp * 0.47, cp * 0.28, cp * 0.06);
+      }
+      if (T.cwall) { // cinder blocks, staggered, a different wear on each
+        const g = ctx.createLinearGradient(X, Y, X, Y + cp); g.addColorStop(0, "rgba(255,255,255,.07)"); g.addColorStop(1, "rgba(0,0,0,.2)");
+        ctx.fillStyle = g; ctx.fillRect(X, Y, cp, cp);
+        ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = cp * 0.03; ctx.beginPath();
+        ctx.moveTo(X, Y + cp * 0.5); ctx.lineTo(X + cp, Y + cp * 0.5);
+        const o = y % 2 ? 0.25 : 0.75; ctx.moveTo(X + o * cp, Y); ctx.lineTo(X + o * cp, Y + cp * 0.5); ctx.moveTo(X + (1.25 - o) % 1 * cp, Y + cp * 0.5); ctx.lineTo(X + (1.25 - o) % 1 * cp, Y + cp);
+        ctx.stroke();
+        if (hv > 0.85) { ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(X + cp * 0.1, Y + cp * 0.55, cp * 0.3, cp * 0.15); } // a chipped block
+        if (T.beacon) {
+          dot(0.5, 0.5, 0.2, "#2a2926"); ctx.shadowColor = "#ffaa1e"; ctx.shadowBlur = cp * 0.5; dot(0.5, 0.5, 0.13, "#ffb030"); ctx.shadowBlur = 0;
+          ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = cp * 0.02; ctx.beginPath(); ctx.moveTo(X + cp * 0.37, Y + cp * 0.5); ctx.lineTo(X + cp * 0.63, Y + cp * 0.5); ctx.stroke();
+        }
+      }
+      if (T.pipes) { // three pipes with flanges, running along the wall
+        const along = at(x - 1, y) === "pipes" || at(x + 1, y) === "pipes" || at(x, y - 1) === "missile" || at(x, y + 1) === "missile" ||
+          !(at(x, y - 1) === "pipes" || at(x, y + 1) === "pipes");
+        ctx.save(); ctx.translate(X + cp / 2, Y + cp / 2); if (!along) ctx.rotate(Math.PI / 2); ctx.translate(-cp / 2, -cp / 2);
+        [["#8a8f96", 0.22], ["#a84a32", 0.5], ["#4c7a4a", 0.78]].forEach(([c, yy]) => {
+          ctx.fillStyle = c; ctx.fillRect(0, cp * (yy - 0.09), cp, cp * 0.18);
+          ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(0, cp * (yy - 0.07), cp, cp * 0.04);
+          ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(cp * (0.3 + hv * 0.3), cp * (yy - 0.12), cp * 0.07, cp * 0.24);
+        });
+        ctx.restore();
+      }
+      if (T.tank) {
+        ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = cp * 0.12;
+        dot(0.5, 0.5, 0.44, "#b9bcbf"); ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#6c7075"; ctx.lineWidth = cp * 0.04; ctx.beginPath(); ctx.arc(X + cp / 2, Y + cp / 2, cp * 0.33, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#d23b2b"; ctx.save(); ctx.translate(X + cp / 2, Y + cp / 2); ctx.rotate(Math.PI / 4); ctx.fillRect(-cp * 0.12, -cp * 0.12, cp * 0.24, cp * 0.24); ctx.restore();
+        ctx.fillStyle = "#fff"; ctx.font = "bold " + Math.round(cp * 0.16) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", X + cp / 2, Y + cp / 2);
+      }
+      if (T.reactor) {
+        const g = ctx.createRadialGradient(X + cp / 2, Y + cp / 2, cp * 0.05, X + cp / 2, Y + cp / 2, cp * 0.5);
+        g.addColorStop(0, "#d6fff4"); g.addColorStop(0.35, "#38e0b0"); g.addColorStop(1, "rgba(20,60,50,0)");
+        ctx.fillStyle = g; ctx.fillRect(X, Y, cp, cp);
+        ctx.strokeStyle = "#6a7078"; ctx.lineWidth = cp * 0.06; ctx.beginPath(); ctx.arc(X + cp / 2, Y + cp / 2, cp * 0.38, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; dot(0.5 + Math.cos(a) * 0.38, 0.5 + Math.sin(a) * 0.38, 0.06, "#3a3f45"); }
+      }
+      if (T.console) {
+        rr(0.08, 0.2, 0.84, 0.62, 0.06, "#33373c", "rgba(0,0,0,.6)");
+        rr(0.16, 0.27, 0.68, 0.24, 0.03, "#0e1a14");
+        ctx.fillStyle = "rgba(110,255,150,.8)"; for (let i = 0; i < 2; i++) ctx.fillRect(X + cp * 0.2, Y + cp * (0.31 + i * 0.09), cp * (0.25 + hash(x + i, y) * 0.3), cp * 0.04);
+        dot(0.28, 0.66, 0.06, "#e0a822"); dot(0.45, 0.66, 0.06, "#4a90d9"); dot(0.7, 0.65, 0.09, "#d23b2b");
+      }
+      if (T.bunk) {
+        rr(0.1, 0.08, 0.8, 0.84, 0.05, "#55604a", "rgba(0,0,0,.5)");
+        rr(0.18, 0.13, 0.64, 0.18, 0.05, "#e6e2d6");
+        ctx.fillStyle = "#6c7a5c"; ctx.fillRect(X + cp * 0.12, Y + cp * 0.45, cp * 0.76, cp * 0.45);
+        ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.lineWidth = cp * 0.025; ctx.beginPath(); ctx.moveTo(X + cp * 0.12, Y + cp * 0.6); ctx.lineTo(X + cp * 0.88, Y + cp * 0.6); ctx.stroke();
+      }
+      if (T.rack) {
+        rr(0.06, 0.12, 0.88, 0.76, 0.03, "#2f3236", "rgba(0,0,0,.6)");
+        ctx.strokeStyle = "#15171a"; ctx.lineWidth = cp * 0.06; ctx.beginPath();
+        for (let i = 0; i < 3; i++) { const a = X + cp * (0.24 + i * 0.26); ctx.moveTo(a, Y + cp * 0.2); ctx.lineTo(a, Y + cp * 0.8); }
+        ctx.stroke();
+        ctx.fillStyle = "#6b4a2c"; for (let i = 0; i < 3; i++) ctx.fillRect(X + cp * (0.2 + i * 0.26), Y + cp * 0.62, cp * 0.08, cp * 0.16); // stocks
+      }
+      if (T.crate) {
+        const two = hv > 0.5, draw1 = (a, b, s, c) => {
+          rr(a, b, s, s, 0.03, c, "rgba(0,0,0,.6)");
+          ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = cp * 0.03; ctx.beginPath();
+          ctx.moveTo(X + a * cp, Y + b * cp); ctx.lineTo(X + (a + s) * cp, Y + (b + s) * cp); ctx.moveTo(X + (a + s) * cp, Y + b * cp); ctx.lineTo(X + a * cp, Y + (b + s) * cp); ctx.stroke();
+          ctx.fillStyle = "rgba(240,200,90,.6)"; ctx.fillRect(X + (a + 0.05) * cp, Y + (b + 0.05) * cp, s * 0.3 * cp, cp * 0.05);
+        };
+        ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = cp * 0.1;
+        if (two) { draw1(0.06, 0.08, 0.5, "#5b6440"); draw1(0.44, 0.42, 0.5, "#6a5a3a"); }
+        else draw1(0.12, 0.12, 0.76, hv < 0.25 ? "#5b6440" : "#6a5a3a");
+        ctx.shadowBlur = 0;
+      }
+    }
+    /* Red emergency light spilling onto the floor around each alarm lamp (drawn with the map: no extra animation loop). */
+    drawAlarmGlow(cp, ox, oy, box) {
+      const ctx = this.ctx;
+      ctx.save();
+      for (const [k, v] of Object.entries(this.map.terrain || {})) {
+        if (v !== "redlight" && v !== "beacon") continue;
+        const [x, y] = k.split(",").map(Number), X = ox + (x + 0.5) * cp, Y = oy + (y + 0.5) * cp;
+        if (box && (x < box[0] - 3 || x > box[2] + 3 || y < box[1] - 3 || y > box[3] + 3)) continue;
+        const g = ctx.createRadialGradient(X, Y, cp * 0.1, X, Y, cp * 2.6), c = v === "beacon" ? "255,170,30" : "255,40,30";
+        g.addColorStop(0, "rgba(" + c + ",.28)"); g.addColorStop(1, "rgba(" + c + ",0)");
+        ctx.fillStyle = g; ctx.fillRect(X - cp * 2.6, Y - cp * 2.6, cp * 5.2, cp * 5.2);
+      }
+      ctx.restore();
+    }
+    /* Chests: futuristic containers, each kind with its own colours and marks. The light on the lid is red
+       when it's locked, green when it isn't; an opened one has its lid up, dark inside, light off. */
+    drawChests(cp, ox, oy, which) {
+      const list = (this.map && this.map.chests) || [], ctx = this.ctx, now = performance.now();
+      for (const c of list) {
+        const moving = !!(this.chestAnim && this.chestAnim.has(c.id));
+        if ((which === "still" && moving) || (which === "moving" && !moving)) continue;
+        if (c.kind === "papers") { this.drawPapers(c, cp, ox, oy); continue; }
+        if (c.kind === "abort" || c.kind === "escape") { this.drawSiloControl(c, cp, ox, oy); continue; }
+        const [body, stripe, light] = CHEST_LOOK[c.kind] || CHEST_LOOK.supply;
+        const small = c.kind === "drop", big = c.kind === "legendary" || c.kind === "vault";
+        const w = cp * (small ? 0.56 : big ? 0.86 : 0.76), hgt = cp * (small ? 0.38 : 0.5);
+        const X = ox + c.x * cp + (cp - w) / 2, Y = oy + c.y * cp + cp * 0.32;
+        const t0 = this.chestAnim && this.chestAnim.get(c.id), k = t0 ? Math.min(1, (now - t0) / 700) : 1;
+        if (t0 && k >= 1) { this.chestAnim.delete(c.id); this.layerDirty = true; } // done: back into the saved ground
+        const open = c.opened ? k : 0, empty = c.opened && Array.isArray(c.loot) && !c.loot.length;
+        ctx.save();
+        if (c.hidden) ctx.globalAlpha = 0.5;
+        if (empty) ctx.globalAlpha *= 0.6;
+        ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = cp * 0.12; ctx.shadowOffsetY = cp * 0.05;
+        ctx.fillStyle = body; ctx.fillRect(X, Y, w, hgt);
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(X, Y + hgt * 0.72, w, hgt * 0.28);
+        ctx.fillStyle = stripe; ctx.fillRect(X + w * 0.08, Y + hgt * 0.3, w * 0.84, hgt * 0.16);
+        if (c.kind === "medical") ctx.fillRect(X + w * 0.44, Y + hgt * 0.12, w * 0.12, hgt * 0.56); // a red cross
+        if (c.kind === "military" || c.kind === "supply") { ctx.fillStyle = "rgba(0,0,0,.4)"; for (let i = 0; i < 4; i++) ctx.fillRect(X + w * (0.12 + i * 0.22), Y + hgt * 0.3, w * 0.06, hgt * 0.16); }
+        if (c.kind === "vault") { ctx.fillStyle = "#9aa3ad"; ctx.beginPath(); ctx.arc(X + w / 2, Y + hgt * 0.62, cp * 0.09, 0, Math.PI * 2); ctx.fill(); } // the dial
+        if (c.kind === "experimental" || c.kind === "legendary") { // a glowing core
+          ctx.fillStyle = light; ctx.shadowColor = light; ctx.shadowBlur = cp * (c.opened ? 0.15 : 0.45);
+          ctx.beginPath(); ctx.arc(X + w / 2, Y + hgt * 0.62, cp * 0.08, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+        }
+        ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = cp * 0.03; ctx.strokeRect(X, Y, w, hgt);
+        const lidH = hgt * 0.32, lift = open * hgt * 0.55;
+        if (open > 0) { ctx.fillStyle = "#0d0f12"; ctx.fillRect(X + w * 0.06, Y - lidH * 0.2, w * 0.88, lidH * 0.6); }
+        ctx.fillStyle = body; ctx.fillRect(X - cp * 0.02, Y - lidH - lift, w + cp * 0.04, lidH * (1 - open * 0.5));
+        ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.strokeRect(X - cp * 0.02, Y - lidH - lift, w + cp * 0.04, lidH * (1 - open * 0.5));
+        if (!c.opened) {
+          const col = c.locked_by ? "#ff3b30" : "#5fdc7a";
+          ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = cp * 0.25;
+          ctx.beginPath(); ctx.arc(X + w * 0.86, Y - lidH * 0.5, cp * 0.05, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+        } else if (t0 && k < 1) { // light bursting out as it opens
+          const g = ctx.createRadialGradient(X + w / 2, Y, 0, X + w / 2, Y, cp * 1.2);
+          g.addColorStop(0, "rgba(255,240,180," + (0.65 * (1 - k)).toFixed(3) + ")"); g.addColorStop(1, "rgba(255,240,180,0)");
+          ctx.fillStyle = g; ctx.fillRect(X - cp, Y - cp * 1.2, w + cp * 2, cp * 2.4);
+        }
+        ctx.restore();
+      }
+    }
+    /** The launch bay: an abort key on its pedestal (red until it's turned, then green), and Steven's
+        lift lever (amber until someone reaches it). */
+    drawSiloControl(c, cp, ox, oy) {
+      const ctx = this.ctx, X = ox + c.x * cp, Y = oy + c.y * cp;
+      ctx.save();
+      if (c.hidden) ctx.globalAlpha = 0.5;
+      ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = cp * 0.12;
+      if (c.kind === "abort") {
+        ctx.fillStyle = "#2f3236"; ctx.fillRect(X + cp * 0.16, Y + cp * 0.16, cp * 0.68, cp * 0.68); ctx.shadowBlur = 0;
+        ctx.fillStyle = "#e0a822"; ctx.fillRect(X + cp * 0.16, Y + cp * 0.16, cp * 0.68, cp * 0.1);
+        const col = c.opened ? "#5fdc7a" : "#ff3b30";
+        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = cp * 0.45;
+        ctx.beginPath(); ctx.arc(X + cp * 0.5, Y + cp * 0.55, cp * 0.17, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#e9ecef"; ctx.lineWidth = cp * 0.07; ctx.beginPath(); // the key, upright, or turned flat once it's done
+        const a = c.opened ? 0 : -Math.PI / 2;
+        ctx.moveTo(X + cp * 0.5, Y + cp * 0.55); ctx.lineTo(X + cp * (0.5 + Math.cos(a) * 0.2), Y + cp * (0.55 + Math.sin(a) * 0.2)); ctx.stroke();
+      } else {
+        ctx.fillStyle = "#3a3d42"; ctx.fillRect(X + cp * 0.3, Y + cp * 0.12, cp * 0.4, cp * 0.76); ctx.shadowBlur = 0;
+        const col = c.opened ? "#7d8288" : "#ff9f1a";
+        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = c.opened ? 0 : cp * 0.4;
+        ctx.fillRect(X + cp * 0.42, Y + cp * 0.22, cp * 0.16, cp * 0.3); ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#c9ced4"; ctx.lineWidth = cp * 0.06; ctx.beginPath();
+        ctx.moveTo(X + cp * 0.5, Y + cp * 0.7); ctx.lineTo(X + cp * (c.opened ? 0.72 : 0.5), Y + cp * (c.opened ? 0.58 : 0.5)); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    /** Loose papers: a few sheets scattered on the floor, read ones a little greyed. */
+    drawPapers(c, cp, ox, oy) {
+      const ctx = this.ctx, cx = ox + c.x * cp + cp / 2, cy = oy + c.y * cp + cp / 2;
+      ctx.save();
+      if (c.hidden) ctx.globalAlpha = 0.5;
+      if (c.opened) ctx.globalAlpha *= 0.65;
+      [[-0.14, -0.08, -0.35], [0.12, 0.06, 0.28], [0, 0.02, 0.05]].forEach(([dx, dy, rot], i) => {
+        ctx.save();
+        ctx.translate(cx + dx * cp, cy + dy * cp); ctx.rotate(rot + (hash(c.x + i, c.y) - 0.5) * 0.3);
+        const w = cp * 0.38, hh = cp * 0.5;
+        ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = cp * 0.08; ctx.shadowOffsetY = cp * 0.03;
+        ctx.fillStyle = i === 2 ? "#f3ecd8" : "#ddd5bf"; ctx.fillRect(-w / 2, -hh / 2, w, hh);
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = "rgba(40,40,60,.55)";
+        for (let k = 0; k < 4; k++) ctx.fillRect(-w * 0.36, -hh * 0.32 + k * hh * 0.17, w * (k === 3 ? 0.4 : 0.72), cp * 0.022);
+        ctx.restore();
+      });
+      if (!c.opened) { // a faint glint so they're noticed
+        ctx.fillStyle = "#ffe9a8"; ctx.shadowColor = "#ffe9a8"; ctx.shadowBlur = cp * 0.25;
+        ctx.beginPath(); ctx.arc(cx + cp * 0.3, cy - cp * 0.28, cp * 0.04, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+    chestAt(px, py) {
+      const [cx, cy] = this.toCell(px, py), list = (this.map && this.map.chests) || [];
+      return list.find((c) => Math.floor(cx) === c.x && Math.floor(cy) === c.y) || null;
+    }
+    /** A chest that just opened plays its lid animation (and sound) on every screen showing it. */
+    noticeChests(prev, next) {
+      if (!prev || prev.id !== next.id) return;
+      const was = new Map((prev.chests || []).map((c) => [c.id, c]));
+      this.chestAnim = this.chestAnim || new Map();
+      for (const c of next.chests || []) {
+        const p = was.get(c.id);
+        if (p && !p.opened && c.opened) {
+          this.chestAnim.set(c.id, performance.now());
+          this.layerDirty = true;
+          this.addFx({ type: "word", x: c.x + 0.5, y: c.y, text: "Opened!", color: "#ffd36b", ms: 1500 });
+          if (window.FX) FX.sound("chest");
+        } else if (!p && c.kind === "drop") {
+          this.addFx({ type: "word", x: c.x + 0.5, y: c.y, text: "Loot!", color: "#e6eaee", ms: 1400 });
+          if (window.FX) FX.sound("drop");
+        }
+      }
+      if (this.chestAnim.size) this.addFx({ type: "chest", ms: 750 }); // keeps the animation loop running while the lid lifts
     }
     // An area attack being aimed: the dotted range ring around the attacker, then the area itself.
     drawAim(cp, ox, oy) {
@@ -657,6 +1208,8 @@
       const color = t.color || KIND_COLOR[t.kind] || "#888";
       ctx.save();
       if (t.hidden || t.combatant_hidden) ctx.globalAlpha = 0.55;
+      const winged = starWinged(t);
+      if (winged) drawSteelWings(ctx, cx, cy, r);
       ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = cp * 0.12; ctx.shadowOffsetY = cp * 0.04;
       if (t.is_current) { ctx.beginPath(); ctx.arc(cx, cy, r + cp * 0.12, 0, Math.PI * 2); ctx.fillStyle = "#e0714f"; ctx.fill(); }
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -671,6 +1224,7 @@
         ctx.font = `700 ${r * 0.8}px 'Alegreya SC', serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(initials(t.display), cx, cy + r * 0.05);
       }
+      if (winged) drawChestStar(ctx, cx, cy + r * 0.5, r * 0.26);
       ctx.lineWidth = cp * 0.05;
       ctx.strokeStyle = this.selectedId === t.id ? "#f3d58a" : "rgba(0,0,0,.6)";
       if (t.hidden || t.combatant_hidden) ctx.setLineDash([cp * 0.12, cp * 0.08]);
@@ -768,6 +1322,14 @@
       const ctx = this.ctx, big = f.how === "crit" ? 1.5 : 1, miss = f.how === "miss" || f.how === "saved";
       const P = (pt) => [ox + pt[0] * cp, oy + pt[1] * cp];
       const [tx, ty] = f.to ? P(f.to) : P(f.from);
+      if (f.style === "laser" && f.from && f.to) { // a beam, there at once, then fading; a miss goes wide
+        const [fx, fy] = P(f.from), ex = miss ? tx + cp * 0.9 : tx, ey = miss ? ty - cp * 0.7 : ty, fade = k < 0.25 ? 1 : Math.max(0, (1 - k) / 0.75);
+        ctx.globalAlpha = fade; ctx.lineCap = "round"; ctx.shadowColor = f.color; ctx.shadowBlur = cp * 0.6;
+        ctx.strokeStyle = f.color; ctx.lineWidth = cp * 0.16 * big; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = cp * 0.05 * big; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(ex, ey); ctx.stroke();
+        if (!miss) { ctx.fillStyle = "#ffd0c8"; ctx.beginPath(); ctx.arc(tx, ty, cp * 0.3 * big * (1 - k * 0.5), 0, Math.PI * 2); ctx.fill(); }
+        return;
+      }
       const fly = ["arrow", "fire", "ice", "lightning", "poison", "arcane"].includes(f.style) && f.from && f.to;
       const travel = fly ? 0.38 : 0;
       if (fly && k < travel) { // the shot on its way
@@ -905,6 +1467,8 @@
             const canMove = this.opts.canMove ? this.opts.canMove(t) : true;
             if (canMove) { const [cx, cy] = this.toCell(...p); this.drag = { token: t, grab: [cx - t.x, cy - t.y], at: [t.x, t.y], moved: false }; this.draw(); return; }
           } else {
+            const ch = this.opts.onChest ? this.chestAt(...p) : null; // a tap on a chest opens its panel (dragging still pans)
+            if (ch) { this.opts.onChest(ch); this.drag = { pan: true, start: p, view0: { ...this.view } }; this.draw(); return; }
             const sh = this.shapeAt(...p);
             if (sh) {
               this.selectedShape = sh.id;
@@ -924,9 +1488,12 @@
           this.ping(...p);
         } else if (tool === "aim" && this.aim) {
           const [cx, cy] = this.toCell(...p), s = this.aim.shape, per = this.map.scale_value || 5;
-          if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy); // it stays on the caster and turns to face the click
+          // a line with a range (Steven Voss's steel wall): press where it starts, inside the ring, then drag to point it
+          const anchor = s.kind === "line" && this.aim.range > 0;
+          if (anchor) { const [x, y] = this.clampAim(Math.floor(cx) + 0.5, Math.floor(cy) + 0.5); s.x = x; s.y = y; }
+          else if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy); // it stays on the caster and turns to face the click
           else { const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, per)); s.x = x; s.y = y; }
-          this.drag = { aim: true };
+          this.drag = { aim: true, anchor };
           this.draw();
         } else if (tool === "area") {
           const [cx, cy] = this.toCell(...p), a = this.areaSpec, per = this.map.scale_value || 5;
@@ -976,7 +1543,8 @@
           d.at = [nx, ny];
         } else if (d.aim && this.aim) {
           const [cx, cy] = this.toCell(...p), s = this.aim.shape;
-          if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy);
+          if (d.anchor) { if (Math.hypot(cx - s.x, cy - s.y) > 0.3) s.dir = Math.round(Math.atan2(cy - s.y, cx - s.x) * 180 / Math.PI / 5) * 5; }
+          else if (s.kind === "cone" || s.kind === "line") this.pointAim(cx, cy);
           else {
             const [x, y] = this.clampAim(...snapOrigin(s.kind, cx, cy, s.size, this.map.scale_value || 5)); s.x = x; s.y = y;
           }

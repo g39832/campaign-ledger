@@ -109,6 +109,23 @@
         <div><b>Hit dice</b></div><div class="desc">Spend hit dice to heal on a short rest (rolls the die + Constitution).</div>
         <div class="ctl"><label class="check"><input type="checkbox" data-set="players.hit_dice"> Allowed</label></div>
       </div>
+      <div class="setting">
+        <div><b>Free roam</b></div><div class="desc">Outside a fight, heroes walk the map one square at a time: an arrow pad on phones and tablets, the arrow keys (or W A S D) on a laptop, or dragging one square. In a fight they move on their turn as far as their speed, as always.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="players.free_roam"> On</label></div>
+      </div>
+    </section>
+
+    <section class="section" id="loot-rules">
+      <h2 class="rule-head">Chests, loot and enemies</h2>
+      <p class="faint" style="font-size:.9rem">For chests on the battle map (the Abandoned prison has them already; you can put one on any map).</p>
+      <div class="setting">
+        <div><b>Magic items in chests</b></div><div class="desc">Better chests (weapons crates and up) can hold a random magic item from your 500-item list by themselves. Off: only the ones you put in with “Add a magic item”.</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="loot.magic_items"> On</label></div>
+      </div>
+      <div class="setting">
+        <div><b>Enemies act on their own</b></div><div class="desc">In a fight on a battle map, an enemy moves and attacks by itself when its turn comes, then hands the turn on. Off: tap “Let it act” on its turn (or run it yourself).</div>
+        <div class="ctl"><label class="check"><input type="checkbox" data-set="loot.auto_act"> On</label></div>
+      </div>
     </section>
     {% endif %}
   </div>
@@ -170,5 +187,5 @@
 })();
 </script>
 <script>window.CAMPAIGN_ID = {{ campaign.id if campaign else "null" }};</script>
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=140"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=171"></script>
 {% endblock %}

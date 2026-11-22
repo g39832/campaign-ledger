@@ -107,6 +107,7 @@ def test_players_cant_walk_into_or_through_rock_or_move_while_grappled(api, batt
     mid, camp, pa = battlemap["mid"], battlemap["camp"], battlemap["pa"]
     api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
     me = tok(api.get(f"/api/maps/{mid}"), "Aria")
+    api.patch(f"/api/campaigns/{camp['id']}", {"changes": {"settings": {"to": {"players": {"free_roam": False}}}}})  # the old free drag (Free roam off)
     api.post(f"/api/tokens/{me['id']}/move", {"x": 0, "y": 0})
     api.post(f"/api/maps/{mid}/terrain", {"cells": [[2, 0], [2, 1], [2, 2]], "value": "rock"})
     r = pa.post(f"/api/play/tokens/{me['id']}/move", {"x": 2, "y": 0}, 403)

@@ -29,7 +29,7 @@ from . import fields as F
 from . import spell_book
 from .auth import current_identity
 from .db import claim_op, get_db, now_iso, tx
-from .rules import (ABILITIES, ABILITY_NAMES, ability_mod, active_effects, attack_mode, damage_multiplier, derived, effect_mult,
+from .rules import (ABILITIES, ABILITY_NAMES, ability_mod, active_effects, attack_mode, attack_mods, damage_multiplier, derived, effect_mult,
                     roll_mods, save_mode, spell_expression, spell_helps, spell_info, spell_lasts, with_mods)
 
 bp = Blueprint("spells", __name__, url_prefix="/api")
@@ -194,10 +194,15 @@ def spell_from(ctx, caster, data):
             row = spells[int(raw)]
         except IndexError:
             raise F.ApiError("That spell isn't on the sheet any more — the sheet may have changed")
-        return spell_info(row), extra
+        sp = spell_info(row)
+        sp["row_index"] = int(raw)
+        if sp["dc"]:  # its own DC (a magic item): no spellcasting ability needed
+            extra["dc"] = sp["dc"]
+        return sp, extra
     if isinstance(raw, dict):
         spec = {k: v for k, v in raw.items() if v not in (None, "")}
-        base = dict(spell_book.find(spec.get("name")) or {})
+        # a drone's echo or copy is already the whole spell: the book mustn't fill its blanks back in
+        base = {} if spec.get("copied") or spec.get("relayed") else dict(spell_book.find(spec.get("name")) or {})
         base.update(spec)
         if "attack_bonus" in spec:
             try:
@@ -269,6 +274,9 @@ def effect_for(ctx, sp, caster, cast_id, nums, slot):
             cond[k] = resolve(sp[k], nums["mod"], sp["name"])
     if sp["adv"]:
         cond["adv"] = sp["adv"]
+    if sp.get("resist_all"):
+        cond["resist_all"] = True
+        cond["note"] = (cond["note"] + " · " if cond["note"] else "") + "resistance to all damage except psychic (half damage)"
     if sp.get("death_ward"):
         cond["death_ward"] = True
         cond["note"] = (cond["note"] + " · " if cond["note"] else "") + "the first time they'd drop to 0 HP, they drop to 1 instead"
@@ -395,13 +403,16 @@ def summon(ctx, caster, sp, at=None):
     if sp.get("on_death"):
         statblock["on_death"] = dict(sp["on_death"], name=sp["on_death"].get("name") or sp["name"])
     statblock.update(ac=ac, max_hp=hp, from_spell=sp["name"])
+    if sp.get("relay"):
+        statblock["relay"] = True  # Steven Voss's drones: echo his spells, copy spells cast near them (app/relay.py)
+    side = "enemy" if caster["kind"] == "enemy" else "npc"  # a boss's summons fight on the boss's side
     names = _instance_names(ctx, cr["name"], min(sp["summon_count"], limit - len(standing)))
     new_ids = []
     for n in names:
         cur = ctx.conn.execute(
             """INSERT INTO combatants (uid, encounter_id, creature_id, kind, name, init_mod, init_roll, sort_order, max_hp,
-               current_hp, ac, statblock, created_at) VALUES (?, ?, ?, 'npc', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (uuid.uuid4().hex, ctx.enc["id"], cr["id"], n, cr["initiative_mod"], caster["init_roll"], _next_sort(ctx),
+               current_hp, ac, statblock, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (uuid.uuid4().hex, ctx.enc["id"], cr["id"], side, n, cr["initiative_mod"], caster["init_roll"], _next_sort(ctx),
              hp, hp, ac, json.dumps(statblock), now_iso()))
         new_ids.append(cur.lastrowid)
     _resort(ctx)
@@ -422,12 +433,15 @@ def summon(ctx, caster, sp, at=None):
             spots = _open_spots(md, taken, me["x"], me["y"], len(new_ids))
         for cid, (x, y) in zip(new_ids, spots):
             ctx.conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
-                             "VALUES (?,?,'npc',?,?,?,1,0,?,?)", (uuid.uuid4().hex, m["id"], cid, x, y, now_iso(), now_iso()))
+                             "VALUES (?,?,?,?,?,?,1,0,?,?)", (uuid.uuid4().hex, m["id"], side, cid, x, y, now_iso(), now_iso()))
         _bump(ctx.conn, m["id"])
     return f"{', '.join(names)} {'appears' if len(names) == 1 else 'appear'} and will act right after {caster['name']}"
 
 
-def change_ground(ctx, sp, data):
+STEEL_WALLS = 2  # Metal Bend: walls standing at once; a new one pulls the oldest back into the floor (that's how he moves them)
+
+
+def change_ground(ctx, sp, data, caster=None):
     """Mend Earth and the like: raise solid rock over the squares it covers (not under
     anyone standing there), or mend broken ground back to plain earth. Returns a line for the log."""
     from .maps import MENDABLE, _bump, _cells, map_dict
@@ -437,6 +451,8 @@ def change_ground(ctx, sp, data):
     m = map_dict(row)
     cells = _cells(data, m)
     terrain, changed = m["terrain"], 0
+    if sp["terrain"] == "steel":
+        return steel_wall(ctx, m, cells, caster)
     if sp["terrain"] == "rock":
         taken = set()
         for t in ctx.conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ? AND kind NOT IN ('marker', 'trap')", (m["id"],)):
@@ -459,6 +475,55 @@ def change_ground(ctx, sp, data):
     ctx.conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (json.dumps(terrain), m["id"]))
     _bump(ctx.conn, m["id"])
     return what
+
+
+def steel_wall(ctx, m, cells, caster):
+    """Metal Bend (Steven Voss): a straight steel wall rises over the squares (not under anyone).
+    He keeps up to STEEL_WALLS standing; casting it again folds the oldest back down, so he moves
+    his walls around the fight by bending new ones. The squares under a wall come back as they were."""
+    from .maps import SOLID, _bump
+    terrain = m["terrain"]
+    taken = set()
+    for t in ctx.conn.execute("SELECT x, y, size FROM map_tokens WHERE map_id = ? AND kind NOT IN ('marker', 'trap')", (m["id"],)):
+        for dx in range(t["size"]):
+            for dy in range(t["size"]):
+                taken.add(f"{int(round(t['x'])) + dx},{int(round(t['y'])) + dy}")
+    sb = dict(caster["statblock"] or {}) if caster and not caster["linked"] else {}
+    walls = [w for w in (sb.get("walls") or []) if isinstance(w, dict)]
+    gone = 0
+    while len(walls) >= STEEL_WALLS:
+        old = walls.pop(0)
+        orow = ctx.conn.execute("SELECT * FROM maps WHERE id = ?", (old.get("map"),)).fetchone()
+        if orow is None:
+            continue
+        oterr = terrain if orow["id"] == m["id"] else json.loads(orow["terrain"] or "{}")
+        for k, was in (old.get("cells") or {}).items():
+            if oterr.get(k) == "bulkhead":
+                if was:
+                    oterr[k] = was
+                else:
+                    oterr.pop(k, None)
+                gone += 1
+        if orow["id"] != m["id"]:
+            ctx.conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (json.dumps(oterr), orow["id"]))
+            _bump(ctx.conn, orow["id"])
+    made = {}
+    for x, y in cells:
+        k = f"{x},{y}"
+        if k in taken or terrain.get(k) in SOLID:
+            continue
+        made[k] = terrain.get(k) or ""
+        terrain[k] = "bulkhead"
+    if made:
+        walls.append({"map": m["id"], "cells": made})
+    if caster and not caster["linked"]:
+        sb["walls"] = walls
+        ctx.conn.execute("UPDATE combatants SET statblock = ? WHERE id = ?", (json.dumps(sb), caster["id"]))
+    ctx.conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (json.dumps(terrain), m["id"]))
+    _bump(ctx.conn, m["id"])
+    n = len(made)
+    return (f"bends a steel wall up out of the ground ({n} square{'s' if n != 1 else ''})"
+            + (" and folds his oldest wall back down" if gone else ""))
 
 
 def concentration_check(ctx, c, damage):
@@ -521,7 +586,7 @@ def on_turn(ctx, cid, phase):
             ctx.log("spell", f"{src}: {c['name']} " + {"damage": f"takes {amount}{' ' + on['type'] if on.get('type') else ''} damage",
                                                          "heal": f"regains {amount} HP", "temp": f"gets {amount} temp HP"}[on["kind"]]
                     + why + " at the start of their turn")
-            apply_hp(ctx, cid, {"op": on["kind"] if on["kind"] != "damage" else "damage", "amount": amount}, src)
+            apply_hp(ctx, cid, {"op": on["kind"] if on["kind"] != "damage" else "damage", "amount": amount, "type": on.get("type") or ""}, src)
         if phase == "end" and isinstance(cond.get("save"), dict):
             c = ctx.combatant(cid)
             if not any(x.get("id") == cond["id"] for x in c["conditions"]):
@@ -547,6 +612,12 @@ def cast(ctx, caster_id, data, viewer=None):
     if not isinstance(targets, list) or len(targets) > 50 or not all(isinstance(t, int) and not isinstance(t, bool) for t in targets):
         raise F.ApiError("Choose who the spell is cast on")
     targets = list(dict.fromkeys(targets))
+    if sp.get("rewind"):
+        raise F.ApiError(f"{sp['name']} is used with its own button, right after a creature ends its turn")
+    if sp.get("clone_swap"):
+        raise F.ApiError(f"{sp['name']} is used from the player's screen (pick a clone), or drag the tokens on the map")
+    if sp.get("technique"):
+        raise F.ApiError(f"{sp['name']} is a technique: use it from the Techniques panel")
     if not sp["kind"]:
         raise F.ApiError(f"{sp['name']} is only notes — set what it does (damage, healing, buff or debuff) on the Spells tab")
     if sp["zone"]:
@@ -569,6 +640,22 @@ def cast(ctx, caster_id, data, viewer=None):
         raise F.ApiError(f"Pick who {sp['name']} is cast on")
     if sp["targets"] and len(targets) > sp["targets"]:
         raise F.ApiError(f"{sp['name']} reaches at most {sp['targets']} {'creature' if sp['targets'] == 1 else 'creatures'}")
+    from . import relay
+    echoing = bool(data.get("echo"))
+    relay.use_copied(ctx, caster, data)  # a spell a drone copied: cast back once
+    legendary = bool(data.get("legendary")) and not echoing
+    if legendary:  # a boss casting it as a legendary action (Steven Voss: a spell his drones copied)
+        from .combat import spend_legendary
+        spend_legendary(ctx, caster, sp["name"])
+    # in beast form only her real spells are off: a beast attack that leaves a condition (Bite: Prone)
+    # is sent here as a move ({..., move: true}) and must still work
+    beast_move = isinstance(data.get("spell"), dict) and data["spell"].get("move")
+    if caster["linked"] and not data.get("force") and not beast_move:
+        from .wildshape import is_shifted
+        if is_shifted(ctx.conn, caster["character_id"]):
+            raise F.ApiError(f"{caster['name']} can't cast spells in beast form — change her back first")
+    if sp["per_rest"] and sp["used"] and not data.get("force"):
+        raise F.ApiError(f"{sp['name']} has been used — it's back after a long rest")
     if (sp["cooldown"] or sp["per_fight"]) and not data.get("force"):
         from .rules import cooldown_left
         left = cooldown_left(caster["conditions"], sp["name"], ctx.enc["id"])
@@ -593,7 +680,7 @@ def cast(ctx, caster_id, data, viewer=None):
     slot, spent = spend_slot(ctx, caster, sp, data.get("slot"), bool(data.get("free")))
     cast_id = uuid.uuid4().hex[:12]
     roller = Roller(ctx, viewer)
-    if sp["concentration"]:
+    if sp["concentration"] and not echoing:
         start_concentration(ctx, caster, sp, cast_id)
 
     def amount_expr(text):
@@ -623,7 +710,7 @@ def cast(ctx, caster_id, data, viewer=None):
     one_roll = lands == "attack" and bool(sp["area"]) and len(people) > 1
     swing = swing_dmg = None
     if one_roll:
-        mods = roll_mods(caster["conditions"])
+        mods = attack_mods(caster["conditions"])
         swing = roller.roll(with_mods("1d20" + _signed(attack_bonus), mods), sp["name"], mode=attack_mode(caster["conditions"], [], melee)[0])
         roller.keep(swing, f"{sp['name']} attack (everyone in it)", "attack", caster,
                     "Natural 20 — hits them all!" if swing["natural"] == 20 else "Natural 1 — misses them all" if swing["natural"] == 1 else f"{swing['total']} to hit")
@@ -644,7 +731,7 @@ def cast(ctx, caster_id, data, viewer=None):
             res.update(how="crit" if crit else "hit" if landed else "miss", roll=swing["total"], vs=t["ac"])
         elif lands == "attack":
             mode, why = attack_mode(caster["conditions"], t["conditions"], melee)
-            mods = roll_mods(caster["conditions"])
+            mods = attack_mods(caster["conditions"])
             r = roller.roll(with_mods("1d20" + _signed(attack_bonus), mods), sp["name"], mode=mode)
             nat = r["natural"]
             crit = nat == 20
@@ -688,7 +775,7 @@ def cast(ctx, caster_id, data, viewer=None):
                 mult, word = damage_multiplier(t["statblock"], sp["damage_type"])
                 if mult != 1:
                     amount, note = int(amount * mult), f", {word} {sp['damage_type']}"
-            apply_hp(ctx, t["id"], {"op": "damage", "amount": amount}, by)
+            apply_hp(ctx, t["id"], {"op": "damage", "amount": amount, "type": sp["damage_type"]}, by)
             res["amount"] = amount
             parts.append(f"{amount}{' ' + sp['damage_type'] if sp['damage_type'] else ''} damage" + (" (half)" if half else "") + note)
         if sp["kind"] == "heal" and shared is not None:
@@ -723,11 +810,35 @@ def cast(ctx, caster_id, data, viewer=None):
     if sp["zone"]:
         lines.insert(0, raise_zone(ctx, caster, sp, cast_id, [r["id"] for r in results], nums, slot) + ("" if results else " — no enemies in it right now"))
     if sp["terrain"]:
-        lines.insert(0, change_ground(ctx, sp, data))
+        lines.insert(0, change_ground(ctx, sp, data, caster))
     if sp["summon"]:
         lines.insert(0, summon(ctx, caster, sp, data.get("at")))
+    # relay drones: the caster's own drones cast it again; someone else's drones nearby copy it
+    own = list(results)  # the caster's own hits (the map draws the drones' from the drones)
+    echoes = relay.echo(ctx, caster, sp, data, nums, results, viewer)
+    for e in echoes:
+        lines.append(f"{e['caster']} echoes it — " + ("; ".join(t["text"] for t in e["targets"]) or "no one in reach"))
+        results.extend(dict(t, text=f"{e['caster']}: {t['text']}", echo=True) for t in e["targets"])
+        roller.ids.extend(e["rolls"])
+    lines.extend(relay.record_copies(ctx, caster, sp, data, [r["id"] for r in results]))
+    if echoing:
+        from .maps import attack_fx
+        attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
+                  "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"], None,
+                  str(data["spell"].get("look") or "") if isinstance(data.get("spell"), dict) else "")
+        ctx.log("spell", f"{caster['name']} echoes {sp['name']}: " + "; ".join(lines))
+        return {"cast_id": cast_id, "spell": sp["name"], "caster": caster["name"], "targets": results, "rolls": roller.ids,
+                "summary": "; ".join(lines)}
     from .combat import used_a_move
-    used_a_move(ctx, caster["id"], sp["name"])
+    if not legendary and not data.get("_no_action"):  # a legendary action isn't one of its own actions
+        used_a_move(ctx, caster["id"], sp["name"])  # (_no_action: a technique spends its one action itself)
+    if sp["per_rest"] and caster["linked"] and sp.get("row_index") is not None:
+        ch = _char(ctx.conn, caster["character_id"])
+        rows = list(ch.get("spells") or [])
+        if sp["row_index"] < len(rows) and isinstance(rows[sp["row_index"]], dict):
+            spent = min(sp["rest_uses"], sp["spent"] + 1)  # 2 a day: the second use marks it used
+            rows[sp["row_index"]] = dict(rows[sp["row_index"]], used=spent >= sp["rest_uses"], spent=spent)
+            ctx.conn.execute("UPDATE characters SET spells = ?, updated_at = ? WHERE id = ?", (json.dumps(rows), now_iso(), caster["character_id"]))
     if sp["per_fight"]:
         from .combat import ONCE_PER_FIGHT
         start_cooldown(ctx, caster["id"], sp["name"], ONCE_PER_FIGHT)
@@ -739,7 +850,7 @@ def cast(ctx, caster_id, data, viewer=None):
     head = f"{caster['name']} {'uses' if move else 'casts'} {sp['name']}{slot_word}" + (" (concentration)" if sp["concentration"] else "")
     ctx.log("spell", head + (": " + "; ".join(lines) if lines else ""))
     from .maps import attack_fx
-    attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in results], sp["name"],
+    attack_fx(ctx.conn, ctx.enc["id"], caster["id"], [(r["id"], r["how"]) for r in own], sp["name"],
               "heal" if sp["kind"] == "heal" else "buff" if helps else sp["kind"], sp["damage_type"], sp["area"] if not sp["zone"] else None,
               str(data["spell"].get("look") or "") if isinstance(data.get("spell"), dict) else "")
     return {"cast_id": cast_id, "spell": sp["name"], "kind": sp["kind"], "caster": caster["name"], "slot": slot if sp["level"] else 0,
@@ -816,7 +927,7 @@ def zone_entries(ctx):
                     amount = max(0, r["total"]) // (2 if half else 1)
                     word = ((info.get("type") or "") + " damage").strip()
                     roller.keep(r, f"{z['name']} — {word}", "damage", owner, f"{amount} {word} to {t['name']}")
-                    apply_hp(ctx, t["id"], {"op": "damage", "amount": amount}, f"{z['name']}, {owner['name']}")
+                    apply_hp(ctx, t["id"], {"op": "damage", "amount": amount, "type": info.get("type") or ""}, f"{z['name']}, {owner['name']}")
                     text += f", {amount} {word}" + (" (half)" if half else "")
                 lines.append(text)
                 hows.append((t["id"], "failed" if landed else "saved"))
@@ -843,7 +954,7 @@ def snapshot(ctx):
     conn, eid = ctx.conn, ctx.enc["id"]
     cbs = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, moved, sort_order, character_id, boss_state, reaction, statblock "
                                          "FROM combatants WHERE encounter_id = ?", (eid,))]
-    chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots "
+    chars = [dict(r) for r in conn.execute("SELECT id, current_hp, max_hp, temp_hp, status, conditions, death_successes, death_failures, spell_slots, spells "
                                            "FROM characters WHERE id IN (SELECT character_id FROM combatants WHERE encounter_id = ? AND character_id IS NOT NULL)", (eid,))]
     maps = [dict(r) for r in conn.execute("SELECT id, terrain FROM maps WHERE encounter_id = ?", (eid,))]
     toks = [dict(r) for r in conn.execute("SELECT t.id, t.x, t.y FROM map_tokens t JOIN maps m ON m.id = t.map_id WHERE m.encounter_id = ?", (eid,))]
@@ -853,6 +964,23 @@ def snapshot(ctx):
             "tok": one("SELECT MAX(t.id) FROM map_tokens t JOIN maps m ON m.id = t.map_id WHERE m.encounter_id = ?"),
             "hp": one("SELECT MAX(id) FROM hp_changes WHERE encounter_id = ?"),
             "log": one("SELECT MAX(id) FROM combat_log WHERE encounter_id = ?")}
+
+
+def _restore_used(conn, char_id, before):
+    try:
+        old = json.loads(before or "[]")
+    except ValueError:
+        return
+    row = conn.execute("SELECT spells FROM characters WHERE id = ?", (char_id,)).fetchone()
+    now = json.loads(row["spells"] or "[]") if row else []
+    changed = False
+    for i, s in enumerate(now):
+        if (isinstance(s, dict) and i < len(old) and isinstance(old[i], dict) and old[i].get("name") == s.get("name")
+                and (bool(old[i].get("used")) != bool(s.get("used")) or (old[i].get("spent") or 0) != (s.get("spent") or 0))):
+            now[i] = dict(s, used=bool(old[i].get("used")), spent=int(old[i].get("spent") or 0))
+            changed = True
+    if changed:
+        conn.execute("UPDATE characters SET spells = ? WHERE id = ?", (json.dumps(now), char_id))
 
 
 def remember(ctx, cast_id, snap, out, caster_id, player_id=None):
@@ -919,8 +1047,8 @@ def take_back(ctx, cast_id, by_name, player_id=None, char_id=None):
     return rec["spell"]
 
 
-def restore(ctx, snap):
-    """Put the fight back exactly as the snapshot had it."""
+def restore(ctx, snap, keep_log=False):
+    """Put the fight back exactly as the snapshot had it (keep_log: the log keeps what happened since)."""
     conn, eid = ctx.conn, ctx.enc["id"]
     keep = {c["id"] for c in snap["cbs"]}
     gone = [r["id"] for r in conn.execute("SELECT id FROM combatants WHERE encounter_id = ?", (eid,)) if r["id"] not in keep]
@@ -939,6 +1067,8 @@ def restore(ctx, snap):
                      "death_failures = ?, spell_slots = ?, updated_at = ? WHERE id = ?",
                      (ch["current_hp"], ch["max_hp"], ch["temp_hp"], ch["status"], ch["conditions"], ch["death_successes"],
                       ch["death_failures"], ch["spell_slots"], now_iso(), ch["id"]))
+        if "spells" in ch:  # a once-a-rest item used by the cast is ready again (only its used mark goes back)
+            _restore_used(conn, ch["id"], ch["spells"])
     from .maps import _bump
     for m in snap["maps"]:
         conn.execute("UPDATE maps SET terrain = ? WHERE id = ?", (m["terrain"], m["id"]))
@@ -951,7 +1081,8 @@ def restore(ctx, snap):
         conn.execute("UPDATE encounters SET round = ?, current_id = ?, status = ? WHERE id = ?", (e["round"], e["current_id"], e["status"], eid))
         ctx.enc.update(e)
     conn.execute("DELETE FROM hp_changes WHERE encounter_id = ? AND id > ?", (eid, snap["hp"]))
-    conn.execute("DELETE FROM combat_log WHERE encounter_id = ? AND id > ?", (eid, snap["log"]))
+    if not keep_log:
+        conn.execute("DELETE FROM combat_log WHERE encounter_id = ? AND id > ?", (eid, snap["log"]))
 
 
 # ---- Undo last action (the DM): every change in a fight keeps the state from just before it
@@ -1025,6 +1156,7 @@ def api_cast(eid):
     from .combat import Ctx, encounter_state
     viewer = current_identity()
     data = request.get_json(silent=True) or {}
+    data.pop("_no_action", None)  # only the server's own techniques skip the action
     if data.get("caster_id") is None:
         raise F.ApiError("Who is casting?")
     out = {}

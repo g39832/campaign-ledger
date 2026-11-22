@@ -188,7 +188,7 @@ def build_check(conn, check):
 def with_effects(conn, ids, check_type, expr, label, mode):
     """What the roller's effects add: Bless +1d4 / Bane -1d4 on attacks and saves,
     Divine Favor on damage, and disadvantage on attacks while poisoned, frightened..."""
-    from .rules import attack_mode, roll_mods, save_mode, with_mods
+    from .rules import attack_mode, attack_mods, roll_mods, save_mode, with_mods
     if check_type not in ("attack", "spell_attack", "save", "damage", "spell"):
         return expr, label, mode
     if ids.get("character_id"):
@@ -200,8 +200,10 @@ def with_effects(conn, ids, check_type, expr, label, mode):
     conds = json.loads(row["conditions"] or "[]") if row else []
     if check_type in ("damage", "spell"):
         mods = roll_mods(conds, "dmg_mod") if check_type == "damage" else []
-    else:
+    elif check_type == "save":
         mods = roll_mods(conds)
+    else:
+        mods = attack_mods(conds)
     if mods and len(with_mods(expr, mods)) <= dice.MAX_LENGTH:
         expr = with_mods(expr, mods)
         label = f"{label} ({', '.join(f'{n} {m}' for m, n in mods)})"

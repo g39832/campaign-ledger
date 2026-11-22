@@ -18,9 +18,10 @@ def speed_ft(conn, char_id):
         return DEFAULT_SPEED
     m = re.search(r"\d+", str(row["speed"] or ""))
     base = int(m.group()) if m else DEFAULT_SPEED
-    mult = max([float(x.get("speed_mult") or 1) for x in json.loads(row["conditions"] or "[]")
-                if isinstance(x, dict) and not x.get("expired")] or [1])
-    return int(base * max(mult, 1))
+    conds = [x for x in json.loads(row["conditions"] or "[]") if isinstance(x, dict) and not x.get("expired")]
+    mult = max([float(x.get("speed_mult") or 1) for x in conds] or [1])
+    slow = 2 if any(x.get("slowed") for x in conds) else 1  # Slowed (Phantom Blade): half speed
+    return int(base * max(mult, 1)) // slow
 
 
 def ft_per_square(md):
@@ -34,7 +35,8 @@ def step_ft(md, x0, y0, x1, y1):
 
 
 def _row(conn, cb_id):
-    return conn.execute("SELECT cb.id AS cb_id, cb.name, cb.moved, cb.conditions, cb.statblock, cb.character_id, e.id AS eid, e.status, e.current_id, e.round "
+    return conn.execute("SELECT cb.id AS cb_id, cb.name, cb.moved, cb.conditions, cb.statblock, cb.character_id, cb.current_hp, cb.max_hp, "
+                        "e.id AS eid, e.status, e.current_id, e.round "
                         "FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id WHERE cb.id = ?", (cb_id,)).fetchone()
 
 
@@ -59,9 +61,26 @@ def monster_speed(row):
         sb = {}
     m = re.search(r"\d+", str(sb.get("speed") or ""))
     base = int(m.group()) if m else DEFAULT_SPEED
-    mult = max([float(x.get("speed_mult") or 1) for x in json.loads(row["conditions"] or "[]")
-                if isinstance(x, dict) and not x.get("expired")] or [1])
-    return int(base * max(mult, 1))
+    p2 = PHASE2_SPEED.search(str(sb.get("speed") or ""))
+    if p2 and in_phase2(row, sb):
+        base = int(p2.group(1))  # "30 ft. (90 ft. in phase 2)": Steven Voss on his steel wings
+    conds = [x for x in json.loads(row["conditions"] or "[]") if isinstance(x, dict) and not x.get("expired")]
+    mult = max([float(x.get("speed_mult") or 1) for x in conds] or [1])
+    slow = 2 if any(x.get("slowed") for x in conds) else 1  # Slowed (Phantom Blade): half speed
+    return int(base * max(mult, 1)) // slow
+
+
+# a boss's own speed once it's in phase 2, written in its speed line: "30 ft. (90 ft. in phase 2)"
+PHASE2_SPEED = re.compile(r"(\d+)\s*(?:ft|feet)\.?[^,;()\d]*?\bin\s+phase\s*2", re.I)
+
+
+def in_phase2(row, sb):
+    """A boss with a phase 2, at half HP or less (and still up): the same rule as combat.boss_info."""
+    keys = row.keys()
+    if "current_hp" not in keys or not sb.get("has_phase2"):
+        return False
+    hp, mx = row["current_hp"] or 0, row["max_hp"] or 0
+    return bool(mx) and 0 < hp * 2 <= mx
 
 
 def turn_info(conn, cb_id):
@@ -342,3 +361,98 @@ def dash(conn, cb_id):
     spend_action(conn, cb_id)
     row = _row(conn, cb_id)
     _save(conn, row, dict(_turn(row), dash=True))
+
+
+# ---- shoves (Steven Voss's phase 2) -------------------------------------------------------
+
+PULL_ALL = -999   # "pull all the way": dragged right up to the attacker (Magnet Pull)
+FLY_INTO = 4      # a player character the pulled fighter flies into takes this much from the impact
+
+
+def _fighter_at(ctx, map_id, token_id, size, x, y):
+    """The (token row, combatant) standing on the squares a token of `size` would take at (x, y),
+    or (None, None). Markers, traps, the fallen and hidden tokens don't count."""
+    for r in ctx.conn.execute(
+            "SELECT t.*, COALESCE(ch.status, cb.status, '') AS st FROM map_tokens t LEFT JOIN combatants cb ON cb.id = t.combatant_id "
+            "LEFT JOIN characters ch ON ch.id = COALESCE(t.character_id, cb.character_id) WHERE t.map_id = ? AND t.id != ?",
+            (map_id, token_id)):
+        if r["kind"] in ("marker", "trap") or r["st"] in ("dead", "defeated") or r["hidden"]:
+            continue
+        if x < r["x"] + r["size"] - 1e-6 and r["x"] < x + size - 1e-6 and y < r["y"] + r["size"] - 1e-6 and r["y"] < y + size - 1e-6:
+            cb = None
+            if r["combatant_id"]:
+                cb = ctx.conn.execute("SELECT * FROM combatants WHERE id = ?", (r["combatant_id"],)).fetchone()
+            elif r["character_id"]:
+                cb = ctx.conn.execute("SELECT * FROM combatants WHERE encounter_id = ? AND character_id = ?",
+                                      (ctx.enc["id"], r["character_id"])).fetchone()
+            return r, cb
+    return None, None
+
+
+def shove(ctx, by, target_id, feet):
+    """Push a fighter straight away from `by` (pull them in when feet < 0), one square at a time,
+    stopping at walls, other fighters and the map's edge. PULL_ALL drags them right up next to
+    `by`: they fly past any player character in the way, who takes FLY_INTO damage from the impact.
+    Returns a line for the log ('' when nothing moved or there's no battle map)."""
+    from .maps import SOLID, _bump, map_dict
+    m = _live_map(ctx.conn, ctx.enc["id"])
+    if m is None or not feet:
+        return ""
+    a, t = _token_of(ctx.conn, m["id"], by["id"]), _token_of(ctx.conn, m["id"], target_id)
+    if a is None or t is None:
+        return ""
+    tok = ctx.conn.execute("SELECT id FROM map_tokens WHERE map_id = ? AND x = ? AND y = ? LIMIT 1", (m["id"], t["x"], t["y"])).fetchone()
+    if tok is None:
+        return ""
+    md = map_dict(m)
+    per = ft_per_square(dict(m))
+    ax, ay = a["x"] + a["size"] / 2, a["y"] + a["size"] / 2
+    size, all_way = t["size"], feet <= PULL_ALL
+
+    def step_from(x, y):
+        cx, cy = x + size / 2, y + size / 2
+        sx, sy = (cx > ax) - (cx < ax), (cy > ay) - (cy < ay)
+        if feet < 0:  # a pull re-aims every square so it ends right beside the attacker
+            sx, sy = -sx, -sy
+        return sx, sy
+
+    x, y = int(round(t["x"])), int(round(t["y"]))
+    sx, sy = step_from(x, y)
+    if not (sx or sy):
+        return ""
+    cur_x, cur_y, hit = x, y, []   # cur: where they are in flight (maybe over someone); x, y: last square they could land on
+    for _ in range(200 if all_way else abs(int(feet)) // per):
+        if feet < 0:
+            sx, sy = step_from(cur_x, cur_y)
+            if not (sx or sy):
+                break
+        nx, ny = cur_x + sx, cur_y + sy
+        if not (0 <= nx <= md["cols"] - size and 0 <= ny <= md["rows"] - size):
+            break
+        if any(md["terrain"].get(f"{nx + dx},{ny + dy}") in SOLID for dx in range(size) for dy in range(size)):
+            break
+        who_tok, who = _fighter_at(ctx, m["id"], tok["id"], size, nx, ny)
+        if who_tok is not None:
+            if all_way and who is not None and who["id"] != by["id"] and who["character_id"] is not None:
+                if who["id"] not in hit:
+                    hit.append(who["id"])   # flies straight into a player character and keeps going
+                cur_x, cur_y = nx, ny
+                continue
+            break  # the attacker himself, or anyone else, stops them
+        cur_x, cur_y = nx, ny
+        x, y = nx, ny
+    moved = max(abs(x - int(round(t["x"]))), abs(y - int(round(t["y"]))))
+    name = ctx.combatant(target_id)["name"]
+    out = []
+    if moved:
+        ctx.conn.execute("UPDATE map_tokens SET x = ?, y = ? WHERE id = ?", (x, y, tok["id"]))
+        _bump(ctx.conn, m["id"])
+        out.append(f"{name} is {'pulled' if feet < 0 else 'shoved'} {moved * per} ft by {by['name']}")
+    if hit:
+        from .combat import apply_hp
+        names = []
+        for cid in hit:
+            apply_hp(ctx, cid, {"op": "damage", "amount": FLY_INTO}, by=f"{name} flew into them")
+            names.append(ctx.combatant(cid)["name"])
+        out.append(f"{name} slams into {', '.join(names)} on the way ({FLY_INTO} damage each)")
+    return "; ".join(out)

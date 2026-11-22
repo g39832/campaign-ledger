@@ -123,6 +123,8 @@ def test_migration_keeps_phase_two_on_for_bosses_that_had_its_attacks(data_dir):
     conn.execute("ALTER TABLE creatures DROP COLUMN loot")
     conn.execute("ALTER TABLE combatants DROP COLUMN reaction")
     conn.execute("ALTER TABLE maps DROP COLUMN dungeon")
+    conn.execute("ALTER TABLE characters DROP COLUMN spell_attack_override")
+    conn.execute("ALTER TABLE characters DROP COLUMN wild_shape")
     conn.execute("PRAGMA user_version = 13")
     conn.commit(); conn.close()
     api = Api(create_app({"DATA_DIR": data_dir}).test_client())

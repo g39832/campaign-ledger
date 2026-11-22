@@ -1,0 +1,4002 @@
+[
+{
+"tier": 1,
+"roll": 1,
+"name": "Copper Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 2,
+"name": "Copper Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 3,
+"name": "Copper Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 4,
+"name": "Copper Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 5,
+"name": "Copper Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 6,
+"name": "Copper Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 7,
+"name": "Copper Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 8,
+"name": "Copper Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 9,
+"name": "Copper Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 10,
+"name": "Copper Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 11,
+"name": "Wicker Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 12,
+"name": "Wicker Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 13,
+"name": "Wicker Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 14,
+"name": "Wicker Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 15,
+"name": "Wicker Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 16,
+"name": "Wicker Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 17,
+"name": "Wicker Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 18,
+"name": "Wicker Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 19,
+"name": "Wicker Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 20,
+"name": "Wicker Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 21,
+"name": "Dewdrop Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 22,
+"name": "Dewdrop Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 23,
+"name": "Dewdrop Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 24,
+"name": "Dewdrop Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 25,
+"name": "Dewdrop Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 26,
+"name": "Dewdrop Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 27,
+"name": "Dewdrop Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 28,
+"name": "Dewdrop Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 29,
+"name": "Dewdrop Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 30,
+"name": "Dewdrop Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 31,
+"name": "Candle Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 32,
+"name": "Candle Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 33,
+"name": "Candle Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 34,
+"name": "Candle Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 35,
+"name": "Candle Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 36,
+"name": "Candle Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 37,
+"name": "Candle Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 38,
+"name": "Candle Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 39,
+"name": "Candle Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 40,
+"name": "Candle Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 41,
+"name": "Moss Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 42,
+"name": "Moss Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 43,
+"name": "Moss Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 44,
+"name": "Moss Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 45,
+"name": "Moss Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 46,
+"name": "Moss Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 47,
+"name": "Moss Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 48,
+"name": "Moss Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 49,
+"name": "Moss Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 50,
+"name": "Moss Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 51,
+"name": "Pebble Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 52,
+"name": "Pebble Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 53,
+"name": "Pebble Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 54,
+"name": "Pebble Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 55,
+"name": "Pebble Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 56,
+"name": "Pebble Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 57,
+"name": "Pebble Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 58,
+"name": "Pebble Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 59,
+"name": "Pebble Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 60,
+"name": "Pebble Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 61,
+"name": "Tin Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 62,
+"name": "Tin Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 63,
+"name": "Tin Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 64,
+"name": "Tin Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 65,
+"name": "Tin Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 66,
+"name": "Tin Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 67,
+"name": "Tin Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 68,
+"name": "Tin Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 69,
+"name": "Tin Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 70,
+"name": "Tin Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 71,
+"name": "Thimble Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 72,
+"name": "Thimble Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 73,
+"name": "Thimble Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 74,
+"name": "Thimble Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 75,
+"name": "Thimble Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 76,
+"name": "Thimble Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 77,
+"name": "Thimble Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 78,
+"name": "Thimble Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 79,
+"name": "Thimble Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 80,
+"name": "Thimble Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 81,
+"name": "Sparrow Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 82,
+"name": "Sparrow Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 83,
+"name": "Sparrow Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 84,
+"name": "Sparrow Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 85,
+"name": "Sparrow Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 86,
+"name": "Sparrow Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 87,
+"name": "Sparrow Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 88,
+"name": "Sparrow Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 89,
+"name": "Sparrow Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 90,
+"name": "Sparrow Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 91,
+"name": "Pocket Charm",
+"type": "Worn Charm",
+"rarity": "Common",
+"effect": "Glow: Sheds bright light in a 10-foot radius and dim light for another 10 feet. You can switch it on or off as a bonus action. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 92,
+"name": "Pocket Ring",
+"type": "Ring",
+"rarity": "Common",
+"effect": "Warmth: Keeps one creature comfortable in ordinary cold or heat; it does not protect against extreme environmental damage. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 93,
+"name": "Pocket Bottle",
+"type": "Small Potion",
+"rarity": "Common",
+"effect": "Whisper: Stores a short message of up to 10 words and plays it once when touched by the intended recipient. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 94,
+"name": "Pocket Cloak",
+"type": "Cloak",
+"rarity": "Common",
+"effect": "Mend: Repairs a small tear, crack, or break in a nonmagical object no larger than a hand-sized item. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 95,
+"name": "Pocket Coin",
+"type": "Coin",
+"rarity": "Common",
+"effect": "Scent: Creates a harmless scent of your choice for 1 hour, useful for disguises or signaling. It feels warm to the touch while active."
+},
+{
+"tier": 1,
+"roll": 96,
+"name": "Pocket Lantern",
+"type": "Lantern",
+"rarity": "Common",
+"effect": "Spark: Creates a tiny harmless spark, snuffs a candle, or lights dry tinder within 5 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 1,
+"roll": 97,
+"name": "Pocket Gloves",
+"type": "Gloves",
+"rarity": "Common",
+"effect": "Clean: Cleans dirt and ordinary stains from one outfit or object no larger than a backpack. Its markings shift when a creature uses its power."
+},
+{
+"tier": 1,
+"roll": 98,
+"name": "Pocket Boots",
+"type": "Boots",
+"rarity": "Common",
+"effect": "Compass: Points toward the direction you designated when you last rested; it does not reveal distance or the safest route. A thin halo of light appears during activation."
+},
+{
+"tier": 1,
+"roll": 99,
+"name": "Pocket Quill",
+"type": "Writing Tool",
+"rarity": "Common",
+"effect": "Lucky Flicker: Once per day, add 1d4 to one ability check made to avoid a minor mishap; decide after rolling but before the DM says the result. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 1,
+"roll": 100,
+"name": "Pocket Stone",
+"type": "Stone",
+"rarity": "Common",
+"effect": "Quiet Step: For 1 minute, your footsteps make no sound on ordinary floors. This does not hide your voice, scent, or visible presence. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 1,
+"name": "Moonlit Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 2,
+"name": "Moonlit Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 3,
+"name": "Moonlit Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 4,
+"name": "Moonlit Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 5,
+"name": "Moonlit Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 6,
+"name": "Moonlit Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 7,
+"name": "Moonlit Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 8,
+"name": "Moonlit Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 9,
+"name": "Moonlit Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 10,
+"name": "Moonlit Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 11,
+"name": "Ember Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 12,
+"name": "Ember Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 13,
+"name": "Ember Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 14,
+"name": "Ember Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 15,
+"name": "Ember Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 16,
+"name": "Ember Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 17,
+"name": "Ember Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 18,
+"name": "Ember Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 19,
+"name": "Ember Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 20,
+"name": "Ember Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 21,
+"name": "Stormglass Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 22,
+"name": "Stormglass Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 23,
+"name": "Stormglass Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 24,
+"name": "Stormglass Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 25,
+"name": "Stormglass Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 26,
+"name": "Stormglass Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 27,
+"name": "Stormglass Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 28,
+"name": "Stormglass Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 29,
+"name": "Stormglass Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 30,
+"name": "Stormglass Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 31,
+"name": "Foxfire Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 32,
+"name": "Foxfire Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 33,
+"name": "Foxfire Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 34,
+"name": "Foxfire Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 35,
+"name": "Foxfire Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 36,
+"name": "Foxfire Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 37,
+"name": "Foxfire Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 38,
+"name": "Foxfire Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 39,
+"name": "Foxfire Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 40,
+"name": "Foxfire Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 41,
+"name": "Ironbark Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 42,
+"name": "Ironbark Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 43,
+"name": "Ironbark Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 44,
+"name": "Ironbark Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 45,
+"name": "Ironbark Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 46,
+"name": "Ironbark Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 47,
+"name": "Ironbark Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 48,
+"name": "Ironbark Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 49,
+"name": "Ironbark Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 50,
+"name": "Ironbark Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 51,
+"name": "Silverleaf Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 52,
+"name": "Silverleaf Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 53,
+"name": "Silverleaf Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 54,
+"name": "Silverleaf Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 55,
+"name": "Silverleaf Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 56,
+"name": "Silverleaf Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 57,
+"name": "Silverleaf Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 58,
+"name": "Silverleaf Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 59,
+"name": "Silverleaf Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 60,
+"name": "Silverleaf Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 61,
+"name": "Gale Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 62,
+"name": "Gale Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 63,
+"name": "Gale Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 64,
+"name": "Gale Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 65,
+"name": "Gale Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 66,
+"name": "Gale Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 67,
+"name": "Gale Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 68,
+"name": "Gale Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 69,
+"name": "Gale Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 70,
+"name": "Gale Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 71,
+"name": "Runebound Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 72,
+"name": "Runebound Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 73,
+"name": "Runebound Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 74,
+"name": "Runebound Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 75,
+"name": "Runebound Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 76,
+"name": "Runebound Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 77,
+"name": "Runebound Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 78,
+"name": "Runebound Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 79,
+"name": "Runebound Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 80,
+"name": "Runebound Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 81,
+"name": "Duskwoven Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 82,
+"name": "Duskwoven Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 83,
+"name": "Duskwoven Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 84,
+"name": "Duskwoven Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 85,
+"name": "Duskwoven Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 86,
+"name": "Duskwoven Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 87,
+"name": "Duskwoven Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 88,
+"name": "Duskwoven Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 89,
+"name": "Duskwoven Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 90,
+"name": "Duskwoven Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 91,
+"name": "Starling Amulet",
+"type": "Amulet",
+"rarity": "Uncommon",
+"effect": "Ward: Once per long rest, use your reaction to gain +2 AC against one attack that you can see, potentially causing it to miss. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 92,
+"name": "Starling Dagger",
+"type": "Dagger",
+"rarity": "Uncommon",
+"effect": "Sure Aim: Once per turn, add 1d4 to one weapon attack roll. You must choose to use this before the attack's outcome is announced. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 93,
+"name": "Starling Buckler",
+"type": "Shield",
+"rarity": "Uncommon",
+"effect": "Quickstep: As a bonus action, move up to 10 feet without provoking opportunity attacks; usable three times per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 94,
+"name": "Starling Boots",
+"type": "Boots",
+"rarity": "Uncommon",
+"effect": "Mending Draught: Drink as an action to regain 2d4 + 2 hit points. The potion is consumed. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 95,
+"name": "Starling Gloves",
+"type": "Gloves",
+"rarity": "Uncommon",
+"effect": "Night Sight: For 1 hour, gain darkvision out to 60 feet; if you already have darkvision, increase its range by 30 feet. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 2,
+"roll": 96,
+"name": "Starling Band",
+"type": "Ring",
+"rarity": "Uncommon",
+"effect": "Featherfall: When you fall, you descend safely for up to 1 minute. The effect recharges at dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 2,
+"roll": 97,
+"name": "Starling Mantle",
+"type": "Cloak",
+"rarity": "Uncommon",
+"effect": "Keen Ear: For 10 minutes, gain advantage on Wisdom (Perception) checks that rely on hearing; usable once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 2,
+"roll": 98,
+"name": "Starling Flask",
+"type": "Potion",
+"rarity": "Uncommon",
+"effect": "Elemental Guard: Choose acid, cold, fire, lightning, or thunder when activated. Gain resistance to that damage type until the start of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 2,
+"roll": 99,
+"name": "Starling Rod",
+"type": "Rod",
+"rarity": "Uncommon",
+"effect": "Hidden Pocket: The item holds one object small enough to fit in a fist in an extradimensional space. Retrieving or storing it takes an action. It feels warm to the touch while active."
+},
+{
+"tier": 2,
+"roll": 100,
+"name": "Starling Satchel",
+"type": "Bag",
+"rarity": "Uncommon",
+"effect": "Snare Rune: As an action, mark a visible 5-foot square within 30 feet. The first creature entering it must succeed on a DC 12 Dexterity save or have its speed reduced to 0 until the end of its turn; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 1,
+"name": "Dragonwake Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 2,
+"name": "Dragonwake Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 3,
+"name": "Dragonwake Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 4,
+"name": "Dragonwake Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 5,
+"name": "Dragonwake Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 6,
+"name": "Dragonwake Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 7,
+"name": "Dragonwake Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 8,
+"name": "Dragonwake Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 9,
+"name": "Dragonwake Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 10,
+"name": "Dragonwake Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 11,
+"name": "Aether Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 12,
+"name": "Aether Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 13,
+"name": "Aether Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 14,
+"name": "Aether Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 15,
+"name": "Aether Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 16,
+"name": "Aether Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 17,
+"name": "Aether Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 18,
+"name": "Aether Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 19,
+"name": "Aether Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 20,
+"name": "Aether Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 21,
+"name": "Bloodmoon Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 22,
+"name": "Bloodmoon Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 23,
+"name": "Bloodmoon Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 24,
+"name": "Bloodmoon Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 25,
+"name": "Bloodmoon Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 26,
+"name": "Bloodmoon Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 27,
+"name": "Bloodmoon Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 28,
+"name": "Bloodmoon Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 29,
+"name": "Bloodmoon Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 30,
+"name": "Bloodmoon Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 31,
+"name": "Thunderforged Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 32,
+"name": "Thunderforged Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 33,
+"name": "Thunderforged Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 34,
+"name": "Thunderforged Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 35,
+"name": "Thunderforged Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 36,
+"name": "Thunderforged Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 37,
+"name": "Thunderforged Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 38,
+"name": "Thunderforged Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 39,
+"name": "Thunderforged Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 40,
+"name": "Thunderforged Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 41,
+"name": "Phoenix Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 42,
+"name": "Phoenix Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 43,
+"name": "Phoenix Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 44,
+"name": "Phoenix Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 45,
+"name": "Phoenix Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 46,
+"name": "Phoenix Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 47,
+"name": "Phoenix Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 48,
+"name": "Phoenix Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 49,
+"name": "Phoenix Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 50,
+"name": "Phoenix Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 51,
+"name": "Graveglass Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 52,
+"name": "Graveglass Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 53,
+"name": "Graveglass Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 54,
+"name": "Graveglass Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 55,
+"name": "Graveglass Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 56,
+"name": "Graveglass Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 57,
+"name": "Graveglass Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 58,
+"name": "Graveglass Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 59,
+"name": "Graveglass Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 60,
+"name": "Graveglass Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 61,
+"name": "Runekeeper Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 62,
+"name": "Runekeeper Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 63,
+"name": "Runekeeper Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 64,
+"name": "Runekeeper Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 65,
+"name": "Runekeeper Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 66,
+"name": "Runekeeper Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 67,
+"name": "Runekeeper Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 68,
+"name": "Runekeeper Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 69,
+"name": "Runekeeper Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 70,
+"name": "Runekeeper Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 71,
+"name": "Sunshard Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 72,
+"name": "Sunshard Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 73,
+"name": "Sunshard Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 74,
+"name": "Sunshard Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 75,
+"name": "Sunshard Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 76,
+"name": "Sunshard Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 77,
+"name": "Sunshard Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 78,
+"name": "Sunshard Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 79,
+"name": "Sunshard Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 80,
+"name": "Sunshard Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 81,
+"name": "Voidtouched Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 82,
+"name": "Voidtouched Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 83,
+"name": "Voidtouched Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 84,
+"name": "Voidtouched Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 85,
+"name": "Voidtouched Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 86,
+"name": "Voidtouched Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 87,
+"name": "Voidtouched Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 88,
+"name": "Voidtouched Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 89,
+"name": "Voidtouched Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 90,
+"name": "Voidtouched Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 91,
+"name": "Wyrmcrest Greatsword",
+"type": "Greatsword",
+"rarity": "Rare",
+"effect": "Spellbreaker: When you take damage from a spell, use your reaction to reduce that damage by 2d8 + your proficiency bonus; three uses per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 92,
+"name": "Wyrmcrest Staff",
+"type": "Staff",
+"rarity": "Rare",
+"effect": "Force Burst: As an action, target a creature within 60 feet. It takes 3d6 force damage and must succeed on a DC 13 Strength save or be pushed 10 feet; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 93,
+"name": "Wyrmcrest Crown",
+"type": "Crown",
+"rarity": "Rare",
+"effect": "Blink: As a bonus action, teleport up to 30 feet to an unoccupied space you can see; two uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 94,
+"name": "Wyrmcrest Bracers",
+"type": "Bracers",
+"rarity": "Rare",
+"effect": "Vital Surge: As an action, regain 4d4 + 4 hit points; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 95,
+"name": "Wyrmcrest Cloak",
+"type": "Cloak",
+"rarity": "Rare",
+"effect": "Elemental Edge: Once per turn when you hit with a weapon, deal an extra 1d6 acid, cold, fire, lightning, or thunder damage (choose when found). Its markings shift when a creature uses its power."
+},
+{
+"tier": 3,
+"roll": 96,
+"name": "Wyrmcrest Orb",
+"type": "Orb",
+"rarity": "Rare",
+"effect": "Truthsense: For 10 minutes, sense when a creature you can see deliberately speaks a lie, though you do not learn the truth; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 3,
+"roll": 97,
+"name": "Wyrmcrest Greaves",
+"type": "Boots",
+"rarity": "Rare",
+"effect": "Spider Climb: For 10 minutes, gain a climbing speed equal to your walking speed and can move across ceilings while keeping your hands free; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 3,
+"roll": 98,
+"name": "Wyrmcrest Signet",
+"type": "Ring",
+"rarity": "Rare",
+"effect": "Guardian Sigil: As a reaction when you or an ally within 30 feet is hit, grant the target resistance to that attack's damage; three uses per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 3,
+"roll": 99,
+"name": "Wyrmcrest Shield",
+"type": "Shield",
+"rarity": "Rare",
+"effect": "Spectral Scout: Create a tiny invisible magical sensor within 120 feet for up to 10 minutes. You can see and hear from its space while stationary; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 3,
+"roll": 100,
+"name": "Wyrmcrest Tome",
+"type": "Book",
+"rarity": "Rare",
+"effect": "Counterspell Spark: When a creature you can see within 60 feet casts a spell of 3rd level or lower, use your reaction to try to interrupt it as if casting counterspell at 3rd level; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 1,
+"name": "Worldfire Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 2,
+"name": "Worldfire Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 3,
+"name": "Worldfire Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 4,
+"name": "Worldfire Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 5,
+"name": "Worldfire Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 6,
+"name": "Worldfire Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 7,
+"name": "Worldfire Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 8,
+"name": "Worldfire Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 9,
+"name": "Worldfire Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 10,
+"name": "Worldfire Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 11,
+"name": "Eclipse Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 12,
+"name": "Eclipse Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 13,
+"name": "Eclipse Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 14,
+"name": "Eclipse Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 15,
+"name": "Eclipse Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 16,
+"name": "Eclipse Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 17,
+"name": "Eclipse Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 18,
+"name": "Eclipse Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 19,
+"name": "Eclipse Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 20,
+"name": "Eclipse Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 21,
+"name": "Titan Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 22,
+"name": "Titan Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 23,
+"name": "Titan Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 24,
+"name": "Titan Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 25,
+"name": "Titan Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 26,
+"name": "Titan Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 27,
+"name": "Titan Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 28,
+"name": "Titan Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 29,
+"name": "Titan Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 30,
+"name": "Titan Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 31,
+"name": "Astral Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 32,
+"name": "Astral Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 33,
+"name": "Astral Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 34,
+"name": "Astral Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 35,
+"name": "Astral Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 36,
+"name": "Astral Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 37,
+"name": "Astral Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 38,
+"name": "Astral Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 39,
+"name": "Astral Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 40,
+"name": "Astral Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 41,
+"name": "Stormking Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 42,
+"name": "Stormking Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 43,
+"name": "Stormking Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 44,
+"name": "Stormking Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 45,
+"name": "Stormking Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 46,
+"name": "Stormking Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 47,
+"name": "Stormking Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 48,
+"name": "Stormking Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 49,
+"name": "Stormking Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 50,
+"name": "Stormking Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 51,
+"name": "Dawnbringer Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 52,
+"name": "Dawnbringer Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 53,
+"name": "Dawnbringer Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 54,
+"name": "Dawnbringer Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 55,
+"name": "Dawnbringer Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 56,
+"name": "Dawnbringer Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 57,
+"name": "Dawnbringer Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 58,
+"name": "Dawnbringer Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 59,
+"name": "Dawnbringer Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 60,
+"name": "Dawnbringer Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 61,
+"name": "Nightfall Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 62,
+"name": "Nightfall Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 63,
+"name": "Nightfall Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 64,
+"name": "Nightfall Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 65,
+"name": "Nightfall Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 66,
+"name": "Nightfall Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 67,
+"name": "Nightfall Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 68,
+"name": "Nightfall Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 69,
+"name": "Nightfall Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 70,
+"name": "Nightfall Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 71,
+"name": "Frostheart Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 72,
+"name": "Frostheart Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 73,
+"name": "Frostheart Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 74,
+"name": "Frostheart Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 75,
+"name": "Frostheart Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 76,
+"name": "Frostheart Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 77,
+"name": "Frostheart Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 78,
+"name": "Frostheart Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 79,
+"name": "Frostheart Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 80,
+"name": "Frostheart Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 81,
+"name": "Soulforged Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 82,
+"name": "Soulforged Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 83,
+"name": "Soulforged Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 84,
+"name": "Soulforged Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 85,
+"name": "Soulforged Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 86,
+"name": "Soulforged Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 87,
+"name": "Soulforged Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 88,
+"name": "Soulforged Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 89,
+"name": "Soulforged Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 90,
+"name": "Soulforged Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 91,
+"name": "Celestial Blade",
+"type": "Weapon",
+"rarity": "Very rare",
+"effect": "Greater Ward: As a reaction, reduce damage you take by 3d10 + your proficiency bonus. Three uses per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 92,
+"name": "Celestial Scepter",
+"type": "Scepter",
+"rarity": "Very rare",
+"effect": "Riftwalk: Teleport yourself and up to two willing creatures within 5 feet up to 120 feet to spaces you can see; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 93,
+"name": "Celestial Aegis",
+"type": "Shield",
+"rarity": "Very rare",
+"effect": "Meteor Strike: As an action, choose a point within 120 feet. Creatures in a 15-foot-radius sphere take 6d6 fire damage, or half on a successful DC 14 Dexterity save; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 94,
+"name": "Celestial Mantle",
+"type": "Cloak",
+"rarity": "Very rare",
+"effect": "Phoenix Return: When you would drop to 0 hit points, drop to 1 instead and gain 20 temporary hit points. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 95,
+"name": "Celestial Diadem",
+"type": "Headpiece",
+"rarity": "Very rare",
+"effect": "Spell Reservoir: Store one spell of 5th level or lower cast into the item by a willing creature. The spell can later be released using the original caster's save DC and spell attack bonus. A thin halo of light appears during activation."
+},
+{
+"tier": 4,
+"roll": 96,
+"name": "Celestial Gauntlets",
+"type": "Gloves",
+"rarity": "Very rare",
+"effect": "Time Haste: For 1 minute, your speed doubles and you gain +2 AC and advantage on Dexterity saves. When it ends, you cannot take reactions until the end of your next turn; once per dawn. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 4,
+"roll": 97,
+"name": "Celestial Orb",
+"type": "Orb",
+"rarity": "Very rare",
+"effect": "Soul Beacon: For 1 minute, allies within 30 feet gain 10 temporary hit points at the start of their turns if they have no temporary hit points; once per dawn. It feels warm to the touch while active."
+},
+{
+"tier": 4,
+"roll": 98,
+"name": "Celestial Grimoire",
+"type": "Book",
+"rarity": "Very rare",
+"effect": "Planar Seal: Create a 20-foot-radius ward for 10 minutes. Teleportation into or out of the area fails unless the creature succeeds on a DC 14 Charisma check; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 4,
+"roll": 99,
+"name": "Celestial Boots",
+"type": "Boots",
+"rarity": "Very rare",
+"effect": "Dragon's Mantle: For 10 minutes, gain a flying speed of 40 feet and resistance to one damage type chosen when activated; once per dawn. Its markings shift when a creature uses its power."
+},
+{
+"tier": 4,
+"roll": 100,
+"name": "Celestial Heartstone",
+"type": "Stone",
+"rarity": "Very rare",
+"effect": "Mass Restoration: Choose up to six creatures within 30 feet. Each regains 3d8 + your proficiency bonus hit points and may end either the poisoned or frightened condition; once per dawn. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 1,
+"name": "Godslayer Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 2,
+"name": "Godslayer World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 3,
+"name": "Godslayer Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 4,
+"name": "Godslayer Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 5,
+"name": "Godslayer Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 6,
+"name": "Godslayer Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 7,
+"name": "Godslayer Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 8,
+"name": "Godslayer Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 9,
+"name": "Godslayer Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 10,
+"name": "Godslayer Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 11,
+"name": "Genesis Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 12,
+"name": "Genesis World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 13,
+"name": "Genesis Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 14,
+"name": "Genesis Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 15,
+"name": "Genesis Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 16,
+"name": "Genesis Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 17,
+"name": "Genesis Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 18,
+"name": "Genesis Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 19,
+"name": "Genesis Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 20,
+"name": "Genesis Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 21,
+"name": "Oblivion Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 22,
+"name": "Oblivion World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 23,
+"name": "Oblivion Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 24,
+"name": "Oblivion Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 25,
+"name": "Oblivion Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 26,
+"name": "Oblivion Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 27,
+"name": "Oblivion Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 28,
+"name": "Oblivion Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 29,
+"name": "Oblivion Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 30,
+"name": "Oblivion Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 31,
+"name": "Eternity Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 32,
+"name": "Eternity World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 33,
+"name": "Eternity Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 34,
+"name": "Eternity Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 35,
+"name": "Eternity Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 36,
+"name": "Eternity Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 37,
+"name": "Eternity Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 38,
+"name": "Eternity Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 39,
+"name": "Eternity Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 40,
+"name": "Eternity Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 41,
+"name": "Worldheart Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 42,
+"name": "Worldheart World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 43,
+"name": "Worldheart Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 44,
+"name": "Worldheart Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 45,
+"name": "Worldheart Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 46,
+"name": "Worldheart Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 47,
+"name": "Worldheart Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 48,
+"name": "Worldheart Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 49,
+"name": "Worldheart Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 50,
+"name": "Worldheart Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 51,
+"name": "Star-Eater Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 52,
+"name": "Star-Eater World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 53,
+"name": "Star-Eater Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 54,
+"name": "Star-Eater Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 55,
+"name": "Star-Eater Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 56,
+"name": "Star-Eater Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 57,
+"name": "Star-Eater Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 58,
+"name": "Star-Eater Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 59,
+"name": "Star-Eater Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 60,
+"name": "Star-Eater Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 61,
+"name": "Fateweaver Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 62,
+"name": "Fateweaver World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 63,
+"name": "Fateweaver Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 64,
+"name": "Fateweaver Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 65,
+"name": "Fateweaver Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 66,
+"name": "Fateweaver Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 67,
+"name": "Fateweaver Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 68,
+"name": "Fateweaver Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 69,
+"name": "Fateweaver Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 70,
+"name": "Fateweaver Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 71,
+"name": "Heavensplitter Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 72,
+"name": "Heavensplitter World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 73,
+"name": "Heavensplitter Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 74,
+"name": "Heavensplitter Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 75,
+"name": "Heavensplitter Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 76,
+"name": "Heavensplitter Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 77,
+"name": "Heavensplitter Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 78,
+"name": "Heavensplitter Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 79,
+"name": "Heavensplitter Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 80,
+"name": "Heavensplitter Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 81,
+"name": "Void Emperor Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 82,
+"name": "Void Emperor World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 83,
+"name": "Void Emperor Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 84,
+"name": "Void Emperor Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 85,
+"name": "Void Emperor Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 86,
+"name": "Void Emperor Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 87,
+"name": "Void Emperor Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 88,
+"name": "Void Emperor Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 89,
+"name": "Void Emperor Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 90,
+"name": "Void Emperor Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 91,
+"name": "First Dawn Relic Blade",
+"type": "Weapon",
+"rarity": "Legendary",
+"effect": "Mythic Defense: As a reaction, turn one hit against you into a miss or reduce a failed saving throw's damage to zero. Three uses per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 92,
+"name": "First Dawn World Staff",
+"type": "Staff",
+"rarity": "Legendary",
+"effect": "Worldstep: Teleport yourself and up to eight willing creatures you can see to a known location on the same plane, up to 1 mile away; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 93,
+"name": "First Dawn Godcrown",
+"type": "Crown",
+"rarity": "Legendary",
+"effect": "Starfall: Choose a point within 300 feet. Creatures in a 20-foot-radius sphere take 10d6 force damage, half on a successful DC 15 Dexterity save. Once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 94,
+"name": "First Dawn Aegis Prime",
+"type": "Shield",
+"rarity": "Legendary",
+"effect": "Second Dawn: If you die, the item restores you to life after 1 minute with half your hit points, provided your body is present and your soul is willing. Once per 30 days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 95,
+"name": "First Dawn Soul Lantern",
+"type": "Lantern",
+"rarity": "Legendary",
+"effect": "Wish Echo: The item can reproduce one spell of 8th level or lower without material components. It cannot duplicate a spell with a costly consumed component; once per seven days. Its runes glow faintly when its power is ready."
+},
+{
+"tier": 5,
+"roll": 96,
+"name": "First Dawn Fate Ring",
+"type": "Ring",
+"rarity": "Legendary",
+"effect": "Time Reversal: After a creature you can see within 60 feet finishes its turn, force it to repeat that turn's movement and actions from its starting position, restoring hit points and resources spent during that turn to their prior state. Legendary resistance or DM adjudication may limit this effect; once per seven days. It feels warm to the touch while active."
+},
+{
+"tier": 5,
+"roll": 97,
+"name": "First Dawn Cosmic Mantle",
+"type": "Cloak",
+"rarity": "Legendary",
+"effect": "Army of Light: For 1 minute, up to six allies within 60 feet gain 20 temporary hit points and advantage on saving throws against being frightened; once per dawn. A soft chime sounds when its magic takes effect."
+},
+{
+"tier": 5,
+"roll": 98,
+"name": "First Dawn Elder Grimoire",
+"type": "Book",
+"rarity": "Legendary",
+"effect": "Planar Gate: Open a stable portal between your current location and a location on another plane you have visited, lasting 1 minute. The DM determines whether the destination is reachable; once per seven days. Its markings shift when a creature uses its power."
+},
+{
+"tier": 5,
+"roll": 99,
+"name": "First Dawn Phoenix Core",
+"type": "Stone",
+"rarity": "Legendary",
+"effect": "Worldform: For 1 minute, transform into a towering magical avatar: gain 50 temporary hit points, a flying speed of 60 feet, and one 4d8 force-damage strike per turn. Once per seven days. A thin halo of light appears during activation."
+},
+{
+"tier": 5,
+"roll": 100,
+"name": "First Dawn Reality Shard",
+"type": "Crystal",
+"rarity": "Legendary",
+"effect": "Rewrite Fate: After a creature you can see within 60 feet succeeds or fails an attack roll, ability check, or saving throw, force it to reroll and use the new result. Once per dawn; the DM may reserve this for pivotal moments. Its runes glow faintly when its power is ready."
+}
+]

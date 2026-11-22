@@ -255,6 +255,7 @@ CHARACTER = {
     "dice_style": Json("dict"),  # the character's dice colors: {body, ink} (empty: the classic mixed set)
     "attacks": Json("list"),
     "spellcasting_ability": Choice("", "str", "dex", "con", "int", "wis", "cha"),
+    "spell_attack_override": Int(-20, 30, nullable=True),  # spell attack typed in by hand (else prof + ability)
     "spell_slots": Json("dict"),
     "spells": Json("list"),
     "features": Text(),

@@ -10,6 +10,7 @@ masked server-side (fog_image) so the raw picture never reaches players.
 """
 import hashlib
 import json
+import math
 import os
 import uuid
 
@@ -22,11 +23,21 @@ bp = Blueprint("maps", __name__, url_prefix="/api")
 
 IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 TERRAIN = ("floor", "wall", "water", "difficult", "pit", "door", "foliage",
-           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table", "rock", "stairs")
+           "grass", "sand", "stone", "wood", "lava", "ice", "rubble", "tree", "table", "rock", "stairs",
+           # the abandoned (sci-fi) prison
+           "metal", "grate", "bulkhead", "blastdoor", "forcefield", "sealed", "panel", "redlight", "camera", "turret",
+           "terminal", "machinery", "cryo",
+           # the missile silo (app/silo_layout.py): walkable ones first, then the solid ones
+           "concrete", "hazard", "catwalk", "cable", "coolant", "silodoor", "lift", "pad", "escape",
+           "concretewall", "beacon", "shaft", "missile", "fueltank", "pipes", "reactor", "console", "bunk", "rack", "crate")
+# The silo's walls, the open launch shaft, the missiles and the heavy things in its rooms.
+SILO_SOLID = {"concretewall", "beacon", "shaft", "missile", "fueltank", "pipes", "reactor", "console", "bunk", "rack", "crate"}
+# Steel walls, sealed doors and big machines: nobody walks into or through them.
+SCIFI_SOLID = {"bulkhead", "sealed", "panel", "redlight", "camera", "turret", "terminal", "machinery", "cryo"} | SILO_SOLID
 # Squares a token can't stand in when the app places tokens for you.
-BLOCKING = {"wall", "pit", "water", "lava", "tree", "table", "rock"}
+BLOCKING = {"wall", "pit", "water", "lava", "tree", "table", "rock"} | SCIFI_SOLID
 # Solid squares nobody can walk into or through (a player's move is refused).
-SOLID = {"wall", "rock"}
+SOLID = {"wall", "rock"} | SCIFI_SOLID
 # Ground a spell like Mend Earth puts right again.
 MENDABLE = {"rock", "rubble", "difficult", "pit"}
 
@@ -75,15 +86,61 @@ def blocked_path(m, size, x0, y0, x1, y1):
     terrain = m["terrain"]
     if not any(v in SOLID for v in terrain.values()):
         return None
+    hit = None
     steps = max(1, int(max(abs(x1 - x0), abs(y1 - y0)) * 2))
     for i in range(1, steps + 1):
         x, y = x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps
         for dx in range(size):
             for dy in range(size):
-                k = f"{int(round(x)) + dx},{int(round(y)) + dy}"
+                k = f"{math.floor(x + 0.5) + dx},{math.floor(y + 0.5) + dy}"  # (half rounds up, every time)
                 if terrain.get(k) in SOLID:
-                    return k
-    return None
+                    hit = hit or k
+    if hit and walk_round(terrain, size, x0, y0, x1, y1, m.get("cols"), m.get("rows")):
+        return None  # the straight line clips a wall, but there's a short way round (a corner, a doorway)
+    return hit
+
+
+ROUND_EXTRA = 1  # a way round may be one square longer than the straight line: a corner or a doorway, not round a wall
+
+
+def walk_round(terrain, size, x0, y0, x1, y1, cols=None, rows=None):
+    """Is there a way from (x0, y0) to (x1, y1) over open squares, at most ROUND_EXTRA squares longer
+    than going straight? Steps go 8 ways; a diagonal can't squeeze between two walls touching at a corner."""
+    if any(v != int(v) for v in (x0, y0, x1, y1)):
+        return False
+    x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+    straight = max(abs(x1 - x0), abs(y1 - y0))
+    limit = straight + ROUND_EXTRA
+
+    def open_at(x, y):
+        if x < 0 or y < 0 or (cols and x + size > cols) or (rows and y + size > rows):
+            return False  # off the map
+        return all(terrain.get(f"{x + dx},{y + dy}") not in SOLID for dx in range(size) for dy in range(size))
+
+    if not open_at(x1, y1):
+        return False
+    seen, frontier = {(x0, y0)}, [(x0, y0)]
+    for n in range(1, limit + 1):
+        nxt = []
+        for x, y in frontier:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    p = (x + dx, y + dy)
+                    if (not dx and not dy) or p in seen:
+                        continue
+                    if max(abs(p[0] - x1), abs(p[1] - y1)) > limit - n:
+                        continue  # too far to get there in time
+                    if not open_at(*p):
+                        continue
+                    if dx and dy and not open_at(x + dx, y) and not open_at(x, y + dy):
+                        continue
+                    if p == (x1, y1):
+                        return True
+                    seen.add(p); nxt.append(p)
+        frontier = nxt
+        if not frontier:
+            break
+    return False
 SHAPE_KINDS = ("circle", "cone", "line", "square")
 
 
@@ -184,6 +241,13 @@ def encounter_summary(conn, enc_id):
 
 
 def _unlinked_party(conn, map_id):
+    row = conn.execute("SELECT dungeon, encounter_id FROM maps WHERE id = ?", (map_id,)).fetchone()
+    try:
+        d = json.loads(row["dungeon"]) if row and row["dungeon"] else {}
+    except ValueError:
+        d = {}
+    if d.get("picked") and d["picked"] == row["encounter_id"]:
+        return []  # a fight started by who saw whom: the DM adds the rest of the party themselves
     return conn.execute(
         "SELECT t.id, t.character_id FROM map_tokens t JOIN maps m ON m.id = t.map_id "
         "JOIN encounters e ON e.id = m.encounter_id AND e.status != 'ended' "
@@ -240,8 +304,15 @@ def dm_state(map_id):
     if enc and enc["status"] == "active" and enc["current_id"]:
         from .movement import turn_info
         move = turn_info(conn, enc["current_id"])  # how far whoever's turn it is can still go
+    from .chests import chests_for
+    m["chests"] = chests_for(conn, map_id, "dm")
+    from .silo import public as silo_public
+    m["silo"] = silo_public(conn, m)
+    from .campaigns import get_campaign
+    roam_open = bool(get_campaign(m["campaign_id"])["settings"]["players"].get("roam_open", True))
     return {"map": m, "tokens": tokens_for(conn, map_id, enc["current_id"] if enc and enc["status"] == "active" else None),
-            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id), "move": move, "zones": zones}
+            "encounter": enc, "live": live == map_id, "pings": recent_pings(map_id), "move": move, "zones": zones,
+            "roam_open": roam_open}
 
 
 def fight_zones(conn, map_id, enc):
@@ -275,13 +346,20 @@ def player_view(conn, map_id, player):
     current = enc["current_id"] if enc and enc["status"] == "active" else None
     fog = m["fog_enabled"]
     tokens = []
+    from .campaigns import get_campaign
+    roam_on = bool(get_campaign(m["campaign_id"])["settings"]["players"].get("free_roam"))
+    roam_open = bool(get_campaign(m["campaign_id"])["settings"]["players"].get("roam_open", True))
     from .spells import my_clones
     clones = {k["id"]: k for k in my_clones(conn, player["character_id"])[0]} if player.get("character_id") else {}
+    from .vision import bitmap, has_vision, party_sight
+    vis = party_sight(conn, m) if has_vision(m) else None  # a made-up map: what the heroes can see right now
     for t in tokens_for(conn, map_id, current):
         if t["hidden"] or t["combatant_hidden"]:
             continue
         if fog and not any(fog_get(m, x, y) for x, y in token_cells(t)):
             continue
+        if vis is not None and t["kind"] == "enemy" and not any(c in vis for c in token_cells(t)):
+            continue  # out of everyone's sight: not on the players' map (the DM still sees it)
         own = bool(player.get("character_id") and t["character_id"] == player["character_id"])
         is_party = t["kind"] in ("pc", "npc") and t["character_id"]
         out = {k: t[k] for k in ("id", "kind", "x", "y", "size", "color", "display", "is_current", "portrait", "combatant_id")}
@@ -291,6 +369,10 @@ def player_view(conn, map_id, player):
             from .movement import fight_turn
             turn = fight_turn(conn, m, t["character_id"])
             out["movable"] = turn is None or (turn["my_turn"] and turn["budget"] > 0)  # used it all: they can still readjust
+            if turn is None and not roam_open:
+                out["movable"], out["held"] = False, True  # the DM hasn't opened free roam: they wait
+            elif turn is None and roam_on:
+                out["roam"] = True  # exploring: one square at a time (play.js arrow pad)
         out["own"] = own
         if t["combatant_id"] in clones:  # their clone: they move it on its turn
             from .movement import turn_info
@@ -310,10 +392,15 @@ def player_view(conn, map_id, player):
                                 "fog_enabled", "players_can_move", "image_w", "image_h", "rev")}
     public["terrain"] = terrain
     public["revealed"] = m["revealed"] if fog else ""
+    public["visible"] = bitmap(m, vis) if vis is not None else ""  # lit now; the rest of "revealed" is drawn dimmed
     f = (m.get("dungeon") or {}).get("fight")
-    public["fight_starting"] = {"room": f["room"], "by": f["by"], "at": f["at"]} if f else None  # a room fight about to begin
+    public["fight_starting"] = {"room": f["room"], "by": f["by"], "at": f["at"], "what": f.get("what") or f"{f['by']} walks into {f['room']}"} if f else None  # a room fight about to begin
     public["image_url"] = f"/api/play/map-image/{map_id}?v={m['rev']}" if m["image"] else None
     public["shapes"] = [{k: v for k, v in s.items() if k != "hidden"} for s in m["shapes"] if not s.get("hidden")]
+    from .chests import chests_for
+    public["chests"] = chests_for(conn, map_id, "player", m)
+    from .silo import public as silo_public
+    public["silo"] = silo_public(conn, m)  # the launch bay: countdown, keys, how it ended
     visible = {t["id"] for t in tokens}
     zones = [z for z in fight_zones(conn, map_id, enc) if z["token"] in visible]
     return {"map": public, "tokens": tokens, "pings": recent_pings(map_id), "zones": zones}
@@ -361,7 +448,7 @@ def add_fx(map_id, fx):
     store[map_id] = keep[-40:]
 
 
-LOOKS = ("slash", "punch", "bite", "arrow", "flames", "frost", "sparks", "holy", "venom", "arcane", "rock", "quake")
+LOOKS = ("slash", "punch", "bite", "arrow", "flames", "frost", "sparks", "holy", "venom", "arcane", "rock", "quake", "laser")
 
 
 def attack_fx(conn, enc_id, attacker_id, hits, name, kind="damage", damage_type="", area=None, style=""):
@@ -913,7 +1000,6 @@ def api_add_monsters(map_id):
     """Add enemies from the creature library or the Monster Book to the map's
     encounter (making one if the map has none) and put their tokens around the
     square that was clicked."""
-    from .combat import Ctx, _insert_enemy, _instance_names, _resort, one_boss
     from .monster_book import BY_NAME
     data = request.get_json(silent=True) or {}
     try:
@@ -939,46 +1025,56 @@ def api_add_monsters(map_id):
             x, y = max(0, min(m["cols"] - 1, int(float(x)))), max(0, min(m["rows"] - 1, int(float(y))))
         except (TypeError, ValueError):
             raise F.ApiError("Where should they go?")
-        created = False
-        eid = m["encounter_id"]
-        if not eid:
-            ts = now_iso()
-            eid = F.insert(conn, "encounters", F.ENCOUNTER, {"name": m["name"]},
-                           {"uid": new_uid(), "campaign_id": m["campaign_id"], "created_at": ts, "updated_at": ts})
-            conn.execute("INSERT INTO combat_log (encounter_id, round, kind, message, created_at) VALUES (?, 0, 'system', ?, ?)",
-                         (eid, f"Encounter “{m['name']}” created from the battle map", ts))
-            conn.execute("UPDATE maps SET encounter_id = ? WHERE id = ?", (eid, map_id))
-            created = True
-        ctx = Ctx(conn, eid)
-        before = {c["id"] for c in ctx.combatants()}
-        statblock = {k: block.get(k) for k in F.CREATURE if k != "name"}
-        statblock["base_name"] = base
-        count = one_boss(ctx, block, base, count, creature_id)
-        names = _instance_names(ctx, base, count)
-        hidden = bool(data.get("hidden"))
-        for n in names:
-            _insert_enemy(ctx, n, statblock, block["max_hp"], block["ac"], block["initiative_mod"], creature_id)
-        if hidden:
-            conn.execute(f"UPDATE combatants SET hidden = 1 WHERE encounter_id = ? AND name IN ({','.join('?' * len(names))})",
-                         (eid, *names))
-        ctx.log("roster", f"Added {', '.join(names)} from the battle map" + (" (hidden from players)" if hidden else ""))
-        if ctx.settings["auto_sort"]:
-            _resort(ctx)
-        conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
-        new = [c for c in ctx.combatants() if c["id"] not in before]
-        link_party(conn, map_id)
-        taken = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (map_id,))}
-        size = {"Large": 2, "Huge": 3, "Gargantuan": 4}.get(str(block.get("creature_type") or "").split(" ")[0], 1)
-        spots = _open_spots(m, taken, x, y, len(new))
-        ts = now_iso()
-        for i, c in enumerate(new):
-            sx, sy = spots[i] if i < len(spots) else (x, y)
-            sx, sy = min(sx, m["cols"] - size), min(sy, m["rows"] - size)
-            conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
-                         "VALUES (?,?,'enemy',?,?,?,?,0,?,?)", (new_uid(), map_id, c["id"], sx, sy, size, ts, ts))
-            taken.add((sx, sy))
-        _bump(conn, map_id)
+        names, created = add_monsters(conn, m, block, base, creature_id, count, x, y, bool(data.get("hidden")))
     return jsonify(dm_state(map_id) | {"added": names, "encounter_created": created}), 201
+
+
+def add_monsters(conn, m, block, base, creature_id, count, x, y, hidden=False, extra=None):
+    """Put `count` of a monster in the map's encounter (made if there's none) with their tokens around
+    (x, y). extra: more for each one's stat block (what it carries...). Returns (names, encounter made)."""
+    from .combat import Ctx, _insert_enemy, _instance_names, _resort, one_boss
+    map_id = m["id"]
+    created = False
+    eid = m["encounter_id"]
+    if not eid:
+        ts = now_iso()
+        eid = F.insert(conn, "encounters", F.ENCOUNTER, {"name": m["name"]},
+                       {"uid": new_uid(), "campaign_id": m["campaign_id"], "created_at": ts, "updated_at": ts})
+        conn.execute("INSERT INTO combat_log (encounter_id, round, kind, message, created_at) VALUES (?, 0, 'system', ?, ?)",
+                     (eid, f"Encounter “{m['name']}” created from the battle map", ts))
+        conn.execute("UPDATE maps SET encounter_id = ? WHERE id = ?", (eid, map_id))
+        m["encounter_id"] = eid
+        created = True
+    ctx = Ctx(conn, eid)
+    before = {c["id"] for c in ctx.combatants()}
+    statblock = {k: block.get(k) for k in F.CREATURE if k != "name"}
+    statblock["base_name"] = base
+    statblock.update(extra or {})
+    count = one_boss(ctx, block, base, count, creature_id)
+    names = _instance_names(ctx, base, count)
+    for n in names:
+        _insert_enemy(ctx, n, statblock, block["max_hp"], block["ac"], block["initiative_mod"], creature_id)
+    if hidden:
+        conn.execute(f"UPDATE combatants SET hidden = 1 WHERE encounter_id = ? AND name IN ({','.join('?' * len(names))})",
+                     (eid, *names))
+    ctx.log("roster", f"Added {', '.join(names)} from the battle map" + (" (hidden from players)" if hidden else ""))
+    if ctx.settings["auto_sort"]:
+        _resort(ctx)
+    conn.execute("UPDATE encounters SET rev = rev + 1, updated_at = ? WHERE id = ?", (now_iso(), eid))
+    new = [c for c in ctx.combatants() if c["id"] not in before]
+    link_party(conn, map_id)
+    taken = {(int(round(r["x"])), int(round(r["y"]))) for r in conn.execute("SELECT x, y FROM map_tokens WHERE map_id = ?", (map_id,))}
+    size = {"Large": 2, "Huge": 3, "Gargantuan": 4}.get(str(block.get("creature_type") or "").split(" ")[0], 1)
+    spots = _open_spots(m, taken, x, y, len(new))
+    ts = now_iso()
+    for i, c in enumerate(new):
+        sx, sy = spots[i] if i < len(spots) else (x, y)
+        sx, sy = min(sx, m["cols"] - size), min(sy, m["rows"] - size)
+        conn.execute("INSERT INTO map_tokens (uid, map_id, kind, combatant_id, x, y, size, hidden, created_at, updated_at) "
+                     "VALUES (?,?,'enemy',?,?,?,?,0,?,?)", (new_uid(), map_id, c["id"], sx, sy, size, ts, ts))
+        taken.add((sx, sy))
+    _bump(conn, map_id)
+    return names, created
 
 
 @bp.post("/tokens/<int:token_id>/visibility")
@@ -1102,6 +1198,28 @@ def api_live(cid):
         if map_id:
             _bump(conn, int(map_id))
     return jsonify({"live_map_id": map_id})
+
+
+@bp.post("/campaigns/<int:cid>/roam")
+def api_roam(cid):
+    """The DM's Free roam button: {open: true | false}. Off = outside a fight, players can't move their
+    tokens until it's on again (in a fight they still move on their turn)."""
+    from .auth import is_dm
+    from .campaigns import get_campaign
+    if not is_dm():
+        raise F.ApiError("Only the DM can do that", status=403)
+    data = request.get_json(silent=True) or {}
+    on = bool(data.get("open"))
+    with tx() as conn:
+        row = conn.execute("SELECT settings, live_map_id FROM campaigns WHERE id = ?", (cid,)).fetchone()
+        if row is None:
+            raise F.NotFound("Campaign not found")
+        s = json.loads(row["settings"] or "{}")
+        s.setdefault("players", {})["roam_open"] = on
+        conn.execute("UPDATE campaigns SET settings = ?, updated_at = ? WHERE id = ?", (json.dumps(s), now_iso(), cid))
+        if row["live_map_id"]:
+            _bump(conn, row["live_map_id"])
+    return jsonify({"roam_open": bool(get_campaign(cid)["settings"]["players"].get("roam_open", True))})
 
 
 @bp.get("/maps/<int:map_id>/player-preview")

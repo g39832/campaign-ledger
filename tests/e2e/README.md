@@ -46,6 +46,7 @@ Phones join the test server over your Wi-Fi address, which is worked out each ru
 | `e2e_reactions.py` | Reactions from players' devices and the DM: Moni's Deflect (and sending it back) and Absorb Elements, Gnocchi's Sentinel, burning and giving back a reaction, Yamato's three clones (Phantasmal Killers burst, Dismiss), his Action surge, the "what's left this turn" strip, and the spell builder |
 | `e2e_moves.py` | Every move on every hero's sheet, used from their own screen |
 | `e2e_clonespot.py` | Picking where Yamato's clones appear (phone, laptop, DM tablet, fog, hidden traps) |
+| `e2e_prison.py` | The Abandoned prison: making it, its look, chests (place, look inside, add a magic item), a player opening one and taking the loot onto their sheet, card locks and sealed doors, a room fight, "Let it act", a fallen enemy's drop, and the same after a reload |
 | `e2e_dicecolors.py` | Dice colors from the phone and the sheet; others see them |
 | `e2e_monrows.py` | The monster attack/spell form (every library and book line reads the same) |
 | `e2e_bosses.py` / `e2e_monicons.py` | The Bosses section; monster pictures in the library, combat and on tokens |

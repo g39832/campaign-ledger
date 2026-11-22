@@ -38,7 +38,7 @@ JSON_COLUMNS = {
     "rolls": ["result"],
 }
 CHILD_KEYS = ("characters", "morality_events", "creatures", "encounters", "journal", "combatants", "hp_changes",
-              "log", "links", "maps", "tokens", "rolls", "handouts")
+              "log", "links", "maps", "tokens", "rolls", "handouts", "chests")
 
 
 def _rows(conn, sql, params=()):
@@ -80,6 +80,7 @@ def build_export(campaign_ids=None):
         maps_ = _rows(conn, "SELECT * FROM maps WHERE campaign_id = ? ORDER BY id", (cid,))
         for m in maps_:
             m["tokens"] = _rows(conn, "SELECT * FROM map_tokens WHERE map_id = ? ORDER BY id", (m["id"],))
+            m["chests"] = _rows(conn, "SELECT * FROM chests WHERE map_id = ? ORDER BY id", (m["id"],))
             if m["image"]:
                 portraits.add(m["image"])
         c["maps"] = maps_
@@ -234,6 +235,7 @@ def validate_backup(payload):
         _check_rows(conn, "maps", c.get("maps", []), errors, where)
         for m in c.get("maps", []) or []:
             _check_rows(conn, "map_tokens", m.get("tokens", []), errors, where, required_fk=("map_id",))
+            _check_rows(conn, "chests", m.get("chests", []) or [], errors, where, required_fk=("map_id",))
         _check_rows(conn, "rolls", c.get("rolls", []), errors, where)
         _check_rows(conn, "handouts", c.get("handouts", []), errors, where)
         for e in c.get("encounters", []) or []:
@@ -389,6 +391,8 @@ def import_campaign(conn, c, mode, lib_map):
         for t in m.get("tokens", []):
             _insert_row(conn, "map_tokens", t, {"map_id": mid, "character_id": char_map.get(t.get("character_id")),
                                                 "combatant_id": comb_map.get(t.get("combatant_id"))}, fresh)
+        for ch in m.get("chests", []) or []:  # (backups from before chests have none)
+            _insert_row(conn, "chests", ch, {"map_id": mid}, fresh)
     if c.get("live_map_id") in map_map:
         conn.execute("UPDATE campaigns SET live_map_id = ? WHERE id = ?", (map_map[c["live_map_id"]], cid))
     for r in c.get("rolls", []):

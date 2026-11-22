@@ -7,7 +7,7 @@
   const char = boot("boot");
   const SKILLS = boot("boot-skills");
   const ABS = ["str", "dex", "con", "int", "wis", "cha"];
-  const NULLABLE = new Set(["prof_override", "initiative_override"]);
+  const NULLABLE = new Set(["prof_override", "initiative_override", "spell_attack_override"]);
 
   const model = Object.assign({}, char);
   delete model.derived;
@@ -33,7 +33,7 @@
     const autoSkills = Object.fromEntries(SKILLS.map(([k, , a]) => [k, mods[a] + prof * (Number(kp[k]) || 0) + (Number(kb[k]) || 0)]));
     const init = Number.isInteger(model.initiative_override) ? model.initiative_override : mods.dex + (Number(model.initiative_bonus) || 0);
     const sa = model.spellcasting_ability;
-    return { mods, prof, saves, skills, autoSkills, init, spell: ABS.includes(sa) ? { dc: 8 + prof + mods[sa], atk: prof + mods[sa] } : null };
+    return { mods, prof, saves, skills, autoSkills, init, spell: ABS.includes(sa) ? { dc: 8 + prof + mods[sa], atk: Number.isInteger(model.spell_attack_override) ? model.spell_attack_override : prof + mods[sa] } : null };
   }
   function derive() {
     const d = derived();
@@ -339,9 +339,10 @@
     { key: "condition", label: "On a hit, they're", placeholder: "e.g. Grappled" },
     { key: "extra_moves", label: "Extra moves", type: "number", placeholder: "0" },
     { key: "dmg_mult", label: "Damage ×", type: "number", placeholder: "1" },
+    { key: "hit_bonus", label: "To hit + (this turn)", type: "number", placeholder: "0", title: "With no damage: using it adds this to your attack rolls for the rest of the turn (Reckless attack: 2)" },
     { key: "reaction", label: "Reaction", type: "select", options: [["", "No"], ["sentinel", "Sentinel: hit back"], ["parry", "Parry: roll-off"]],
       title: "Used off your turn, once a round. Sentinel: when an enemy next to you attacks someone else, you strike it with your first melee attack." },
-  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "", extra_moves: null, dmg_mult: null }, {
+  ], { name: "", bonus: "", damage: "", notes: "", area: "", cooldown: null, condition: "", extra_moves: null, dmg_mult: null, hit_bonus: null }, {
     addLabel: "Add attack", empty: "No attacks recorded.",
     fold: { summary: attackSummary },
     // A row whose damage or notes say "heal" (Mend · 1d8 · Heal) rolls healing instead of an attack.
@@ -369,6 +370,7 @@
       r.condition ? "on a hit: " + r.condition : "",
       n(r.extra_moves) ? "+" + n(r.extra_moves) + " extra moves" : "",
       n(r.dmg_mult) > 1 ? (noDice ? "your damage ×" + n(r.dmg_mult) + " this turn" : "×" + n(r.dmg_mult) + " damage on a hit") : "",
+      n(r.hit_bonus) && noDice ? (n(r.hit_bonus) > 0 ? "+" : "") + n(r.hit_bonus) + " to hit this turn" : "",
       n(r.cooldown) ? n(r.cooldown) + "-turn cooldown" : "",
       r.reaction === "sentinel" ? "reaction: hit back an enemy next to you that attacks someone else" : r.reaction === "parry" || r.parry ? "reaction: parry" : "",
       String(r.area || "").trim(),
@@ -522,7 +524,7 @@
       const harmful = does === "damage" || does === "debuff";
       const lasting = does === "buff" || does === "debuff" || (does === "damage" && (s.condition || s.ongoing));
       // the rarer effects, folded away until needed (open when one is set)
-      const extras = [s.death_ward, s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone, s.summon_count, s.summon_max, s.on_death].some((x) => x != null && x !== "" && x !== false && x !== 0);
+      const extras = [s.death_ward, s.resist_all, s.roll_mod, s.dmg_mod, s.adv, s.temp_hp, s.max_hp, s.ongoing, s.repeat_save, s.ac, s.terrain, s.summon, s.parry, s.force_save, s.aura, s.zone, s.summon_count, s.summon_max, s.on_death].some((x) => x != null && x !== "" && x !== false && x !== 0);
       const burst = s.on_death || null;
       const setBurst = (k, val) => set(i, "on_death", val === null ? null : Object.assign({ save: "dex", dc: 10, reach: 5 }, burst || {}, k ? { [k]: val } : {}), true);
       const more = does ? h("details", { class: "spell-more", "data-key": "spell-more-" + i, open: extras ? true : null },
@@ -533,6 +535,7 @@
           does === "buff" ? field("Extra damage on hits", text(i, "dmg_mod", { short: true, placeholder: "1d4", title: "Divine Favor: 1d4" })) : null,
           does !== "heal" ? field("Advantage", pick(i, "adv", ADV_PICK)) : null,
           does === "buff" || does === "heal" ? field("Temp HP", text(i, "temp_hp", { short: true, placeholder: "1d4+4", title: "False Life: 1d4+4" })) : null,
+          does === "buff" ? chk(i, "resist_all", "Resistance to all damage except psychic (half damage)", !!s.resist_all, "Totem Spirit: Bear — lasts the whole fight") : null,
           does === "buff" ? chk(i, "death_ward", "Death Ward: the first time they'd drop to 0 HP, they drop to 1 instead", !!s.death_ward) : null,
           does === "buff" ? field("More max HP", num(i, "max_hp", { min: 0, max: 100, placeholder: "e.g. 5", title: "Aid: 5. It goes away again when the effect ends." })) : null,
           field("Every turn", h("div", { class: "row", style: "gap:4px;flex-wrap:nowrap" },
@@ -542,6 +545,7 @@
           harmful && s.hit && s.hit !== "attack" && lasting ? chk(i, "repeat_save", "Save at the end of each turn to end it", !!s.repeat_save, "Hold Person: a Wisdom save at the end of each of its turns") : null,
           does === "damage" && s.hit && s.hit !== "attack" ? chk(i, "save_half", "Half damage on a save", v.save_half != null ? !!v.save_half : Number(s.level) > 0) : null,
           harmful && s.hit && s.hit !== "attack" ? chk(i, "force_save", "Always a real saving throw (even with the roll-to-hit rule)", !!s.force_save) : null,
+          harmful && s.hit && s.hit !== "attack" ? field("Save DC (its own)", num(i, "dc", { min: 1, max: 40, placeholder: "yours", title: "A magic item's own DC (Meteor Strike: 14). Empty: the character's spell save DC" })) : null,
           does === "damage" || does === "heal" || does === "buff" ? field("Upcast: per level above", text(i, "upcast", { short: true, placeholder: does === "heal" ? "1d8" : "1d6", title: "Extra dice for each slot level above the spell's level" })) : null,
           field("Reaches at most", num(i, "targets", { min: 1, max: 50, placeholder: "any", title: "Bless: 3 · Mass Healing Word: 6 · Shield: 1" })),
           field("Area", text(i, "area", { short: true, placeholder: "20 ft sphere", title: "Aim it on the battle map: 15 ft cone, 20 ft radius, 100 ft line" })),
@@ -611,6 +615,9 @@
           does || rk || Number(s.extra_moves) ? field("Cooldown (turns)", num(i, "cooldown", { min: 0, max: 20, placeholder: "none", title: "Turns to wait before using it again (no spell slots: this is what limits it)" })) : null,
           ...reactBits,
           does ? chk(i, "per_fight", "Once per fight", !!s.per_fight, "Usable once in each fight (Echo Knight); it's back in the next fight") : null,
+          does ? chk(i, "per_rest", "Once per long rest", !!s.per_rest, "A magic item's once a day: used once, then it's back after a long rest") : null,
+          does && s.per_rest ? field("Uses per long rest", num(i, "rest_uses", { min: 1, max: 20, placeholder: "1", title: "Totem Spirit: Bear is 2 a day" })) : null,
+          does && s.per_rest && s.used ? chk(i, "used", "Used (back after a long rest)", true, "Untick to make it ready again") : null,
           does === "damage" || does === "heal" ? field(does === "heal" ? "Healing dice" : "Damage dice",
             text(i, "dice", { short: true, placeholder: does === "heal" ? "1d8+mod" : "8d6", title: "Dice, like 2d6+3. Write mod for your spellcasting modifier.", onchange: () => redrawSoon() })) : null,
           does === "damage" ? field("Damage type", pick(i, "damage_type", DAMAGE_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]))) : null,

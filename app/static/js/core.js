@@ -124,12 +124,18 @@
     if (s.summon) bits.push("summons " + (s.summon_count > 1 ? s.summon_count + "× " : "") + s.summon + ", who acts right after you"
       + (s.summon_ac != null && s.summon_ac !== "" || s.summon_hp ? " (" + [s.summon_ac != null && s.summon_ac !== "" ? s.summon_ac + " AC" : "", s.summon_hp ? s.summon_hp + " HP" : ""].filter(Boolean).join(", ") + ")" : "")
       + (Number(s.summon_max) ? "; " + s.summon_max + " out at once at most" : "")
+      + (s.relay ? "; relay drones: they cast your spells again on anyone it hits within 30 ft of them, and copy spells others cast near them" : "")
       + (s.on_death ? "; when one is destroyed, enemies within " + (s.on_death.reach || 5) + " ft make a " + (ABIL_SHORT[s.on_death.save] || "Dex") + " save DC " + (s.on_death.dc || 10) + " or lose an action" : ""));
+    if (s.copied) bits.push("copied by a drone" + (s.copied_from ? " from " + s.copied_from : "") + " · can be cast back once");
     if (s.reaction === "deflect") bits.push("reaction: when you're hit, cut the damage by " + (s.reduce || "1d10+dex+level") + (s.redirect !== false ? "; cut to 0, send it at an enemy (10 ft, or 60 ft for a projectile)" : ""));
     if (s.reaction === "absorb") bits.push((s.prime ? "cast it first on your turn; then " : "reaction: ") + "hit by acid, cold, fire, lightning or thunder, +" + (s.bonus_dice || "1d12") + " of it on your next hit");
     else if (s.prime && s.reaction) bits.push("cast it first on your turn");
     if (s.reaction === "sentinel") bits.push("reaction: an enemy next to you attacks someone else, and you strike it");
+    if (s.resist_all) bits.push("resistance to all damage except psychic (half damage) for the whole fight");
+    if (s.per_rest && Number(s.rest_uses) > 1) bits.push(Math.max(0, Number(s.rest_uses) - (Number(s.spent) || 0)) + " of " + s.rest_uses + " uses left before a long rest");
     if (s.death_ward) bits.push("the first time they'd drop to 0 HP, they drop to 1 instead (then it ends)");
+    if (s.clone_swap) bits.push("teleport to one of your clones: you swap places with it (15 ft of movement, no action)");
+    if (s.rewind) bits.push("right after a creature within 60 ft ends its turn: it goes back to where that turn began, its HP and what it spent restored, and takes the turn again" + (s.per_rest ? " · once per long rest" : ""));
     if (Number(s.extra_moves)) bits.push("+" + s.extra_moves + " action" + (Number(s.extra_moves) === 1 ? "" : "s") + " this turn");
     if (s.parry) bits.push("parry: when you're hit, roll off d20 vs the DM; win and you take half");
     if (s.terrain === "rock") bits.push("raises solid rock that blocks movement");
@@ -186,6 +192,28 @@
       const line = raw.trim();
       if (!line) return;
       const p = parseAttack(line) || {};
+      // "Deploy Drones: summon 2 Voss Drone, relay, 3 at once, 2 turn cooldown" -> brings creatures from the library
+      const sm = /\bsummons?\s+(?:(\d+)\s*[x×]?\s+)?([a-z][\w' -]*?)\s*(?=,|\(|$)/i.exec(line);
+      if (sm && !p.dmg) {
+        const cdM = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i.exec(line);
+        const maxM = /(\d+)\s*at once/i.exec(line);
+        const sname = ((line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1] || "Summon").trim();
+        const spec = { name: sname, effect: "buff", summon: sm[2].trim(), summon_count: sm[1] ? Number(sm[1]) : 1, notes: line };
+        if (maxM) spec.summon_max = Number(maxM[1]);
+        if (/\brelay\b/i.test(line)) spec.relay = true;
+        if (cdM) spec.cooldown = Math.min(20, Number(cdM[1] || cdM[2]));
+        out.push(spellView(spec));
+        return;
+      }
+      // "Metal Bend: steel wall, 30 ft line, range 60" -> a straight steel wall on the battle map (he can move it by bending another)
+      if (/\b(?:steel|metal)\s+wall\b/i.test(line)) {
+        const wcd = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down/i.exec(line);
+        const wspec = { name: ((line.match(/^\s*([^.:]{1,40})[.:]/) || [])[1] || "Steel wall").trim(), effect: "buff", terrain: "steel", area: line, notes: line };
+        if (wcd) wspec.cooldown = Math.min(20, Number(wcd[1]));
+        if (lookOf(line)) wspec.look = lookOf(line);
+        out.push(spellView(wspec));
+        return;
+      }
       const book = bookSpell(line);
       const dc = /\bDC\s*(\d+)/i.exec(line);
       let spec;
@@ -206,6 +234,8 @@
     });
     return out;
   }
+  // Spells a relay drone copied (Steven Voss): each can be cast back once
+  const copiedSpells = (sb) => ((sb || {}).copied || []).filter((s) => s && s.name).map((s) => spellView(s));
 
   /* The one way to cast, on every screen: tap who it's on (tap again to take them off), pick
      the slot for a levelled spell, then Cast. The server rolls everything and applies it.
@@ -265,12 +295,21 @@
     if (!p || p.note) return { raw, note: true, text: raw };
     const type = DMG_TYPES.find((t) => t && new RegExp("\\b" + t + "\\b", "i").test(line)) || "";
     const ar = parseArea(line), dc = /\bDC\s*(\d+)/i.exec(line);
-    return { raw, look: p.look || "", name: p.name, hit: p.hit || "", dice: p.dmg || p.check || "", type,
+    // damage: the dice and the base damage (the flat number every hit deals, added to the dice) in their own boxes
+    const split = p.dmg && !p.heal && !p.check ? /^(\d*d\d+)([+-]\d+)?$/i.exec(p.dmg) : null;
+    return { raw, look: p.look || "", name: p.name, hit: p.hit || "", dice: split ? split[1] : p.dmg || p.check || "", base: split && split[2] ? String(Number(split[2])) : "", type,
       does: p.check ? "check" : p.heal ? "heal" : p.condition && !p.dmg ? "condition" : "damage",
       condition: p.condition || "", rounds: p.rounds || "", beat: p.beat != null ? p.beat : p.check && p.dc != null ? p.dc : "",
       dc: dc && !p.check ? Number(dc[1]) : "", area: ar ? ar.size : "", shape: ar ? ar.kind : "cone", range: ar ? ar.range || "" : "",
       reach: kind === "attacks" && !ar && lineReach(line, p) != null ? lineReach(line, p) : "", ranged: kind === "attacks" && !ar && !p.heal && !p.check && lineReach(line, p) == null,
       cooldown: p.cooldown || "" };
+  }
+  /* "2d6" + base 10 -> "2d6+10"; "1d6+2" + base 3 -> "1d6+5" (the fight reads one number after the dice). */
+  function withBase(dice, base) {
+    const m = /^(\d*d\d+)([+-]\d+)?$/i.exec(dice), b = parseInt(String(base ?? "").replace(/\s/g, ""), 10) || 0;
+    if (!m) return dice;
+    const n = (m[2] ? Number(m[2]) : 0) + b;
+    return m[1] + (n > 0 ? "+" + n : n < 0 ? String(n) : "");
   }
   function lineFromRow(r, kind) {
     if (r.note) return String(r.text || "").trim();
@@ -285,7 +324,7 @@
     } else {
       if (hit) parts.push((/^[+-]/.test(hit) ? hit : "+" + hit) + " to hit");
       if (r.dc !== "" && r.dc != null) parts.push("DC " + r.dc);
-      if (dice && r.does !== "condition") parts.push(dice + (r.type ? " " + r.type : "") + " damage"); // "damage": a lone 1d20 isn't a check
+      if (dice && r.does !== "condition") parts.push((r.does === "damage" ? withBase(dice, r.base) : dice) + (r.type ? " " + r.type : "") + " damage"); // "damage": a lone 1d20 isn't a check
       if (r.condition) parts.push(r.condition + (r.rounds ? " " + r.rounds + " rounds" : ""));
     }
     if (r.area) parts.push(r.area + " ft " + (SHAPES.find(([k]) => k === r.shape) || SHAPES[0])[1] + (r.range ? ", range " + r.range : ""));
@@ -299,6 +338,9 @@
     if (r.look) line += ", look " + r.look;
     return line;
   }
+  // "2d6+10" -> "10 base damage + 2d6 on a hit"
+  const dmgWords = (d) => { const m = /^(\d*d\d+)([+-]\d+)$/i.exec(d || "");
+    return m && Number(m[2]) > 0 ? Number(m[2]) + " base damage + " + m[1] + " on a hit" : d + " damage"; };
   function attackRows(o) {
     const kind = o.kind === "spells" ? "spells" : "attacks";
     const rows = String(o.text || "").split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => rowFromLine(l, kind));
@@ -313,7 +355,7 @@
       if (kind === "spells" && bookSpell(line)) { const b = bookSpell(line); return "the rulebook's " + b.name + (p.dmg && p.dmg !== b.dice ? " with " + p.dmg : "") + (spellWhat(b) ? " · " + spellWhat(b) : ""); }
       return [p.check ? "rolls " + p.check + (p.beat != null ? ", must beat " + p.beat : p.dc != null ? ", DC " + p.dc : "") : "",
         p.heal ? "heals " + p.dmg : "", !p.check && !p.heal && p.hit ? p.hit + " to hit" : !p.check && !p.heal && (p.dmg || p.condition) ? "d20 to hit" : "",
-        !p.check && !p.heal && p.dmg ? p.dmg + " damage" : "", p.condition ? p.condition + (p.rounds ? " for " + p.rounds + " rounds" : "") : "",
+        !p.check && !p.heal && p.dmg ? dmgWords(p.dmg) : "", p.condition ? p.condition + (p.rounds ? " for " + p.rounds + " rounds" : "") : "",
         p.aimArea ? p.aimArea.size + " ft " + p.aimArea.kind + " (aimed on the map)" : "", kind === "attacks" && !p.aimArea && !p.heal && !p.check ? (lineReach(line, p) ? "reaches " + lineReach(line, p) + " ft" : "any distance") : "",
         p.cooldown ? p.cooldown + "-turn cooldown" : "", p.look ? "looks like " + (LOOKS.find(([k]) => k === p.look) || ["", p.look])[1].toLowerCase() : ""].filter(Boolean).join(" · ");
     };
@@ -343,7 +385,9 @@
           fld("What it does", sel("does", [["damage", "Damage"], ["condition", "Puts on a condition"], ["heal", "Heals"], ["check", "Roll to beat a number"]], { "aria-label": "What it does" })),
           does === "damage" || does === "condition" ? fld("To hit", inp("hit", { placeholder: "+4", "aria-label": "To hit", inputmode: "numeric", class: "mr-short" })) : null,
           does === "check" ? fld("Must beat", inp("beat", { placeholder: "5", "aria-label": "Must beat", inputmode: "numeric", class: "mr-short" })) : null,
-          does !== "condition" ? fld(does === "heal" ? "Heals" : does === "check" ? "Roll" : "Damage dice", inp("dice", { placeholder: does === "check" ? "1d20" : "1d6+2", "aria-label": "Dice", class: "mr-short" })) : null,
+          does !== "condition" ? fld(does === "heal" ? "Heals" : does === "check" ? "Roll" : "Damage dice", inp("dice", { placeholder: does === "check" ? "1d20" : does === "damage" ? "2d6" : "1d6+2", "aria-label": "Dice", class: "mr-short" })) : null,
+          does === "damage" ? fld("Base damage", inp("base", { placeholder: "0", "aria-label": "Base damage", inputmode: "numeric", class: "mr-short",
+            title: "Every hit deals this much, then the damage dice are added on top" })) : null,
           does === "damage" ? fld("Damage type", sel("type", DMG_TYPES.map((t) => [t, t ? t.charAt(0).toUpperCase() + t.slice(1) : "—"]), { "aria-label": "Damage type" })) : null,
           does === "damage" || does === "condition" ? fld("Condition on a hit", sel("condition", [["", "—"]].concat(CONDITION_WORDS.map((c) => [c, c])), { "aria-label": "Condition" })) : null,
           (does === "damage" || does === "condition") && r.condition ? fld("For rounds", inp("rounds", { placeholder: "1", "aria-label": "Rounds", inputmode: "numeric", class: "mr-short" })) : null,
@@ -484,12 +528,12 @@
      what the move does. Empty = guessed from its name. */
   const LOOKS = [["", "Auto (from its name)"], ["slash", "Slash"], ["punch", "Punch"], ["bite", "Bite"], ["arrow", "Arrow"],
     ["flames", "Fire"], ["frost", "Ice"], ["sparks", "Lightning"], ["holy", "Radiant"], ["venom", "Poison"], ["arcane", "Magic"],
-    ["rock", "Earth"], ["quake", "Earthquake"]];
-  const LOOK_RE = /\s*,?\s*\blook\s+(slash|punch|bite|arrow|flames|frost|sparks|holy|venom|arcane|rock|quake)\b/i;
+    ["rock", "Earth"], ["quake", "Earthquake"], ["laser", "Laser"]];
+  const LOOK_RE = /\s*,?\s*\blook\s+(slash|punch|bite|arrow|flames|frost|sparks|holy|venom|arcane|rock|quake|laser)\b/i;
   const lookOf = (line) => { const m = LOOK_RE.exec(String(line || "")); return m ? m[1].toLowerCase() : ""; };
   const unLook = (line) => String(line || "").replace(LOOK_RE, "");
   const CONDITION_WORDS = ["Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated", "Invisible",
-    "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
+    "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious", "Shocked"];  // Shocked: loses an action next turn (Steven Voss)
   function parseAttack(raw) {
     const look = lookOf(raw), line = unLook(raw).trim();
     if (!line) return null;
@@ -516,8 +560,12 @@
     // breath weapons and other areas reach several creatures
     const area = /\b(?:breath|cone|radius|cube|sphere|each creature|every creature|line that is)\b/i.test(line);
     const cd = /(\d+)\s*-?\s*(?:turns?|rounds?|rds?)\s*(?:of\s*)?cool\s*-?\s*down|cool\s*-?\s*down\s*(?:of\s*|:\s*)?(\d+)/i.exec(line);
-    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line),
-      cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0, look };
+    // "push 20 ft" / "pull 30 ft": on a hit the target is shoved away from (or dragged toward) the attacker
+    const pushM = /\b(push|shove|pull)\w*\s+(\d+)\s*(?:ft|feet|foot)\b/i.exec(line);
+    // "pull all the way": dragged right up to the attacker (-999), flying into any player character in the way
+    const push = /\bpull\w*\s+all\s+the\s+way\b/i.test(line) ? -999 : pushM ? Number(pushM[2]) * (/^pull/i.test(pushM[1]) ? -1 : 1) : 0;
+    return { name, hit, dmg: expr, heal, condition: cond || "", rounds: roundsM ? Number(roundsM[1]) : null, area, aimArea: parseArea(line.replace(/\b(?:push|shove|pull)\w*\s+\d+\s*(?:ft|feet|foot)\b/gi, "").replace(/\bpull\w*\s+all\s+the\s+way\b/gi, "")),
+      cooldown: cd ? Math.min(20, Number(cd[1] || cd[2])) : 0, look, push };
   }
   /* "15 ft cone", "20-foot radius", "10 ft cone, range 20" -> { kind, size, range } to aim on the map.
      Same rule as rules.parse_area on the server; without a range the area starts at the attacker. */
@@ -566,7 +614,7 @@
   }
   // what's been typed in a monster's attacks & spells boxes but not saved yet, so a redraw doesn't lose it
   const drafts = new Map();
-  const ATTACK_HELP = "One per line. Bite 1d6 · Claw +4 to hit 1d6+2 · Spread 1d20 must beat a 5";
+  const ATTACK_HELP = "One per line. Bite 1d6 · Claw +4 to hit 1d6+2 (2 base damage + 1d6 on a hit) · Spread 1d20 must beat a 5";
   const SPELL_HELP = "One per line. Fire bolt +5 2d10 · Fireball 8d6 · Healing word heal 1d4+2 · Web: Restrained 10 rounds";
   /* Write an enemy's attacks and spells in the middle of a fight. With "all like it" ticked, every
      enemy of the same kind in the fight and the creature in the library change too. */
@@ -1047,8 +1095,18 @@
       const key = "boss-phase2-" + b.id;
       let seen = false;
       try { seen = sessionStorage.getItem(key) === "1"; sessionStorage.setItem(key, "1"); } catch (e) { /* ignore */ }
-      if (!seen && window.FX) { FX.banner("Phase 2!", b.name + " grows stronger", "crit"); FX.sound && FX.sound("crit"); }
+      if (seen || !window.FX) return;
+      const scene = phase2Scene(b.name);
+      if (scene) scene(b);
+      else { FX.banner("Phase 2!", b.name + " grows stronger", "crit"); FX.sound && FX.sound("crit"); }
     });
+  }
+  /* A boss's own phase 2 moment, instead of the plain banner: Steven Voss drives his shard of the
+     Hollow Star into his chest and grows steel wings (effects.js FX.starHeart). null = the banner. */
+  function phase2Scene(name) {
+    if (!window.FX || !FX.starHeart) return null;
+    if (/^\s*steven\s+voss\b/i.test(String(name || ""))) return (b) => FX.starHeart({ name: "Steven Voss", portrait: b.portrait });
+    return null;
   }
 
   /* Instant updates: one connection per page (server-sent events). on(fn) runs fn the moment
@@ -1095,6 +1153,7 @@
   }
   document.addEventListener("pointerdown", (e) => {
     if (!(e.target.closest && e.target.closest("button, a, summary, label, [role=button]"))) return;
+    if (e.target.closest("[data-free-press]")) return; // fixed buttons that are never rebuilt (the walking pad): the map keeps updating while held
     press.down = true;
     clearTimeout(press.safety);
     press.safety = setTimeout(pressEnd, 1000); // a held finger doesn't freeze the screen
@@ -1233,5 +1292,102 @@
   const dmReact = (c, kind, body, done) => act("POST", "/api/combatants/" + c.id + "/react", Object.assign({ kind }, body || {}), (d) => { if (done) done(d); return d; },
     { onError: (e) => toast(e.message, "error") });
 
-  window.L = { h, icon, twoTapBtn, whenUp, pressing: () => press.down, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
+  /* ---- techniques (Yamato, app/yamato.py): one panel on the phone, the combat page and the map ----
+     t: the server's techniques state {moves, clones, foes, weapon, dc, mirage}. opts.run(body) uses one
+     (body: {index, targets, clones, rider}); opts.dm adds the knockback/slow pick and the Mirage spot check. */
+  const techPick = new Map(); // key -> { open: index, targets: Set, clones: Set, rider: {} } (kept across redraws)
+  const CLONE_WORD = { "uses up all": ["Uses up every clone", "is-bad"], "uses up one": ["Uses up 1 clone", "is-bad"],
+    moves: ["Moves clones", "is-good"], joins: ["Clones join in (not used up)", ""], hides: ["Hides among clones", ""] };
+  function techniques(t, opts) {
+    if (!t || !t.moves || !t.moves.length) return null;
+    opts = opts || {};
+    const key = opts.key || "me";
+    const st = techPick.get(key) || { open: null, targets: new Set(), clones: new Set(), rider: {} };
+    techPick.set(key, st);
+    const redraw = () => { const old = document.querySelector('[data-tech="' + key + '"]'); if (old) old.replaceWith(techniques(t, opts)); };
+    const foes = t.foes || [], clones = t.clones || [];
+    const go = (m, btn) => {
+      const body = { index: m.index, targets: [...st.targets].filter((id) => foes.some((f) => f.id === id)),
+        clones: [...st.clones].filter((id) => clones.some((k) => k.id === id)) };
+      if (opts.dm && m.key === "phantom_blade") body.rider = st.rider;
+      if (btn) btn.disabled = true;
+      Promise.resolve(opts.run(body)).then((d) => {
+        if (d && d.technique) {
+          toast(d.technique.summary, "ok", { ms: 9000 });
+          if (window.FX) { FX.banner(d.technique.name + "!", "", "crit"); FX.sound("crit"); }
+          st.open = null; st.targets.clear(); st.clones.clear(); st.rider = {};
+        }
+        if (btn) btn.disabled = false;
+      });
+    };
+    const card = (m) => {
+      const open = st.open === m.index && m.ready;
+      const [cw, ccls] = CLONE_WORD[m.clones] || [];
+      const tags = [
+        h("span", { class: "tag" }, icon("hourglass", "sm"), m.key === "clone_calling" ? " once a round" : " " + m.cooldown + "-turn cooldown"),
+        h("span", { class: "tag" }, m.action ? "1 action" : "no action"),
+        cw ? h("span", { class: "tag " + ccls }, cw) : null,
+        m.stage === "on" ? h("span", { class: "tag is-good" }, "ON · Perception DC " + m.mirage_dc) : null,
+        m.stage === "release" ? h("span", { class: "tag is-good" }, "Sheathed: ready to release") : null,
+        m.recharging ? h("span", { class: "tag is-off" }, "recharging") : null];
+      const pickFoes = open && m.targets !== "none" ? h("div", { class: "tech-pick" },
+        h("div", { class: "lbl" }, m.targets === "one" ? "Who?" : "Who? (tap each one)"),
+        foes.length ? foes.map((f) => h("button", { type: "button", class: "tag" + (st.targets.has(f.id) ? " is-good" : ""), style: "margin:2px;cursor:pointer",
+          "aria-pressed": String(st.targets.has(f.id)), "data-foe": f.id,
+          onclick: () => { if (st.targets.has(f.id)) st.targets.delete(f.id); else { if (m.targets === "one") st.targets.clear(); st.targets.add(f.id); } redraw(); } }, f.name))
+          : h("span", { class: "faint" }, "No enemies showing."),
+        opts.dm && m.key === "phantom_blade" ? [...st.targets].map((id) => { const f = foes.find((x) => x.id === id); return f ? h("label", { class: "field", style: "margin-top:4px" },
+          h("span", null, f.name + " on a hit"), h("select", { onchange: (e) => { st.rider[id] = e.target.value; } },
+            [["size", "By size (Medium: knock back · Large: slow · Huge: nothing)"], ["push", "Knock back 10 ft"], ["slow", "Slow (half speed)"], ["none", "Nothing (it resists)"]]
+              .map(([v, l]) => h("option", { value: v, selected: (st.rider[id] || "size") === v }, l)))) : null; }) : null) : null;
+      const pickClones = open && (m.pick_clone || m.key === "clone_calling") ? h("div", { class: "tech-pick" },
+        h("div", { class: "lbl" }, m.pick_clone ? "Which clone charges? (it's used up)" : "Which clones? (none picked = all)"),
+        clones.map((k) => h("button", { type: "button", class: "tag" + (st.clones.has(k.id) ? " is-good" : ""), style: "margin:2px;cursor:pointer",
+          "aria-pressed": String(st.clones.has(k.id)), "data-clone": k.id,
+          onclick: () => { if (st.clones.has(k.id)) st.clones.delete(k.id); else { if (m.pick_clone) st.clones.clear(); st.clones.add(k.id); } redraw(); } },
+          k.name + " · " + k.hp + "/" + k.max_hp))) : null;
+      const needs = m.targets === "none" ? false : !st.targets.size;
+      const direct = m.targets === "none" && !m.pick_clone && m.key !== "clone_calling";
+      const btn = m.ready ? (open || direct
+        ? h("button", { type: "button", class: "btn btn-sm btn-primary", "data-go": m.key, disabled: open && (needs || (m.pick_clone && !st.clones.size)),
+          onclick: (e) => go(m, e.currentTarget) }, open && !direct ? "Go" : m.button)
+        : h("button", { type: "button", class: "btn btn-sm", "data-open": m.key, onclick: () => { st.open = m.index; st.targets.clear(); st.clones.clear(); st.rider = {}; redraw(); } }, m.button))
+        : h("span", { class: "faint", style: "font-size:.85rem" }, m.why);
+      return h("div", { class: "tech-row spell-row does-" + (m.key === "clone_calling" || m.key === "mirage" ? "buff" : "damage"), "data-key": m.key },
+        h("div", { class: "sr-main" },
+          h("div", { class: "sr-name" }, h("b", null, m.name), ...tags),
+          h("div", { class: "faint sr-what" }, m.info),
+          pickFoes, pickClones,
+          open ? h("button", { type: "button", class: "btn btn-sm btn-quiet", onclick: () => { st.open = null; redraw(); } }, "Cancel") : null),
+        btn);
+    };
+    const mir = opts.dm && opts.spot && t.mirage ? h("div", { class: "tech-pick", style: "margin-top:6px" },
+      h("div", { class: "lbl" }, "Mirage: an enemy tries to pick out the real one"),
+      foes.map((f) => h("button", { type: "button", class: "tag", style: "margin:2px;cursor:pointer", onclick: () => opts.spot(f.id) }, f.name + " looks"))) : null;
+    return h("div", { class: "hit-spells tech-box", "data-tech": key },
+      h("div", { class: "lbl" }, "Techniques", h("span", { class: "faint", style: "text-transform:none;letter-spacing:0" },
+        " · weapon " + signed(t.weapon.bonus) + " " + t.weapon.damage + " · DC " + t.dc + " · " + clones.length + " clone" + (clones.length === 1 ? "" : "s") + " out")),
+      t.moves.map(card), mir);
+  }
+
+  /* ---- loot: what's in a chest, by rarity ----------------------------------------------------- */
+  const RARITY = { common: ["Common", "#b9b4a8"], uncommon: ["Uncommon", "#5fc46a"], rare: ["Rare", "#4f9cf0"], epic: ["Epic", "#b06cf0"], legendary: ["Legendary", "#f0a43a"] };
+  const CHEST_ICON = { supply: "backpack", military: "swords", medical: "heart-pulse", vault: "shield", experimental: "zap", legendary: "crown", drop: "backpack", papers: "scroll-text", abort: "key-round", escape: "footprints" };
+  /** A list of items: name, rarity, how many, what it does; opts.take(item) / opts.remove(item) add buttons. */
+  function lootList(items, opts) {
+    opts = opts || {};
+    if (!items || !items.length) return h("p", { class: "faint loot-empty" }, opts.empty || "Empty.");
+    return h("ul", { class: "loot-list" }, items.map((it) => {
+      const [rname, col] = RARITY[it.rarity] || RARITY.common;
+      return h("li", { class: "loot-item rarity-" + (it.rarity || "common"), style: "--rarity:" + col },
+        h("div", { class: "loot-top" },
+          h("b", { class: "loot-name" }, it.name + (it.qty > 1 ? " ×" + it.qty : "")),
+          h("span", { class: "rarity-tag" }, (it.magic ? "Magic · " : "") + rname),
+          opts.take ? h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: (e) => opts.take(it, e.currentTarget) }, "Take") : null,
+          opts.remove ? h("button", { type: "button", class: "btn btn-sm btn-quiet", title: "Take it out of the chest", onclick: () => opts.remove(it) }, icon("x", "sm")) : null),
+        it.desc ? h("p", { class: "loot-desc" }, it.desc + (it.weight ? " · " + it.weight + " lb" : "")) : null);
+    }));
+  }
+
+  window.L = { techniques, RARITY, CHEST_ICON, lootList, h, icon, twoTapBtn, whenUp, pressing: () => press.down, grow, wrapUp, isHealing, attackLines, attackNotes, checkVerdict, monsterEditor, restoreOpen, ATTACK_HELP, SPELL_HELP, spellHelps, spellKind, spellWhat, spellLands, spellView, levelWord, duration, bookSpell, monsterSpells, copiedSpells, castPanel, castResult, castSpell, diceColors, live: Live, bossBar, dmBoss, phase2Scene, attackRows, attackRowParts: { rowFromLine, lineFromRow }, takeBack, parry, offerParry, turnStrip, reactionBox, reactionDone, offerReactions, dmReact, auraButton, KIND_WORD, KIND_ICON, wrapText, $, $$, signed, boot, uid, debounce, fmtTime, fmtDate, initials, toast, api, HttpError, Save, Binder, act, armed };
 })();

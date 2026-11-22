@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from flask import current_app, g
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 19
 
 MIGRATIONS = {
     1: """
@@ -405,6 +405,38 @@ MIGRATIONS = {
     # v17: made-up maps (dungeon, cave, prison): their rooms, start, stairs and the next level.
     17: """
     ALTER TABLE maps ADD COLUMN dungeon TEXT NOT NULL DEFAULT '';
+    """,
+    # v18: chests on a map (app/chests.py): kind, where, the card that opens it, opened or not, and the
+    # loot (rolled once, the first time anyone looks inside; NULL until then) and who took what.
+    18: """
+    CREATE TABLE IF NOT EXISTS chests (
+        id INTEGER PRIMARY KEY,
+        uid TEXT NOT NULL UNIQUE,
+        map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        locked_by TEXT NOT NULL DEFAULT '',
+        hidden INTEGER NOT NULL DEFAULT 0,
+        opened INTEGER NOT NULL DEFAULT 0,
+        opened_by TEXT NOT NULL DEFAULT '',
+        opened_at TEXT,
+        seed INTEGER NOT NULL DEFAULT 0,
+        loot TEXT,
+        added TEXT NOT NULL DEFAULT '[]',
+        taken TEXT NOT NULL DEFAULT '[]',
+        source TEXT NOT NULL DEFAULT 'placed',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chests_map ON chests(map_id);
+    """,
+    # v19: a spell attack typed in by hand (an NPC who's always +3 to hit), and Wild Shape (app/wildshape.py):
+    # the forms a druid can take, uses spent, and while shifted, the form and her own stats kept aside.
+    19: """
+    ALTER TABLE characters ADD COLUMN spell_attack_override INTEGER;
+    ALTER TABLE characters ADD COLUMN wild_shape TEXT NOT NULL DEFAULT '{}';
     """,
 }
 

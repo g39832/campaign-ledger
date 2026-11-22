@@ -88,6 +88,7 @@
     $("#reopen").hidden = st !== "ended";
     $("#end").hidden = st === "ended";
     $("#next").disabled = $("#prev").disabled = st !== "active";
+    $("#let-act").hidden = !(st === "active" && cur && cur.kind === "enemy" && !cur.linked);
     const u = $("#undo");
     u.disabled = !S.undo_last;
     u.title = S.undo_last ? "Undo: " + S.undo_last : "Nothing to undo";
@@ -97,6 +98,12 @@
   }
   $("#next").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/next", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#prev").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/prev", {}, () => { const c = current(); if (c) select(c.id); }));
+  // an enemy takes its own turn on the battle map (app/ai.py), then the turn moves on
+  $("#let-act").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/auto-turn", { next: true }, (d) => {
+    (d && d.did || []).slice(-4).forEach((line) => toast(line, "ok", { ms: 5000 }));
+    if (window.Dice && Dice.poll) Dice.poll();
+    const c = current(); if (c) select(c.id);
+  }));
   $("#start").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/start", {}, () => { const c = current(); if (c) select(c.id); }));
   $("#reopen").addEventListener("click", () => run("POST", "/api/encounters/" + EID + "/reopen"));
   const makeMap = () => act("POST", "/api/encounters/" + EID + "/map", {}, (d) => {
@@ -426,7 +433,7 @@
       // no dice: "+2 ac to target" is cast like a buff; anything else is just shown
       ? { name: a.name, note: a.ac || a.extra_moves ? "" : a.notes, cooldown: a.cooldown || 0,
         // Action Surge: extra moves for the rest of this turn
-        surge: a.extra_moves || a.stance > 1 ? () => run("POST", "/api/combatants/" + c.id + "/surge", { index: i }) : null, surgeN: a.extra_moves || 0, stance: a.stance || 1,
+        surge: a.extra_moves || a.stance > 1 || a.stance_hit ? () => run("POST", "/api/combatants/" + c.id + "/surge", { index: i }) : null, surgeN: a.extra_moves || 0, stance: a.stance || 1, stanceHit: a.stance_hit || 0,
         effect: a.ac ? { name: a.name, effect: a.ac > 0 ? "buff" : "debuff", condition: a.name, ac: a.ac, rounds: null, hit: "", cooldown: a.cooldown || 0, move: true } : null }
       : ({ name: a.name, heal: !!a.heal, cooldown: a.cooldown || 0, hasHit: a.has_hit,
       // leaves a condition on a hit (Grapple): one button rolls the hit, the damage and puts it on
@@ -540,7 +547,7 @@
       }) }, a.hitLabel) : null,
       a.chk ? h("button", { type: "button", class: "btn btn-sm", onclick: (e) => a.chk(e) }, icon("dice-5", "sm"), " " + a.chkLabel) : null,
       a.surge ? h("button", { type: "button", class: "btn btn-sm btn-primary", title: "On themselves, for the rest of their turn", onclick: a.surge },
-        icon("zap", "sm"), " Use · " + [a.surgeN ? "+" + a.surgeN + " moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : ""].filter(Boolean).join(", ")) : null,
+        icon("zap", "sm"), " Use · " + [a.surgeN ? "+" + a.surgeN + " moves" : "", a.stance > 1 ? (a.stance === 2 ? "double damage" : "×" + a.stance + " damage") + " this turn" : "", a.stanceHit ? (a.stanceHit > 0 ? "+" : "") + a.stanceHit + " to hit this turn" : ""].filter(Boolean).join(", ")) : null,
       a.effect ? h("button", { type: "button", class: "btn btn-sm" + (L.spellHelps(a.effect) ? " btn-heal" : a.effectFirst ? " btn-dmg" : ""),
         title: a.effectFirst ? "Rolls to hit against their AC; on a hit it deals the damage" + (a.effect.dmg_mult > 1 ? " ×" + a.effect.dmg_mult : "") + (a.effect.condition ? " and they're " + a.effect.condition : "") : "Then tap who it's on", onclick: () => startCast(c, a.effect, { spell: a.effect }) },
         icon(L.spellHelps(a.effect) ? "shield-plus" : "zap", "sm"), a.effectFirst ? " Use · " + [a.effect.condition, a.effect.dmg_mult > 1 ? (a.effect.dmg_mult == 2 ? "double damage" : "×" + a.effect.dmg_mult + " damage") : ""].filter(Boolean).join(", ")
@@ -566,7 +573,13 @@
       h("h3", { class: "rule-head" }, healing ? "Heal or help someone" : "Hit a target", h("span", { class: "count" }, c.name + (healing ? " helps" : " attacks"))),
       h("div", { class: "row", style: "align-items:center;margin-bottom:8px" }, seg),
       h("div", { class: "target-chips" }, chips),
-      atkRows, spellRows, verdict,
+      atkRows, spellRows,
+      c.techniques ? L.techniques(c.techniques, { dm: true, key: "c" + c.id,
+        run: (body) => api("POST", "/api/encounters/" + EID + "/technique", Object.assign({ op_id: L.uid(), caster_id: c.id }, body))
+          .then((d) => { refresh(true); return d; }).catch((e) => { toast(e.message, "error"); return null; }),
+        spot: (fid) => api("POST", "/api/encounters/" + EID + "/mirage-spot", { op_id: L.uid(), caster_id: c.id, enemy_id: fid })
+          .then((d) => { toast(d.spot, "ok", { ms: 9000 }); refresh(true); }).catch((e) => toast(e.message, "error")) }) : null,
+      verdict,
       c.boss && c.boss.legendary && c.boss.legendary.trim() ? h("div", { class: "legendary-box" },
         h("div", null, icon("crown", "sm"), h("b", null, " Legendary actions: " + c.boss.left + " of " + c.boss.per_round + " left"),
           h("span", { class: "faint" }, " · " + L.attackLines(c.boss.legendary).map((x) => x.name + (x.dmg ? " " + x.dmg : "")).join(", "))),
@@ -585,10 +598,17 @@
   /* Spells: the sheet's (heroes), the Spells box (monsters), and for monsters any spell from
      the list. Each one: what it does, how it lands, and a Cast button. */
   let bookPick = "";
+  async function rewind(c) { // Time Reversal (Lux's ring), used by the DM for the hero
+    try {
+      const d = await api("POST", "/api/encounters/" + EID + "/rewind", { op_id: L.uid(), caster_id: c.id });
+      if (d.rewind) toast(d.rewind.name + ": " + d.rewind.target + " takes its turn again.", "ok", { ms: 6000 });
+      refresh(true);
+    } catch (e) { toast(e.message, "error"); }
+  }
   function spellList(c, cdLeft) {
     const sc = c.spellcasting, rule = toHitRule();
     const items = c.linked ? (c.spells || []).map((s) => [L.spellView(s), { spell: s.index }])
-      : L.monsterSpells((c.statblock || {}).spells).map((s) => [s, { spell: s }]);
+      : L.monsterSpells((c.statblock || {}).spells).concat(L.copiedSpells(c.statblock)).map((s) => [s, { spell: s }]);
     const slots = c.linked ? Object.entries(c.spell_slots || {}).sort((a, b) => a[0] - b[0]) : [];
     const row = ([s, body]) => {
       const helps = L.spellHelps(s), left = s.cooldown || s.per_fight ? cdLeft(s.name) : 0;
@@ -596,13 +616,22 @@
         h("div", { class: "sr-main" },
           h("div", { class: "sr-name" }, h("b", null, s.name), h("span", { class: "tag" }, L.levelWord(s)),
             s.concentration ? h("span", { class: "tag", title: "Concentration" }, "Conc.") : null),
-          h("div", { class: "faint sr-what" }, [L.spellWhat(s), L.spellLands(s, sc || (s.dc ? { dc: s.dc } : null), rule), s.area ? s.area.size + " ft " + ({ circle: "radius", square: "cube" }[s.area.kind] || s.area.kind) : ""].filter(Boolean).join(" · "))),
-        left ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
+          h("div", { class: "faint sr-what" }, [L.spellWhat(s), L.spellLands(s, s.dc ? { dc: s.dc } : sc, rule), s.area ? s.area.size + " ft " + ({ circle: "radius", square: "cube" }[s.area.kind] || s.area.kind) : ""].filter(Boolean).join(" · "))),
+        s.rewind ? (c.rewind && c.rewind.ok ? h("button", { type: "button", class: "btn btn-sm btn-heal", title: "Undo " + c.rewind.target + "'s whole turn: back where it started, HP and what it spent restored; it takes the turn again",
+            onclick: () => rewind(c) }, icon("history", "sm"), " Rewind " + c.rewind.target + "'s turn")
+          : h("span", { class: "tag" }, icon("hourglass", "sm"), " " + ((c.rewind && c.rewind.why) || "right after a creature ends its turn")))
+        : s.per_rest && s.used ? h("span", { class: "tag", title: "A long rest brings it back" }, icon("hourglass", "sm"), " used · back after a long rest")
+          : left ? h("span", { class: "tag" }, icon("hourglass", "sm"), " recharging")
           : s.aura && c.linked ? L.auraButton(s, "/api/characters/" + c.character_id + "/aura", () => refresh(true))
           : s.terrain ? h("button", { type: "button", class: "btn btn-sm", title: "It changes the ground: aim it on the battle map", onclick: () => { try { localStorage.setItem("combat-sel-" + EID, c.id); } catch (e) { /* ignore */ } makeMap(); } },
             icon("map", "sm"), " Aim on map")
-          : h("button", { type: "button", class: "btn btn-sm " + (s.kind === "heal" || helps ? "btn-heal" : "btn-dmg"), title: "Pick who it reaches, then Cast",
-            onclick: () => startCast(c, s, body) }, icon(L.KIND_ICON[s.kind] || "zap", "sm"), " Cast"));
+          : [h("button", { type: "button", class: "btn btn-sm " + (s.kind === "heal" || helps ? "btn-heal" : "btn-dmg"), title: "Pick who it reaches, then Cast",
+            onclick: () => startCast(c, s, body) }, icon(L.KIND_ICON[s.kind] || "zap", "sm"), " Cast"),
+            // a spell his drones copied can also be cast as a legendary action (Steven Voss)
+            s.copied && c.boss && c.boss.per_round ? h("button", { type: "button", class: "btn btn-sm leg-cast",
+              disabled: S.encounter.status !== "active" || S.encounter.current_id === c.id || !c.boss.left,
+              title: S.encounter.current_id === c.id ? "Legendary actions are for the end of other creatures' turns" : !c.boss.left ? "No legendary actions left this round" : "Cast it as one of " + c.name + "'s legendary actions",
+              onclick: () => startCast(c, s, Object.assign({}, body, { legendary: true })) }, icon("crown", "sm"), " As legendary") : null]);
     };
     const book = (window.SPELL_BOOK && window.SPELL_BOOK.spells) || [];
     const fromBook = !c.linked && book.length ? h("div", { class: "row sr-book", style: "gap:6px;align-items:center;margin-top:6px" },
@@ -623,6 +652,26 @@
         h("div", { class: "faint sr-what" }, "Cast it first (an action) · then a hit lets them react: +" + (r.bonus || "1d12") + " on the next hit")),
       h("button", { type: "button", class: "btn btn-sm btn-primary", onclick: () => dmReact(c, "prime", { name: r.name }).then((d) => L.reactionDone(d && d.reaction, c.name)) },
         icon("flame", "sm"), " Cast"))));
+    const ws = c.linked && c.wild_shape;
+    if (ws) {
+      const wsRun = (body, msg) => api("POST", "/api/characters/" + c.character_id + "/wild-shape", body)
+        .then(() => { toast(msg, "success"); refresh(true); }).catch((e) => toast(e.message, "error"));
+      if (ws.active) surges.unshift(h("div", { class: "spell-row does-buff" },
+        h("div", { class: "sr-main" }, h("div", { class: "sr-name" }, h("b", null, "Wild Shape: " + ws.active.name)),
+          h("div", { class: "faint sr-what" }, (ws.active.trump ? "Her trump card! " : "") + "In beast form: no spells · at 0 HP she changes back and the rest of the damage carries over")),
+        h("button", { type: "button", class: "btn btn-sm", title: "A bonus action on her turn", onclick: () => wsRun({ back: true }, c.name + " changes back.") },
+          icon("undo-2", "sm"), " Change back")));
+      else surges.unshift(h("div", { class: "spell-row does-buff ws-row" },
+        h("div", { class: "sr-main" }, h("div", { class: "sr-name" }, h("b", null, "Wild Shape"), h("span", { class: "tag" }, ws.left + "/" + ws.uses + " uses")),
+          h("div", { class: "faint sr-what" }, "A bonus action · turns into a beast with its own HP, AC and attacks")),
+        h("select", { "aria-label": "Wild Shape form", class: "ws-pick", style: "width:auto;max-width:220px" },
+          ws.forms.map((f) => h("option", { value: f.index, disabled: f.trump ? !ws.trump_ready : f.cost > ws.left },
+            (f.trump ? "★ Trump card: " : "") + f.name + " · " + f.hp + " HP · AC " + f.ac
+            + (f.trump ? (ws.trump_ready ? " · once per long rest" : " · used") : f.cost > 1 ? " · 2 uses" : "")))),
+        h("button", { type: "button", class: "btn btn-sm btn-primary", disabled: !ws.left && !ws.trump_ready,
+          onclick: (e) => { const sel = e.target.closest(".ws-row").querySelector(".ws-pick"); const f = ws.forms[Number(sel.value)];
+            wsRun({ form: f.index }, c.name + " becomes a " + f.name + "."); } }, icon("paw-print", "sm"), " Shift")));
+    }
     if (!items.length && !fromBook && !surges.length) return null;
     return h("div", { class: "hit-attacks hit-spells" },
       h("div", { class: "lbl" }, "Spells",

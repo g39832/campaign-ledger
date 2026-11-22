@@ -1,4 +1,4 @@
-@echo off
+   @echo off
 REM Campaign Ledger - double-click to start
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (

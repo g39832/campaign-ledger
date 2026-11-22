@@ -14,7 +14,7 @@ def test_every_layout_has_a_boss_room_and_reaches_the_stairs(theme):
         assert kinds.count("boss") == 1 and kinds.count("start") == 1
         boss = next(r for r in g["rooms"] if r["kind"] == "boss")
         assert room_at([boss], *g["exit"]), "the stairs are in the boss room"
-        assert g["terrain"][f"{g['exit'][0]},{g['exit'][1]}"] == "stairs"
+        assert g["terrain"][f"{g['exit'][0]},{g['exit'][1]}"] == ("lift" if theme == "silo" else "stairs")  # the silo goes down by freight lift
         assert path_len(g["terrain"], g["start"], g["exit"], g["cols"], g["rows"]) is not None
     assert generate(theme, 5)["terrain"] == generate(theme, 5)["terrain"], "the same seed, the same map"
     assert generate(theme, 5)["terrain"] != generate(theme, 6)["terrain"]
@@ -105,6 +105,9 @@ def test_walking_into_a_room_with_monsters_starts_a_fight(api, joined):
     mid, d = st["map"]["id"], st["map"]["dungeon"]
     api.post(f"/api/campaigns/{camp['id']}/live-map", {"map_id": mid})
     st = api.post(f"/api/maps/{mid}/party-to-start")
+    # with the fog off it's the room rule: walking into a room with monsters brings the whole party in
+    # (with fog on, who sees whom starts it: tests/test_vision.py)
+    api.patch(f"/api/maps/{mid}", {"changes": {"fog_enabled": {"from": True, "to": False}}})
     rooms = [r for r in d["rooms"] if r["kind"] == "room"]
     r1, r2 = rooms[0], rooms[1]
     api.post(f"/api/maps/{mid}/monsters", {"book": "Goblin", "count": 2, "x": r1["box"][0] + 1, "y": r1["box"][1] + 1, "hidden": True}, 201)

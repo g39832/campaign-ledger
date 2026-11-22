@@ -157,9 +157,31 @@
       for (let i = 0; i < 6; i++) noise(a, { dur: 0.35, vol: 0.4, freq: 120 + i * 25, delay: i * 0.22 });
       for (let i = 0; i < 4; i++) noise(a, { dur: 0.06, vol: 0.3, freq: 1500 + i * 400, delay: 0.15 + i * 0.3 }); },
     ac: (a) => { tone(a, { type: "triangle", from: 440, to: 880, dur: 0.25, vol: 0.18 }); },
+    chest: (a) => { // a seal hisses, the lid clunks up, a bright chime
+      noise(a, { dur: 0.35, vol: 0.28, freq: 4200 }); tone(a, { type: "square", from: 120, to: 70, dur: 0.12, vol: 0.18, delay: 0.3 });
+      [784, 1175, 1568].forEach((f, i) => tone(a, { type: "sine", from: f, dur: 0.3, vol: 0.14, delay: 0.42 + i * 0.07 })); },
+    drop: (a) => { noise(a, { dur: 0.08, vol: 0.3, freq: 900 }); tone(a, { type: "triangle", from: 660, to: 880, dur: 0.15, vol: 0.14, delay: 0.08 }); },
+    door: (a) => { tone(a, { type: "sine", from: 880, to: 1320, dur: 0.12, vol: 0.14 }); noise(a, { dur: 0.6, vol: 0.22, freq: 300, delay: 0.12 });
+      tone(a, { type: "sawtooth", from: 70, to: 55, dur: 0.6, vol: 0.12, delay: 0.12 }); },
+    denied: (a) => { tone(a, { type: "square", from: 220, dur: 0.12, vol: 0.12 }); tone(a, { type: "square", from: 180, dur: 0.18, vol: 0.12, delay: 0.14 }); },
     descend: (a) => { // footsteps going down, then a low hum
       for (let i = 0; i < 6; i++) { tone(a, { type: "sine", from: 260 - i * 28, dur: 0.12, vol: 0.2, delay: i * 0.16 }); noise(a, { dur: 0.05, vol: 0.18, freq: 500 - i * 50, delay: i * 0.16 }); }
       tone(a, { type: "triangle", from: 98, to: 82, dur: 1.2, vol: 0.2, delay: 1.0 }); },
+    // Steven Voss's Hollow Star Heart
+    shardrise: (a) => { tone(a, { type: "sine", from: 330, to: 990, dur: 1.4, vol: 0.12 }); tone(a, { type: "sine", from: 495, to: 1485, dur: 1.4, vol: 0.06, delay: 0.05 }); },
+    starheart: (a) => { // a heavy thud into the chest, a bright star chord, a low hum that stays
+      tone(a, { type: "sine", from: 120, to: 40, dur: 0.6, vol: 0.5 }); noise(a, { dur: 0.4, vol: 0.4, freq: 240 });
+      [523, 784, 1047, 1568].forEach((f, i) => tone(a, { type: "triangle", from: f, dur: 1.3, vol: 0.13, delay: 0.08 + i * 0.05 }));
+      tone(a, { type: "sawtooth", from: 82, to: 78, dur: 2.2, vol: 0.1, delay: 0.2 }); },
+    scrap: (a) => { for (let i = 0; i < 8; i++) noise(a, { dur: 0.05, vol: 0.18, freq: 2500 + Math.random() * 3000, delay: i * 0.11 + Math.random() * 0.05 }); },
+    clank: (a) => { tone(a, { type: "square", from: 1400 + Math.random() * 600, to: 900, dur: 0.07, vol: 0.06 }); noise(a, { dur: 0.06, vol: 0.2, freq: 3200 }); },
+    wingsweep: (a) => { // steel wings snap open: a rush of air and a ringing blade
+      const t = a.currentTime, len = Math.floor(a.sampleRate * 0.8), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len);
+      const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = buf; f.type = "bandpass"; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(2400, t + 0.6);
+      g.gain.value = 0.45 * prefs.volume; src.connect(f).connect(g).connect(a.destination); src.start(t);
+      [1760, 2637].forEach((fr, i) => tone(a, { type: "sine", from: fr, dur: 1.1, vol: 0.07, delay: 0.45 + i * 0.03 })); },
   };
   /** Going down to a new level (or a new map made): the screen sinks into darkness down a flight of
      steps, the level's name comes up, then it fades away. About two seconds; tap to skip. */
@@ -179,6 +201,120 @@
     sound("descend");
     setTimeout(go, calm() ? 1400 : 2400);
   }
+  /** Steven Voss at half health ("Hollow Star Heart"): he lifts his shard of the Hollow Star and
+     drives it into his chest, the star lights up inside him, scraps of metal flicker into being all
+     round him, fly in and lock together into two folded steel wings, and the wings sweep open around
+     him. About nine seconds; tap to skip. opts: {name, portrait (upload name)}. */
+  const STAR = "50,4 61.2,34.6 93.7,35.8 68.1,55.9 77,87.2 50,69 23,87.2 31.9,55.9 6.3,35.8 38.8,34.6";
+  const STAR_IN = "50,20 57.3,40 78.5,40.7 61.8,53.8 67.6,74.3 50,62.4 32.4,74.3 38.2,53.8 21.5,40.7 42.7,40";
+  function starHeart(opts) {
+    opts = opts || {};
+    const old = document.querySelector(".fx-starheart"); if (old) old.remove();
+    const mk = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
+    const el = mk("div", "fx-starheart" + (calm() || !prefs.effects ? " is-calm" : ""));
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-label", (opts.name || "Steven Voss") + " drives the Hollow Star shard into his chest and grows steel wings");
+    const stage = mk("div", "sh-stage");
+    const wings = mk("div", "sh-wings");
+    const L = mk("div", "sh-wing is-left"), R = mk("div", "sh-wing is-right");
+    wings.append(L, R);
+    // three rows of steel feathers per wing: long blades at the back, shorter plates over them
+    const TIERS = [{ n: 9, len: 0.52, h: 0.07, from: -78, to: 38 }, { n: 7, len: 0.36, h: 0.07, from: -66, to: 30 }, { n: 5, len: 0.2, h: 0.08, from: -50, to: 22 }];
+    const plates = [];
+    TIERS.forEach((t, ti) => {
+      for (let k = 0; k < t.n; k++) {
+        const f = k / (t.n - 1), a = t.from + (t.to - t.from) * f, len = t.len * (1 - 0.32 * f);
+        [L, R].forEach((w) => {
+          const p = mk("div", "sh-plate is-t" + ti);
+          p.style.width = (len * 100) + "%"; p.style.height = (t.h * 100) + "%";
+          w.append(p); plates.push({ p, a, ti, k, f });
+        });
+      }
+    });
+    const body = mk("div", "sh-body");
+    if (opts.portrait) { const img = mk("img", "sh-pic"); img.src = "/api/uploads/" + opts.portrait; img.alt = ""; body.append(img); }
+    else body.append(mk("div", "sh-pic sh-nopic", "SV"));
+    const core = mk("div", "sh-core", `<svg viewBox="0 0 100 100" aria-hidden="true"><polygon points="${STAR}" class="sh-star"/><polygon points="${STAR_IN}" class="sh-star-in"/></svg>`);
+    body.append(core);
+    // the shard: one broken point of the Hollow Star
+    const shard = mk("div", "sh-shard", `<svg viewBox="0 0 60 80" aria-hidden="true"><polygon points="30,2 44,44 38,48 33,41 27,52 21,45 14,49" class="sh-shard-out"/><polygon points="30,16 38,40 31,37 26,43 22,40" class="sh-shard-in"/></svg>`);
+    const hand = mk("div", "sh-hand");
+    const ring = mk("div", "sh-ring"), ring2 = mk("div", "sh-ring is-two"), flash = mk("div", "sh-flash");
+    stage.append(wings, body, hand, shard, ring, ring2);
+    const say = mk("div", "sh-words");
+    const kicker = mk("div", "sh-kicker"); kicker.textContent = (opts.name || "Steven Voss") + " is at half health";
+    const title = mk("div", "sh-title"); title.textContent = "Hollow Star Heart";
+    const sub = mk("div", "sh-sub"); sub.textContent = "Phase 2 — steel wings, and the star burns in his chest";
+    say.append(kicker, title, sub);
+    el.append(flash, stage, say);
+    document.body.append(el);
+    let done = false;
+    const timers = [];
+    const later = (ms, fn) => timers.push(setTimeout(() => { if (!done) fn(); }, ms));
+    ensureLayer(); layer.style.zIndex = "9700"; // the sparks go over the scene
+    const go = () => { if (done) return; done = true; timers.forEach(clearTimeout); el.classList.add("is-out");
+      setTimeout(() => { el.remove(); if (!document.querySelector(".fx-starheart")) layer.style.zIndex = ""; }, 600); };
+    later(700, () => el.addEventListener("click", go));
+    const finalT = (pl) => `translate(0px, 0px) rotate(${pl.a}deg) scale(1)`;
+    if (el.classList.contains("is-calm")) { // no movement: the finished look, then the words
+      plates.forEach((pl) => { pl.p.style.transform = finalT(pl); pl.p.style.opacity = 1; });
+      el.classList.add("is-lit", "is-winged", "is-words");
+      sound("starheart");
+      later(4200, go);
+      return { close: go };
+    }
+    const anim = (node, frames, o) => node.animate ? node.animate(frames, Object.assign({ fill: "forwards", easing: "ease-in-out" }, o)) : null;
+    // 1) he lifts the shard (0.4 s - 1.9 s)
+    sound("shardrise");
+    anim(shard, [{ transform: "translate(-50%, 90%) scale(.5) rotate(-30deg)", opacity: 0 },
+      { transform: "translate(-50%, 30%) scale(1.15) rotate(8deg)", opacity: 1, offset: 0.55 },
+      { transform: "translate(-50%, 0%) scale(1.25) rotate(0deg)", opacity: 1 }], { duration: 1500, delay: 400, easing: "cubic-bezier(.2,.8,.3,1)" });
+    anim(hand, [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1 }], { duration: 1500, delay: 400 });
+    // 2) ... and drives it into his chest (2.2 s): a flash, rings, and the star lights inside him
+    later(2200, () => {
+      anim(shard, [{ transform: "translate(-50%, 0%) scale(1.25) rotate(0deg)", opacity: 1 },
+        { transform: "translate(-50%, -40%) scale(1.5) rotate(0deg)", opacity: 1, offset: 0.35 },
+        { transform: "translate(-50%, 155%) scale(.25) rotate(0deg)", opacity: 0 }], { duration: 520, easing: "cubic-bezier(.6,0,.9,.4)", fill: "forwards" });
+      anim(hand, [{ opacity: 1 }, { opacity: 0 }], { duration: 400, delay: 300 });
+    });
+    later(2720, () => {
+      el.classList.add("is-lit"); sound("starheart");
+      anim(flash, [{ opacity: 0 }, { opacity: 0.95, offset: 0.12 }, { opacity: 0 }], { duration: 900, easing: "ease-out" });
+      [ring, ring2].forEach((r, i) => anim(r, [{ transform: "translate(-50%,-50%) scale(.1)", opacity: 1 }, { transform: "translate(-50%,-50%) scale(3.4)", opacity: 0 }],
+        { duration: 1100, delay: i * 180, easing: "cubic-bezier(.1,.7,.3,1)" }));
+      anim(stage, [{ transform: "translate(0,0)" }, { transform: "translate(-6px,3px)" }, { transform: "translate(5px,-4px)" }, { transform: "translate(-3px,2px)" }, { transform: "translate(0,0)" }], { duration: 420 });
+      burst(core, "crit", 46);
+    });
+    // 3) scraps of metal flicker into being all around him (3.3 s - 4.3 s) ...
+    const W = stage.getBoundingClientRect().width || 400;
+    plates.forEach((pl, i) => {
+      const ang = Math.random() * Math.PI * 2, dist = W * (0.32 + Math.random() * 0.42);
+      const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist * 0.75, r0 = Math.round(Math.random() * 720 - 360);
+      const start = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${r0}deg) scale(.55)`;
+      const shown = 3300 + Math.random() * 1000;
+      // ... then fly in and lock into place, the plates nearest his back first (4.5 s - 6.3 s)
+      const fly = 4500 + pl.ti * 260 + pl.f * 900 + Math.random() * 160;
+      pl.p.style.transform = start; pl.p.style.opacity = 0;
+      anim(pl.p, [{ transform: start, opacity: 0, filter: "brightness(4)" }, { transform: start, opacity: 1, filter: "brightness(3)", offset: 0.35 },
+        { transform: start, opacity: 0.25, offset: 0.55 }, { transform: start, opacity: 1, filter: "brightness(1.2)" }], { duration: 520, delay: shown, easing: "steps(6)" });
+      anim(pl.p, [{ transform: start, opacity: 1, filter: "brightness(1.2)" },
+        { transform: `translate(0px, 0px) rotate(${pl.a + 14}deg) scale(1.08)`, opacity: 1, filter: "brightness(2.2)", offset: 0.82 },
+        { transform: finalT(pl), opacity: 1, filter: "brightness(1)" }], { duration: 760, delay: fly, easing: "cubic-bezier(.5,0,.2,1)" });
+      if (i % 6 === 0) later(fly + 640, () => sound("clank"));
+    });
+    later(3300, () => sound("scrap"));
+    // 4) the folded wings sweep open around him (6.5 s)
+    later(6500, () => {
+      el.classList.add("is-winged"); sound("wingsweep");
+      anim(L, [{ transform: "scaleX(-1) rotate(62deg)" }, { transform: "scaleX(-1) rotate(-14deg)", offset: 0.6 }, { transform: "scaleX(-1) rotate(0deg)" }], { duration: 900, easing: "cubic-bezier(.3,1.3,.5,1)" });
+      anim(R, [{ transform: "rotate(62deg)" }, { transform: "rotate(-14deg)", offset: 0.6 }, { transform: "rotate(0deg)" }], { duration: 900, easing: "cubic-bezier(.3,1.3,.5,1)" });
+      anim(ring, [{ transform: "translate(-50%,-50%) scale(.6)", opacity: 0.8 }, { transform: "translate(-50%,-50%) scale(3)", opacity: 0 }], { duration: 900, easing: "ease-out" });
+    });
+    later(7000, () => el.classList.add("is-words"));
+    later(11000, go);
+    return { close: go };
+  }
+
   function sound(name) {
     if (!prefs.sounds || !SOUNDS[name]) return;
     const a = ac();
@@ -187,7 +323,7 @@
   }
 
   window.FX = {
-    float, flash, banner, burst, sound, descend,
+    float, flash, banner, burst, sound, descend, starHeart,
     get prefs() { return Object.assign({}, prefs); },
     set(k, v) { prefs[k] = v; save(); if (k === "sounds" && v) { ac(); sound("ping"); } },
   };

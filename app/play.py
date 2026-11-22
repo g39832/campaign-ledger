@@ -16,7 +16,7 @@ from .auth import PLAYER_COOKIE, client_ip, current_identity, is_dm, token_hash
 from .db import get_db, now_iso, tx
 from .maps import _bump, blocked_path, clamp_position, map_dict, player_view, fog_image
 
-from .combat import _ac_in, dmg_mult, extra_moves, parse_area, stance_mult  # noqa: E402
+from .combat import _ac_in, dmg_mult, extra_moves, parse_area, stance_hit, stance_mult  # noqa: E402
 
 SPEED_ZERO = ("Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious")
 
@@ -175,6 +175,9 @@ def play_page():
     return render_template("play.html", ident=ident, campaign_name=camp["name"])
 
 
+UNTIL_REST = 100000  # "recharging" for a once-a-long-rest item that's been used
+
+
 def _own_character(conn, char_id):
     if not char_id:
         return None
@@ -202,7 +205,7 @@ def _own_character(conn, char_id):
     out["ac"] = (c["ac"] or 0) + out["ac_bonus"]
     out["attacks"] = [{"index": i, "name": a.get("name", ""), "bonus": a.get("bonus", ""), "damage": a.get("damage", ""),
                        "heal": is_healing(a), "cooldown": parse_cooldown(a), "extra_moves": extra_moves(a),
-                       "dmg_mult": dmg_mult(a), "stance": stance_mult(a),
+                       "dmg_mult": dmg_mult(a), "stance": stance_mult(a), "stance_hit": stance_hit(a),
                        "area": bool(parse_area(a.get("area")) or parse_area(a.get("notes"))), "reach": melee_reach(a), "ac": _ac_in(a)}
                       for i, a in enumerate(c["attacks"] or [])]
     # in a running fight: is it this character's turn? (attacks wait for it) and what's recharging there
@@ -213,6 +216,7 @@ def _own_character(conn, char_id):
     out["my_turn"] = None if fight is None else fight["current_id"] == fight["cb_id"]
     out["parry"] = None
     out["reaction"] = None
+    out["rewind"] = None
     if fight is not None:
         from .combat import Ctx, parry_state
         from .reactions import info as reaction_info
@@ -220,6 +224,8 @@ def _own_character(conn, char_id):
         me = fctx.combatant(fight["cb_id"])
         out["parry"] = parry_state(conn, me, c)
         out["reaction"] = reaction_info(fctx, me, c)  # ready or used, and what they can answer right now
+        from .rewind import offer as rewind_offer
+        out["rewind"] = rewind_offer(fctx, me)  # Time Reversal (a ring): the turn that just ended
     # spell rows that give extra actions (Yamato's Action surge)
     out["surges"] = [{"index": i, "name": (str(s.get("name") or "").strip() or "Action Surge"), "extra_moves": extra_moves(s),
                       "cooldown": spell_info(s)["cooldown"],
@@ -231,6 +237,8 @@ def _own_character(conn, char_id):
     for s in out["spells"]:
         s["aura_on"] = s["aura"] and is_on(c, s["name"])
         s["recharging"] = cooldown_left(c["conditions"], s["name"], fight["eid"]) if fight and (s["cooldown"] or s["per_fight"]) else 0
+        if s["per_rest"] and s["used"]:
+            s["recharging"] = UNTIL_REST  # used: back after a long rest
     out["derived"] = d
     out["disengaged"] = any(x.get("name") == DISENGAGED and not x.get("expired") for x in c["conditions"])
     out["move"] = None
@@ -251,6 +259,8 @@ def _own_character(conn, char_id):
                       "ac": k["ac"], "reaction_ready": reaction_ready(conn, k["id"]),
                       "actions": acts_of(conn, k["id"]), "move": (lambda t: t and {x: t[x] for x in ("my_turn", "speed", "used", "left", "held", "budget", "from")})(turn_info(conn, k["id"])),
                       "attacks": [{x: a[x] for x in ("index", "name", "damage", "reach")} for a in clone_attacks(k)]} for k in clones]
+    from .yamato import state as technique_state
+    out["techniques"] = technique_state(conn, fight["eid"] if fight else None, fight["cb_id"] if fight else None, c) if fight else         technique_state(conn, None, None, c)
     out["in_fight"] = conn.execute("SELECT 1 FROM combatants cb JOIN encounters e ON e.id = cb.encounter_id "
                                    "WHERE cb.character_id = ? AND e.status = 'active'", (char_id,)).fetchone() is not None
     from .campaigns import get_campaign
@@ -260,7 +270,35 @@ def _own_character(conn, char_id):
     out["roll_to_hit"] = settings["combat"]["roll_to_hit"]
     out["hit_dice_total"] = sum(n for n, _ in parse_hit_dice(c["hit_dice"]))
     out["hit_dice_sizes"] = sorted({s for _, s in parse_hit_dice(c["hit_dice"])}, reverse=True)
+    out["inventory"] = _inventory(c)
     return out
+
+
+def _inventory(c):
+    """What the character carries, for the player screen: the sheet's equipment rows (read only),
+    coins, and weight against what they can carry."""
+    from .loot import RARITY_NAME, carried, carry_capacity
+    names = {v.lower(): k for k, v in RARITY_NAME.items()}
+    from .items import heal_info
+    items = []
+    for i, r in enumerate(c.get("equipment") or []):
+        if not isinstance(r, dict) or not str(r.get("name") or "").strip():
+            continue
+        notes = str(r.get("notes") or "").strip()
+        head, _, rest = notes.partition(" · ")
+        rarity = names.get(head.strip().lower())  # items from chests are noted "Rare · what it does"
+        try:
+            qty = int(float(r.get("qty") if r.get("qty") not in (None, "") else 1))
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            weight = float(r.get("weight")) if r.get("weight") not in (None, "") else None
+        except (TypeError, ValueError):
+            weight = None
+        items.append({"index": i, "name": str(r["name"]).strip(), "qty": qty, "weight": weight,
+                      "rarity": rarity, "notes": rest.strip() if rarity else notes, "heal": heal_info(r)})
+    coins = {k: int(v) for k, v in (c.get("currency") or {}).items() if str(v).lstrip("-").isdigit() and int(v)}
+    return {"items": items, "coins": coins, "carried": carried(c), "capacity": carry_capacity(c)}
 
 
 def _player_encounter(conn, campaign_id, live_map):
@@ -355,9 +393,13 @@ def api_move(token_id):
         md = map_dict(m)
         if (md.get("dungeon") or {}).get("fight"):
             raise F.ApiError("Enemies! Wait for the DM to roll initiative", status=403)
+        if not clone and not roam_open(conn, md, owner, ident["campaign_id"]):
+            raise F.ApiError("Hold still: the DM hasn't opened free roam", status=403, held=True)
         x = F.coerce(F.TOKEN["x"], data.get("x"), "x")
         y = F.coerce(F.TOKEN["y"], data.get("y"), "y")
         x, y = clamp_position(md, t["size"], x, y)
+        if not clone and free_roam(conn, md, owner, ident["campaign_id"]) and max(abs(x - t["x"]), abs(y - t["y"])) > 1 + 1e-6:
+            raise F.ApiError("Exploring: one square at a time", status=403)
         stuck = held_in_place(conn, owner) if owner else None
         if stuck:
             raise F.ApiError(f"You're {stuck} and can't move until you break free", status=403, stuck=stuck)
@@ -378,6 +420,26 @@ def api_move(token_id):
         went = after_move(conn, md, t, x, y)  # a made-up map: rooms light up; the stairs lead down
         _bump(conn, m["id"])
     return jsonify({"ok": True, "x": x, "y": y, "move": turn, "zone": entered, "next_level": went})
+
+
+def roam_open(conn, md, char_id, campaign_id):
+    """May this hero move right now? In a fight: yes (on their turn, as always). Outside one: only while
+    the DM's Free roam button is on."""
+    from .campaigns import get_campaign
+    from .movement import fight_turn
+    if get_campaign(campaign_id)["settings"]["players"].get("roam_open", True):
+        return True
+    return fight_turn(conn, md, char_id) is not None
+
+
+def free_roam(conn, md, char_id, campaign_id):
+    """Exploring (no running fight for this hero on this map) with the DM's Free roam on:
+    the hero walks one square at a time."""
+    from .campaigns import get_campaign
+    from .movement import fight_turn
+    if not get_campaign(campaign_id)["settings"]["players"].get("free_roam"):
+        return False
+    return fight_turn(conn, md, char_id) is None
 
 
 def _zone_check(conn, md):
@@ -532,6 +594,22 @@ def api_me_death_save():
     data = request.get_json(silent=True) or {}
     with tx() as conn:
         roll_id = death_save(conn, ident, char_id, data.get("op_id"))
+    row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
+    return jsonify({"roll": roll_dict(row, ident), "character": _own_character(get_db(), char_id)})
+
+
+@bp.post("/api/play/me/item")
+def api_me_item():
+    """The player uses a healing item from their inventory on themselves. {index}"""
+    from .items import use_item
+    from .rolls import roll_dict
+    ident, char_id = _own(None)
+    data = request.get_json(silent=True) or {}
+    with tx() as conn:
+        roll_id = use_item(conn, ident, char_id, data.get("index"), data.get("op_id"))
+        live = conn.execute("SELECT live_map_id FROM campaigns WHERE id = ?", (ident["campaign_id"],)).fetchone()["live_map_id"]
+        if live:
+            _bump(conn, live)
     row = get_db().execute("SELECT * FROM rolls WHERE id = ?", (roll_id,)).fetchone()
     return jsonify({"roll": roll_dict(row, ident), "character": _own_character(get_db(), char_id)})
 
@@ -696,6 +774,8 @@ def dismiss(ctx, k):
         ctx.conn.execute("DELETE FROM map_tokens WHERE map_id = ? AND combatant_id = ?", (m["map_id"], k["id"]))
         _bump(ctx.conn, m["map_id"])
     ctx.conn.execute("DELETE FROM combatants WHERE id = ?", (k["id"],))
+    from .yamato import clone_gone
+    clone_gone(ctx, k)
 
 
 @bp.post("/api/play/me/end-turn")

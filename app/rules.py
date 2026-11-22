@@ -69,6 +69,12 @@ DEFAULT_CAMPAIGN_SETTINGS = {
         "spend_slots": True,  # players may spend and regain their own spell slots
         "hit_dice": True,     # players may spend hit dice (short rest healing)
         "cast_spells": True,  # players may cast their healing and buff spells on the party
+        "free_roam": True,    # outside a fight, heroes walk the map one square at a time (arrow pad, arrow keys or a one-square drag)
+        "roam_open": True,    # the DM's Free roam button on the battle map: off = outside a fight nobody moves until the DM opens it
+    },
+    "loot": {
+        "magic_items": True,  # magic items from the DM's list (app/magic_items.json) can turn up in better chests by themselves
+        "auto_act": False,    # in a fight, enemies take their own turn as soon as it comes round (else the DM taps Let it act)
     },
 }
 
@@ -125,7 +131,8 @@ def derived(char):
     sa = char.get("spellcasting_ability") or ""
     spell = None
     if sa in ABILITIES:
-        spell = {"dc": 8 + prof + mods[sa], "attack": prof + mods[sa], "ability": sa}
+        atk = char.get("spell_attack_override")
+        spell = {"dc": 8 + prof + mods[sa], "attack": atk if isinstance(atk, int) else prof + mods[sa], "ability": sa}
     return {
         "mods": mods,
         "prof": prof,
@@ -273,8 +280,12 @@ def long_rest_changes(char):
     if char.get("status") in ("unconscious", "stable", "incapacitated"):
         changes["status"] = "ok"
     spells = char.get("spells") or []
-    if any(isinstance(s, dict) and s.get("used") for s in spells):  # magic items can be switched on again
-        changes["spells"] = [dict(s, used=False) if isinstance(s, dict) and s.get("used") else s for s in spells]
+    if any(isinstance(s, dict) and (s.get("used") or s.get("spent")) for s in spells):  # magic items can be switched on again
+        changes["spells"] = [dict(s, used=False, spent=0) if isinstance(s, dict) and (s.get("used") or s.get("spent")) else s for s in spells]
+    from .items import recharge
+    gear = recharge(char.get("equipment"))
+    if gear is not None:  # items with charges (a Medical drone) get them back
+        changes["equipment"] = gear
     return changes
 
 
@@ -474,7 +485,7 @@ DAMAGE_TYPES = ("acid", "bludgeoning", "cold", "fire", "force", "lightning", "ne
 # advantage a lasting effect gives: on the bearer's own attacks, or on attacks made against the bearer
 SPELL_ADV = ("", "attacks_adv", "attacks_dis", "attacked_adv", "attacked_dis")
 ONGOING_KINDS = ("damage", "heal", "temp")
-SPELL_TERRAIN = ("", "rock", "mend")  # what a spell does to the battle map: raise solid rock, or mend the ground
+SPELL_TERRAIN = ("", "rock", "mend", "steel")  # steel: Steven Voss's Metal Bend walls (he can move them)  # what a spell does to the battle map: raise solid rock, or mend the ground
 HELP_EXCEPTIONS = {"sleep": False, "sanctuary": True}
 DICE_TEXT = re.compile(r"^[-+]?\s*(?:\d*d\d+|\d+|mod)(?:\s*[-+]\s*(?:\d*d\d+|\d+|mod))*$", re.I)
 
@@ -575,6 +586,8 @@ def spell_info(spell):
         # brings a creature from the library into the fight on the caster's side, acting right after them
         "summon": str(spell.get("summon") or "").strip()[:200],
         "summon_count": _num(spell.get("summon_count"), 1, 10, 1),
+        # relay drones (Steven Voss): they echo the summoner's spells and copy spells cast near them (app/relay.py)
+        "relay": bool(spell.get("relay")),
         # a reaction: when they're hit, a d20 roll-off against the DM; win and the hit does half
         "parry": bool(spell.get("parry")),
         # a reaction (one a round, off your turn): parry, deflect (cut a hit by dice, e.g. 1d10+dex+level),
@@ -587,6 +600,16 @@ def spell_info(spell):
         "extra_moves": _num(spell.get("extra_moves"), 0, 10, 0),
         # Death Ward: the first time the one it's on would drop to 0 HP, they drop to 1 instead and it ends
         "death_ward": bool(spell.get("death_ward")),
+        # Totem Spirit: Bear (Gnocchi): while it's on, every kind of damage but psychic is halved
+        "resist_all": bool(spell.get("resist_all")),
+        # Goblin's Rage (Gnocchi): the first time a hit would drop them to 0 HP in a fight, they drop to 1 instead
+        "last_stand": bool(spell.get("last_stand")),
+        # Time Reversal (a magic ring): the creature whose turn just ended takes it again (app/rewind.py)
+        "rewind": bool(spell.get("rewind")),
+        # Echo Teleport (Yamato): on his turn he swaps places with one of his clones (app/echo.py)
+        "clone_swap": bool(spell.get("clone_swap")),
+        # Yamato's techniques (app/yamato.py): used from their own panel, never through Cast
+        "technique": str(spell.get("technique") or "")[:40],
         # summons: how many may be out at once in all (Yamato: 3), and the summoned one's AC and HP
         "summon_max": _num(spell.get("summon_max"), 1, 10),
         "summon_ac": _num(spell.get("summon_ac"), 0, 40),
@@ -597,10 +620,17 @@ def spell_info(spell):
         "dmg_mult": _num(spell.get("dmg_mult"), 1, 10, 1),
         # a real saving throw even with the "everything rolls to hit" house rule on
         "force_save": bool(spell.get("force_save")),
+        # its own save DC (a magic item's "DC 14 Dexterity save"), instead of the caster's spell save DC
+        "dc": _num(spell.get("dc"), 1, 40),
         # switched on and off (a magic item's aura): lasts until switched off, reaches allies in its area
         "aura": bool(spell.get("aura")),
         "used": bool(spell.get("used")),
-        "per_fight": bool(spell.get("per_fight")),  # once per fight (Echo Knight): back in the next fight  # a magic item switched on already: back after a long rest
+        "per_fight": bool(spell.get("per_fight")),
+        # once per long rest (a magic item's "once per dawn"): marked used on the sheet; a long rest brings it back
+        "per_rest": bool(spell.get("per_rest")),
+        # how many times it can be used before a long rest (Totem Spirit: Bear = 2), and how many are spent
+        "rest_uses": _num(spell.get("rest_uses"), 1, 20, 1),
+        "spent": _num(spell.get("spent"), 0, 20, 0),  # once per fight (Echo Knight): back in the next fight  # a magic item switched on already: back after a long rest
         "speed_mult": _num(spell.get("speed_mult"), 1, 10, 1),
         # an area around the caster that stays up for its rounds (Spirit Guardians): enemies in it
         # when it's cast are hit once; while it's up, enemies in it move at zone_speed (½ = half)
@@ -615,7 +645,7 @@ def spell_lasts(sp):
     """Does the spell leave something on whoever it lands on (a condition, AC, a roll
     bonus, damage every turn...)? Then it becomes an effect on them."""
     return bool(sp["condition"] or sp["ac"] or sp["roll_mod"] or sp["dmg_mod"] or sp["adv"]
-                or sp["ongoing"] or sp["max_hp"] or sp.get("death_ward"))
+                or sp["ongoing"] or sp["max_hp"] or sp.get("death_ward") or sp.get("resist_all"))
 
 
 def spell_does_something(sp):
@@ -714,6 +744,12 @@ def effect_mult(conditions):
         except (TypeError, ValueError):
             pass
     return m
+
+
+def attack_mods(conditions):
+    """What effects add to an ATTACK roll: Bless/Bane (roll_mod) plus to-hit-only bonuses (hit_mod:
+    Reckless attack +2), which never touch saving throws."""
+    return roll_mods(conditions) + roll_mods(conditions, "hit_mod")
 
 
 def with_mods(expr, mods):

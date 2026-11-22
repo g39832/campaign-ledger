@@ -23,16 +23,31 @@ THEMES = {
     "ice": {"name": "Ice cavern", "bg": "#33424a", "about": "Slippery ice, freezing pools and frozen pillars, up to a frozen throne."},
     "sewer": {"name": "Sewer", "bg": "#262a24", "about": "Sludge-filled tunnels, flooded chambers, and the great cistern."},
     "volcano": {"name": "Volcano", "bg": "#2a1a14", "about": "Hot stone caverns cut by rivers of lava, ending at a magma forge."},
+    "futureprison": {"name": "Abandoned prison", "bg": "#121418",
+                     "about": "A dead high-security facility: steel cell blocks under red emergency light, cameras and turrets, "
+                              "security offices, sealed vaults that need access cards, and the warden's command deck."},
+    "lab": {"name": "Laboratory", "bg": "#0f1719", "exit_word": "the lift",
+            "about": "Five floors of a sealed research lab: escaped test subjects, drones and hazmat security that get tougher "
+                     "floor by floor, three supply lockers a floor, and the head researcher (and one rare magic item) at the top."},
+    "silo": {"name": "Missile silo", "bg": "#16171a", "exit_word": "the freight lift",
+             "about": "Four levels down a concrete missile silo round one great launch shaft: Voss's machines on every level, "
+                      "and at the bottom the launch bay, a giant robot, three missiles, and Steven Voss by his escape lift."},
 }
 # what you can't walk through (doors and rubble you can)
-SOLID = {"wall", "pit", "water", "lava", "tree", "table", "rock"}
+SOLID = {"wall", "pit", "water", "lava", "tree", "table", "rock",
+         # the abandoned (sci-fi) prison: steel walls, sealed doors, machines
+         "bulkhead", "sealed", "panel", "camera", "turret", "redlight", "terminal", "machinery", "cryo",
+         # the missile silo (app/silo_layout.py)
+         "concretewall", "beacon", "shaft", "missile", "fueltank", "pipes", "reactor", "console", "bunk", "rack", "crate"}
 ROOM_NAMES = ["Guard post", "Storeroom", "Shrine", "Barracks", "Library", "Armory", "Crypt", "Kitchen", "Well room", "Trophy hall",
               "Torture chamber", "Old chapel", "Workshop", "Collapsed hall"]
 BOSS_NAMES = {"dungeon": ["The Throne Room", "The Bone Hall", "The Black Altar"], "cave": ["The Great Cavern", "The Lair", "The Deep Pool"],
               "prison": ["The Warden's Office", "The Execution Hall", "The Deep Cells"],
               "jungle": ["The Overgrown Temple", "The Serpent Shrine", "The Idol's Court"], "swamp": ["The Witch's Hut", "The Rotting Hall", "The Hag's Lodge"],
               "desert": ["The Sunken Tomb", "The Sun Temple", "The Pharaoh's Vault"], "ice": ["The Frozen Throne", "The Glacier Heart", "The Frost Wyrm's Den"],
-              "sewer": ["The Great Cistern", "The Rat King's Nest", "The Outflow"], "volcano": ["The Magma Forge", "The Fire Lord's Seat", "The Caldera"]}
+              "sewer": ["The Great Cistern", "The Rat King's Nest", "The Outflow"], "volcano": ["The Magma Forge", "The Fire Lord's Seat", "The Caldera"],
+              "futureprison": ["The Warden's Command Deck", "Central Control", "The Execution Chamber"],
+              "lab": ["Containment hall", "Quarantine wing", "Specimen hold"], "silo": ["Freight lift"]}
 
 
 def _k(x, y):
@@ -279,7 +294,145 @@ def _prison(rnd, cols, rows, level):
     return t, rooms, floor
 
 
-LAYOUTS = {"dungeon": _dungeon, "prison": _prison, "sewer": _sewer,
+# ---- the abandoned prison (sci-fi) -----------------------------------------------------------
+# The old prison's cell blocks rebuilt in steel: the same plan, then made futuristic (metal floors,
+# bulkheads, blast doors, force-field cell doors, red emergency lights, cameras and turrets), with four
+# side rooms behind sealed doors: three need an access card, one is a hidden wall panel.
+SCIFI_ROOMS = {"Guard room": "Security office", "Mess hall": "Mess hall", "Interrogation room": "Interrogation room",
+               "Laundry": "Generator room", "Infirmary": "Med bay", "Storeroom": "Supply depot"}
+# (name, kind, box, door, card needed: "" = a hidden panel anyone standing next to it can push open)
+SECRET_ROOMS = [("Hidden armory", "secret", (2, 3, 6, 8), (7, 8), "Security keycard"),
+                ("Smugglers' stash", "secret", (2, 19, 6, 24), (7, 19), ""),
+                ("Restricted vault", "vault", (33, 2, 40, 6), (36, 7), "Warden's access card"),
+                ("Experimental lab", "lab", (33, 22, 40, 24), (36, 21), "Lab keycard")]
+SCIFI_FLOOR = {"stone": "metal", "wall": "bulkhead", "table": "terminal", "pit": "grate"}
+
+
+def _future_prison(rnd, cols, rows, level):
+    t, rooms, floor = _prison(rnd, cols, rows, level)
+    for r in rooms:
+        r["name"] = SCIFI_ROOMS.get(r["name"], r["name"])
+    if not any(r["name"] == "Security office" for r in rooms):  # there's always somewhere for the guards
+        other = next((r for r in rooms if r["kind"] == "room" and r["name"] != "Gatehouse"), None)
+        if other:
+            other["name"] = "Security office"
+    rooms[0]["name"] = "Intake gate"
+    return t, rooms, floor
+
+
+def _scifi(t, rooms, rnd, cols, rows):
+    """Turn the stone prison into steel: the sealed side rooms, lights, cameras, turrets and machines."""
+    def in_cell(x, y):
+        return any(r["kind"] == "cell" and r["box"][0] <= x <= r["box"][2] and r["box"][1] - 1 <= y <= r["box"][3] + 1 for r in rooms)
+    for k, v in list(t.items()):
+        if v == "door":
+            t[k] = "forcefield" if in_cell(*map(int, k.split(","))) else "blastdoor"
+        elif v in SCIFI_FLOOR:
+            t[k] = SCIFI_FLOOR[v]
+    for name, kind, box, door, card in SECRET_ROOMS:
+        _fill(t, *box, "metal")
+        t[_k(*door)] = "sealed" if card else "panel"
+        rooms.append({"name": name, "kind": kind, "box": list(box), "door": list(door), "needs": card})
+
+    def corridor(x, y):
+        return t.get(_k(x, y)) in ("metal", "grate") and not room_at(rooms, x, y)
+    # red emergency lights along the corridor walls, cameras watching from them now and then
+    for y in range(1, rows - 1):
+        for x in range(1, cols - 1):
+            if t.get(_k(x, y)) != "bulkhead":
+                continue
+            if any(corridor(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                if (x * 7 + y * 3) % 6 == 0:
+                    t[_k(x, y)] = "redlight"
+                elif (x * 5 + y) % 11 == 0:
+                    t[_k(x, y)] = "camera"
+    for r in rooms:
+        x0, y0, x1, y1 = r["box"]
+        n = r["name"]
+        if n == "Security office":
+            t[_k(x0, y0)] = t[_k(x1, y0)] = "terminal"
+        elif n == "Generator room":
+            _fill(t, x0 + 1, y0, x0 + 2, y0, "machinery")
+            t[_k(x1 - 1, y1)] = "machinery"
+        elif n in ("Med bay",) or r["kind"] == "lab":
+            for x in range(x0, x1 + 1, 2):
+                t[_k(x, y0)] = "cryo"  # containment pods along the back wall
+            if r["kind"] == "lab":
+                t[_k(x1, y1)] = "machinery"
+        elif r["kind"] == "vault":
+            t[_k(x0, y0)] = t[_k(x1, y0)] = "turret"
+        elif r["kind"] == "boss":
+            t[_k(x0, y0)] = t[_k(x0, y1)] = "turret"
+            t[_k(x0 + 1, y0)] = t[_k(x0 + 1, y1)] = "terminal"
+        elif r["kind"] == "cell" and t.get(_k(x0 + 1, (y0 + y1) // 2)) == "metal" and rnd.random() < 0.3:
+            t[_k(x0 + 1, (y0 + y1) // 2)] = "grate"  # a drain in the floor
+    return t
+
+
+# ---- the laboratory (five floors) -----------------------------------------------------------------
+# Labs and stores off steel corridors, climbing floor by floor by the lift to the head researcher's lab
+# on the top floor (floor 5, where there's no lift any higher). app/lab.py stocks it.
+LAB_FLOORS = 5
+LAB_ROOMS = ["Cryo bay", "Server room", "Chemical store", "Test chamber", "Specimen tanks", "Decontamination",
+             "Observation deck", "Clean room", "Gene lab", "Supply closet", "Break room", "Incinerator"]
+
+
+def _lab(rnd, cols, rows, level):
+    floor = "stone"  # made steel by _lab_tech once the boss room is in
+    t, boxes = _rooms_and_corridors(rnd, cols, rows, floor, 7 + min(level, 3) // 2)
+    names = rnd.sample(LAB_ROOMS, len(boxes))
+    rooms = [{"name": n, "kind": "room", "box": list(b)} for n, b in zip(names, boxes)]
+    rooms[0]["name"] = "Reception" if level == 1 else "Lift landing"
+    return t, rooms, floor
+
+
+def _lab_tech(t, rooms, rnd, cols, rows):
+    """Stone to steel: metal floors, bulkheads, blast doors, lights and cameras along the corridors,
+    and each room's own machines (kept off the squares just inside a door, so nothing gets walled in)."""
+    for k, v in list(t.items()):
+        if v == "door":
+            t[k] = "blastdoor"
+        elif v in SCIFI_FLOOR:
+            t[k] = SCIFI_FLOOR[v]
+
+    def corridor(x, y):
+        return t.get(_k(x, y)) in ("metal", "grate") and not room_at(rooms, x, y)
+    for y in range(1, rows - 1):
+        for x in range(1, cols - 1):
+            if t.get(_k(x, y)) == "bulkhead" and any(corridor(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                if (x * 7 + y * 3) % 7 == 0:
+                    t[_k(x, y)] = "redlight"
+                elif (x * 5 + y) % 13 == 0:
+                    t[_k(x, y)] = "camera"
+
+    def free(x, y):  # an open square of the room with no door next to it
+        return t.get(_k(x, y)) == "metal" and not any(t.get(_k(x + dx, y + dy)) == "blastdoor" for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+    for r in rooms:
+        x0, y0, x1, y1 = r["box"]
+        n = r["name"]
+        put = None
+        if n in ("Cryo bay", "Specimen tanks", "Gene lab"):
+            put = ("cryo", [(x, y0) for x in range(x0, x1 + 1, 2)])
+        elif n in ("Server room", "Observation deck", "Reception"):
+            put = ("terminal", [(x, y0) for x in range(x0 + 1, x1, 3)])
+        elif n in ("Chemical store", "Incinerator", "Clean room"):
+            put = ("machinery", [(x0, y0), (x1, y0), (x1, y1)])
+        elif n in ("Test chamber", "Decontamination"):
+            put = ("grate", [((x0 + x1) // 2, (y0 + y1) // 2), ((x0 + x1) // 2 + 1, (y0 + y1) // 2)])
+        elif r["kind"] == "boss":
+            put = ("cryo", [(x0, y0), (x1, y0), (x0, y1), (x1, y1)])
+            for x in range(x0 + 2, x1 - 1, 3):
+                if free(x, y0):
+                    t[_k(x, y0)] = "terminal"
+        if put:
+            kind, spots = put
+            for x, y in spots:
+                if free(x, y) and (kind == "grate" or [x, y] != r.get("exit")):
+                    t[_k(x, y)] = kind
+    return t
+
+
+LAYOUTS = {"dungeon": _dungeon, "prison": _prison, "sewer": _sewer, "futureprison": _future_prison, "lab": _lab,
            **{k: (lambda kind: lambda rnd, cols, rows, level: _wilds(rnd, cols, rows, level, kind))(k) for k in WILDS}}
 
 
@@ -287,7 +440,7 @@ def _boss_room(t, rooms, theme, rnd, cols, rows, floor, start):
     """The boss room: for a prison, the warden's office at the far end of the corridor; otherwise
     the room farthest from the start, made big. Pillars, a dais, and the stairs down at the back."""
     mid = rows // 2
-    if theme == "prison":
+    if theme in ("prison", "futureprison"):
         box = (cols - 12, 8, cols - 3, 20)
         _fill(t, *box, floor)
         for y in (8, 9, 19, 20):
@@ -314,12 +467,12 @@ def _boss_room(t, rooms, theme, rnd, cols, rows, floor, start):
     for px, py in ((x0 + 2, y0 + 2), (x1 - 2, y0 + 2), (x0 + 2, y1 - 2), (x1 - 2, y1 - 2)):
         if x1 - x0 >= 7 and y1 - y0 >= 6:
             t[_k(px, py)] = "wall"  # pillars to hide behind
-    far_right = x1 if theme == "prison" or x0 > cols // 2 else x0
+    far_right = x1 if theme in ("prison", "futureprison") or x0 > cols // 2 else x0
     side = -1 if far_right == x1 else 1
     t[_k(far_right + side, (y0 + y1) // 2)] = "rubble" if theme in WILDS and not THEMES[theme].get("structure") else "table"  # the throne, the desk
     exit_xy = [far_right, (y0 + y1) // 2]
     t[_k(*exit_xy)] = "stairs"
-    if theme in ("dungeon", "sewer"):
+    if theme in ("dungeon", "sewer", "lab"):
         _doors(t, box, floor)
     if theme == "sewer":  # the cistern: a pool in the middle
         _fill(t, (x0 + x1) // 2 - 1, (y0 + y1) // 2 - 1, (x0 + x1) // 2 + 1, (y0 + y1) // 2 + 1, "water")
@@ -336,17 +489,37 @@ def generate(theme="dungeon", seed=None, level=1):
     if theme not in THEMES:
         raise ValueError("Unknown theme")
     seed = int(seed if seed is not None else random.SystemRandom().randrange(1, 10 ** 9))
+    if theme == "silo":  # its own plan, round the launch shaft (app/silo_layout.py)
+        from .silo_layout import generate as silo_generate
+        g = silo_generate(seed, level, path_len)
+        g["terrain"] = _floor_back(g["terrain"], g["rooms"], "concretewall", g["cols"], g["rows"])
+        return dict(g, theme=theme, seed=seed, bg_color=THEMES[theme]["bg"])
     for attempt in range(20):  # a layout where the stairs can't be reached is thrown away
         rnd = random.Random(seed + attempt * 7919)
-        cols, rows = (44, 26) if theme == "prison" else (40, 28)
+        cols, rows = (44, 26) if theme in ("prison", "futureprison") else (40, 28)
         t, rooms, floor = LAYOUTS[theme](rnd, cols, rows, level)
         first = rooms[0]
         first.update(kind="start", name="Entrance" if theme == "dungeon" else first["name"])
         start = list(_center(first["box"]))
         exit_xy = _boss_room(t, rooms, theme, rnd, cols, rows, floor, start)
         t = _floor_back(t, rooms, floor, cols, rows)
+        if theme == "futureprison":
+            t = _scifi(t, rooms, rnd, cols, rows)
+        name = f"{THEMES[theme]['name']} — level {level}"
+        if theme == "lab":
+            level = max(1, min(int(level), LAB_FLOORS))
+            boss = next(r for r in rooms if r["kind"] == "boss")
+            boss["exit"] = exit_xy
+            if level >= LAB_FLOORS:
+                boss["name"] = "The Director's Office"
+            t = _lab_tech(t, rooms, rnd, cols, rows)
+            boss.pop("exit", None)
+            name = f"{THEMES[theme]['name']} — floor {level}" + (" (top)" if level >= LAB_FLOORS else "")
         if path_len(t, start, exit_xy, cols, rows) is not None:
-            return {"name": f"{THEMES[theme]['name']} — level {level}", "theme": theme, "seed": seed, "level": level,
+            if theme == "lab" and level >= LAB_FLOORS:
+                t[_k(*exit_xy)] = "metal"  # the top floor: no lift any higher
+                exit_xy = None
+            return {"name": name, "theme": theme, "seed": seed, "level": level,
                     "cols": cols, "rows": rows, "bg_color": THEMES[theme]["bg"], "terrain": t,
                     "rooms": rooms, "start": start, "exit": exit_xy}
     raise RuntimeError("Couldn't make a map that joins up")
