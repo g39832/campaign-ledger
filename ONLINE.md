@@ -60,6 +60,26 @@ devices and any friends you invite. Nothing is exposed to the public internet.
 This is best for a regular group that doesn't mind installing one app. The
 address never changes.
 
+## Option 0 — hosted on your Pi cluster (always on, fixed address)
+
+This is how the game runs now: on the Pi 5 in the k3s cluster, at
+**https://dnd.graysoncodes.org**. Your PC can be off.
+
+* Friends open **https://dnd.graysoncodes.org/join** and type the join code. The link
+  never changes, and the Players page and its QR code show it automatically.
+* **Your DM link:** on the Pi 5 run the command at the top of
+  `cluster/k8s/70-campaign-ledger.yaml` (Portfolio repo). Open the link it prints on your
+  own devices. Making a new one cancels the old one.
+* **Update the app:** push to `main`; GitHub builds the container
+  (`.github/workflows/image.yml`); then on the Pi 5:
+  `kubectl -n ledger rollout restart deployment ledger`.
+* Data (database, uploads, daily backups) lives on the cluster's saved disk, not on this PC.
+
+How it works: the container is started with `LEDGER_PUBLIC_URL` (the fixed address) and
+`LEDGER_TRUSTED_PROXIES` (the cluster network the Cloudflare connector is on, so the
+code-guessing limit sees each visitor separately). Nobody arriving over the network is ever
+the DM; the DM signs in with a DM link.
+
 ## Option 3 — run it on the Raspberry Pi (always on)
 
 The Pi uses less power than leaving your PC on.

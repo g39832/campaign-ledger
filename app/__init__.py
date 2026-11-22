@@ -19,6 +19,12 @@ def create_app(config=None):
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,
         AUTO_SNAPSHOT=True,
         BUILD=str(int(time.time() * 1000)),  # new every time the server starts: open pages reload onto the update
+        # Hosted mode (the Pi cluster): the fixed public address players use, e.g. https://dnd.graysoncodes.org.
+        # When set, the Players page shows this link and the "Go online" quick tunnel isn't used.
+        PUBLIC_URL=os.environ.get("LEDGER_PUBLIC_URL", "").strip().rstrip("/"),
+        # Proxies allowed to tell us the visitor's real address (comma-separated networks, e.g. the
+        # cluster's pod network 10.42.0.0/16 where the Cloudflare connector runs). Never makes anyone the DM.
+        TRUSTED_PROXIES=[n.strip() for n in os.environ.get("LEDGER_TRUSTED_PROXIES", "").split(",") if n.strip()],
     )
     if config:
         app.config.update(config)

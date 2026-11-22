@@ -75,7 +75,16 @@ def left_running():
     return found
 
 
+def hosted_url():
+    """The fixed address in hosted mode (LEDGER_PUBLIC_URL), else None."""
+    return current_app.config.get("PUBLIC_URL") or None
+
+
 def status():
+    public = hosted_url()
+    if public:  # hosted on the Pi cluster: always online at the same address, no quick tunnel
+        return {"installed": True, "install_hint": INSTALL_HINT, "running": True, "url": public,
+                "error": None, "started": None, "hosted": True}
     with _lock:
         running = _running()
         out = {
@@ -186,6 +195,8 @@ def api_status():
 @bp.post("/online/start")
 def api_start():
     _dm_only()
+    if hosted_url():
+        return jsonify(status() | {"already": True})
     exe = find_cloudflared()
     if not exe:
         raise F.ApiError("cloudflared isn't installed yet. Open PowerShell and run: " + INSTALL_HINT + " — then try again.")
@@ -243,6 +254,8 @@ def api_start():
 @bp.post("/online/stop")
 def api_stop():
     _dm_only()
+    if hosted_url():
+        return jsonify(status())
     stop()
     stop_left_running()
     return jsonify(status())

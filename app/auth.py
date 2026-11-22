@@ -9,6 +9,7 @@
   checked on the server for every request, not by hiding buttons.
 """
 import hashlib
+import ipaddress
 import secrets
 from urllib.parse import urlparse
 
@@ -34,12 +35,25 @@ def token_hash(raw):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _from_trusted_proxy():
+    """True when the request came from a proxy listed in TRUSTED_PROXIES (hosted mode:
+    the cluster's Cloudflare connector). Only used to find the visitor's address."""
+    nets = current_app.config.get("TRUSTED_PROXIES") or []
+    if not nets or not request.remote_addr:
+        return False
+    try:
+        addr = ipaddress.ip_address(request.remote_addr)
+        return any(addr in ipaddress.ip_network(n, strict=False) for n in nets)
+    except ValueError:
+        return False
+
+
 def client_ip():
     """Who is really asking. Behind a tunnel running on this computer (cloudflared)
     every request arrives from 127.0.0.1, so use the visitor address the tunnel
     passes along. That header is only believed when the request came from this
-    computer, so nobody can fake it from outside."""
-    if request.remote_addr in LOOPBACK:
+    computer (or a trusted proxy in hosted mode), so nobody can fake it from outside."""
+    if request.remote_addr in LOOPBACK or _from_trusted_proxy():
         for h in ("CF-Connecting-IP", "X-Forwarded-For"):
             v = request.headers.get(h)
             if v:

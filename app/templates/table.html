@@ -24,7 +24,10 @@
 
     <section class="section">
       <h2 class="rule-head">1 · Let them reach this computer</h2>
-      {% if lan_mode %}
+      {% if config.PUBLIC_URL %}
+        <p>Your game is hosted on your Pi cluster and always on. Friends anywhere can open:</p>
+        <div id="urls" class="share-url"></div>
+      {% elif lan_mode %}
         <p>The app is listening on your network. Friends on the same Wi-Fi can open:</p>
         <div id="urls" class="share-url"></div>
       {% else %}
@@ -207,7 +210,8 @@
           h("button", { type: "button", class: "btn btn-sm", onclick: () => copy(join) }, icon("copy", "sm"), " Copy link"),
           code && code !== "—" ? h("button", { type: "button", class: "btn btn-sm", onclick: () => copy("Join my game: " + join + "  Code: " + code) }, icon("copy", "sm"), " Copy link + code") : null),
         code && code !== "—" ? null : h("p", { class: "warn-box" }, "Joining is turned off. Make a join code below so friends can get in."),
-        h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger", onclick: () => api("POST", "/api/online/stop").then(render) }, "Stop (go offline)"));
+        s.hosted ? h("p", { class: "faint" }, "Hosted on your Pi cluster: this link stays the same and is always on.")
+          : h("button", { type: "button", class: "btn btn-sm btn-quiet btn-danger", onclick: () => api("POST", "/api/online/stop").then(render) }, "Stop (go offline)"));
     } else if (s.running) {
       body.push(h("p", null, icon("loader-circle", "sm"), " Connecting to Cloudflare…"));
       clearTimeout(poll); poll = setTimeout(load, 1500);
@@ -237,7 +241,10 @@
     $("#off-code").hidden = !info.join_code;
     $("#live-map").value = info.live_map_id || "";
     const urls = $("#urls");
-    if (urls) urls.replaceChildren(...(info.addresses.length ? info.addresses.map((a) => h("div", { style: "margin-bottom:6px" },
+    if (urls && info.public_url) urls.replaceChildren(h("div", { style: "margin-bottom:6px" },
+      h("div", null, info.public_url + "/join" + (info.join_code ? "?code=" + info.join_code : "")),
+      h("div", { class: "faint", style: "font:400 .85rem var(--sans)" }, "Works from anywhere")));
+    else if (urls) urls.replaceChildren(...(info.addresses.length ? info.addresses.map((a) => h("div", { style: "margin-bottom:6px" },
       h("div", null, "http://" + a.ip + ":" + info.port + "/join" + (info.join_code ? "?code=" + info.join_code : "")),
       h("div", { class: "faint", style: "font:400 .85rem var(--sans)" }, a.label))) : [h("div", { class: "faint" }, "Couldn't detect this computer's network address.")]));
     $("#player-count").textContent = info.players.length;
@@ -254,6 +261,11 @@
   $("#live-map").addEventListener("change", (e) => act("POST", "/api/campaigns/" + CID + "/live-map", { map_id: Number(e.target.value) || null }, () => toast("Players' map updated.", "ok")));
   $("#dm-link").addEventListener("click", () => act("POST", "/api/dm-key", {}, (d) => {
     // One link per reachable address, home network first. Making a new link cancels older ones.
+    if (info && info.public_url) {  // hosted mode: one link, the real address
+      $("#dm-link-out").replaceChildren(h("div", { style: "margin-bottom:8px" }, h("div", null, info.public_url + "/dm-login?key=" + d.key),
+        h("div", { class: "faint", style: "font:400 .85rem var(--sans)" }, "Open this on your own devices only. It works like a password.")));
+      return;
+    }
     const addrs = info && info.addresses.length ? info.addresses : [{ ip: location.hostname, label: "" }];
     $("#dm-link-out").replaceChildren(...addrs.map((a) => h("div", { style: "margin-bottom:8px" },
       h("div", null, "http://" + a.ip + ":" + (info ? info.port : location.port) + "/dm-login?key=" + d.key),

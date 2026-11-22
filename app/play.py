@@ -1242,7 +1242,10 @@ def api_players(cid):
         "LEFT JOIN characters ch ON ch.id = p.character_id WHERE p.campaign_id = ? AND p.revoked = 0 ORDER BY p.created_at",
         (cid,)).fetchall()
     return jsonify({"join_code": camp["join_code"], "live_map_id": camp["live_map_id"],
-                    "players": [dict(r) for r in rows], "addresses": lan_addresses(),
+                    "players": [dict(r) for r in rows],
+                    # hosted mode: the container's own network addresses mean nothing to players
+                    "addresses": [] if current_app.config.get("PUBLIC_URL") else lan_addresses(),
+                    "public_url": current_app.config.get("PUBLIC_URL") or None,
                     "port": request.host.rsplit(":", 1)[-1] if ":" in request.host else "80"})
 
 
